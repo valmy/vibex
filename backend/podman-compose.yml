@@ -1,15 +1,15 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database Service
+  # TimescaleDB Database Service (PostgreSQL 16 with TimescaleDB extension)
   postgres:
-    image: docker.io/library/postgres:16-alpine
+    image: timescale/timescaledb:latest-pg16-oss
     container_name: trading-agent-postgres
     environment:
       POSTGRES_USER: trading_user
       POSTGRES_PASSWORD: trading_password
       POSTGRES_DB: trading_db
-      # POSTGRES_INITDB_ARGS: "-c shared_preload_libraries=timescaledb"  # TODO: Use timescaledb image
+      # TimescaleDB is pre-installed and pre-configured in this image
     ports:
       - "5432:5432"
     volumes:

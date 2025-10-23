@@ -165,12 +165,28 @@ Log format is JSON by default for structured logging.
 
 ### PostgreSQL with TimescaleDB
 
-The application uses PostgreSQL with TimescaleDB extension for time-series data.
+The application uses **PostgreSQL 16 with TimescaleDB extension** for optimized time-series data storage and querying.
+
+**Features:**
+- **Hypertables**: Market data is stored in a TimescaleDB hypertable for automatic partitioning and compression
+- **Time-series Optimization**: Automatic chunking and compression of historical data
+- **Fast Queries**: Optimized queries for time-range selections and aggregations
+- **Continuous Aggregates**: Pre-computed aggregations for performance (future enhancement)
 
 **Connection:**
 ```
 postgresql://trading_user:trading_password@postgres:5432/trading_db
 ```
+
+**Docker Image:**
+```
+timescale/timescaledb:latest-pg16-oss
+```
+
+**Hypertable Configuration:**
+- `market_data` table is automatically converted to a hypertable on initialization
+- Time column: `time` (TIMESTAMP)
+- Space column: `symbol` (VARCHAR)
 
 ### Migrations
 

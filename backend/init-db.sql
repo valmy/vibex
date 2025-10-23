@@ -1,5 +1,5 @@
--- Initialize TimescaleDB extension (optional - requires timescaledb image)
--- CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
+-- Initialize TimescaleDB extension (required for time-series optimization)
+CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
 
 -- Create schema for trading data
 CREATE SCHEMA IF NOT EXISTS trading;
@@ -30,8 +30,9 @@ CREATE TABLE IF NOT EXISTS trading.market_data (
     PRIMARY KEY (time, symbol)
 );
 
--- Convert market_data to hypertable for time-series optimization (requires TimescaleDB)
--- SELECT create_hypertable('trading.market_data', 'time', if_not_exists => TRUE);
+-- Convert market_data to hypertable for time-series optimization (TimescaleDB)
+-- This must be done after the table is created
+SELECT create_hypertable('trading.market_data', 'time', if_not_exists => TRUE);
 
 -- Create index on symbol for faster queries
 CREATE INDEX IF NOT EXISTS idx_market_data_symbol ON trading.market_data (symbol, time DESC);
