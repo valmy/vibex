@@ -49,7 +49,7 @@ dependencies = [
     "aster-connector-python @ git+https://github.com/asterdex/aster-connector-python.git",
 
     # Technical Analysis
-    # "TA-Lib>=0.4.28",  # TODO: Install from system packages
+    "TA-Lib>=0.6.8",
 
     # CLI & Utilities
     "typer>=0.12.0",

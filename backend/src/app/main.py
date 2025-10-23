@@ -13,7 +13,7 @@ import os
 from .core.config import config
 from .core.logging import setup_logging, get_logger
 from .db import init_db, close_db, check_db_health
-from .api.routes import accounts, positions, orders, trades, diary, performance, market_data
+from .api.routes import accounts, positions, orders, trades, diary, performance, market_data, analysis
 
 # Initialize logging
 setup_logging(config)
@@ -44,6 +44,7 @@ app.include_router(trades.router)
 app.include_router(diary.router)
 app.include_router(performance.router)
 app.include_router(market_data.router)
+app.include_router(analysis.router)
 
 
 # Health check endpoint
