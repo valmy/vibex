@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  postgres:
+    image: docker.io/library/postgres:16-alpine
+    container_name: trading-agent-postgres
+    environment:
+      POSTGRES_USER: trading_user
+      POSTGRES_PASSWORD: trading_password
+      POSTGRES_DB: trading_db
+      # POSTGRES_INITDB_ARGS: "-c shared_preload_libraries=timescaledb"  # TODO: Use timescaledb image
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trading_user -d trading_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Python Backend Service
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trading-agent-backend
+    environment:
+      ENVIRONMENT: development
+      DEBUG: "true"
+      API_HOST: 0.0.0.0
+      API_PORT: 3000
+      DATABASE_URL: postgresql://trading_user:trading_password@postgres:5432/trading_db
+      LOG_LEVEL: DEBUG
+      LOG_FORMAT: json
+      LOG_DIR: /app/logs
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - trading-network
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  trading-network:
+    driver: bridge
+
