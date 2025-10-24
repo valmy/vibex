@@ -1,9 +1,9 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # TimescaleDB Database Service (PostgreSQL 16 with TimescaleDB extension)
   postgres:
-    image: timescale/timescaledb:latest-pg16-oss
+    image: docker.io/timescale/timescaledb:latest-pg16
     container_name: trading-agent-postgres
     environment:
       POSTGRES_USER: trading_user
@@ -67,4 +67,3 @@ volumes:
 networks:
   trading-network:
     driver: bridge
-
