@@ -16,6 +16,7 @@ class Account(BaseModel):
     __table_args__ = (
         Index("idx_account_name", "name"),
         Index("idx_account_status", "status"),
+        {"schema": "trading"}
     )
 
     # Account identification

@@ -28,7 +28,7 @@ class MarketDataService:
         self.base_url = config.ASTERDEX_BASE_URL
         self.assets = [asset.strip() for asset in config.ASSETS.split(",")]
         self.interval = config.INTERVAL
-        
+
         # Initialize Aster client (lazy loaded)
         self._aster_client = None
         self._ws_client = None
@@ -38,11 +38,10 @@ class MarketDataService:
         """Lazy load Aster REST API client."""
         if self._aster_client is None:
             try:
-                from aster.rest_api import AsterDEXClient
-                self._aster_client = AsterDEXClient(
-                    api_key=self.api_key,
-                    api_secret=self.api_secret,
-                    base_url=self.base_url
+                from aster.rest_api import Client
+
+                self._aster_client = Client(
+                    key=self.api_key, secret=self.api_secret, base_url=self.base_url
                 )
                 logger.info("Aster REST API client initialized")
             except Exception as e:
@@ -55,11 +54,11 @@ class MarketDataService:
         """Lazy load Aster WebSocket client."""
         if self._ws_client is None:
             try:
-                from aster.websocket import AsterDEXWebSocket
-                self._ws_client = AsterDEXWebSocket(
-                    api_key=self.api_key,
-                    api_secret=self.api_secret
-                )
+                from aster.websocket import AsterWebsocketClient
+
+                # For now, we initialize with a default stream_url
+                # The actual implementation might require different initialization
+                self._ws_client = AsterWebsocketClient("wss://ws.asterdex.com/ws")
                 logger.info("Aster WebSocket client initialized")
             except Exception as e:
                 logger.error(f"Failed to initialize WebSocket client: {e}")
@@ -67,10 +66,7 @@ class MarketDataService:
         return self._ws_client
 
     async def fetch_market_data(
-        self,
-        symbol: str,
-        interval: str = "1h",
-        limit: int = 100
+        self, symbol: str, interval: str = "1h", limit: int = 100
     ) -> List[Dict[str, Any]]:
         """
         Fetch market data from Aster DEX.
@@ -85,15 +81,13 @@ class MarketDataService:
         """
         try:
             logger.info(f"Fetching market data for {symbol} ({interval})")
-            
+
             # Call Aster API to get market data
+            # Use the klines method from the Client class
             data = await asyncio.to_thread(
-                self.aster_client.get_klines,
-                symbol=symbol,
-                interval=interval,
-                limit=limit
+                self.aster_client.klines, symbol=symbol, interval=interval, limit=limit
             )
-            
+
             logger.info(f"Successfully fetched {len(data)} candles for {symbol}")
             return data
         except Exception as e:
@@ -105,7 +99,7 @@ class MarketDataService:
         db: AsyncSession,
         symbol: str,
         interval: str,
-        data: List[Dict[str, Any]]
+        data: List[List],  # API returns list of lists
     ) -> int:
         """
         Store market data in TimescaleDB.
@@ -114,7 +108,7 @@ class MarketDataService:
             db: Database session
             symbol: Trading pair symbol
             interval: Candlestick interval
-            data: List of market data dictionaries
+            data: List of market data (from API as list of lists)
 
         Returns:
             Number of records stored
@@ -122,24 +116,34 @@ class MarketDataService:
         try:
             count = 0
             for candle in data:
-                # Parse candle data
+                # Parse candle data from list format
+                # Format: [open_time, open, high, low, close, volume, close_time, quote_asset_volume,
+                #          number_of_trades, taker_buy_base_asset_volume, taker_buy_quote_asset_volume, ignore]
                 market_data = MarketData(
                     symbol=symbol,
                     interval=interval,
-                    time=datetime.fromtimestamp(candle.get("time", 0) / 1000),
-                    open=float(candle.get("open", 0)),
-                    high=float(candle.get("high", 0)),
-                    low=float(candle.get("low", 0)),
-                    close=float(candle.get("close", 0)),
-                    volume=float(candle.get("volume", 0)),
-                    quote_asset_volume=float(candle.get("quote_asset_volume", 0)),
-                    number_of_trades=float(candle.get("number_of_trades", 0)),
-                    taker_buy_base_asset_volume=float(candle.get("taker_buy_base_asset_volume", 0)),
-                    taker_buy_quote_asset_volume=float(candle.get("taker_buy_quote_asset_volume", 0)),
+                    time=datetime.fromtimestamp(candle[0] / 1000),  # open_time
+                    open=float(candle[1]),  # open
+                    high=float(candle[2]),  # high
+                    low=float(candle[3]),  # low
+                    close=float(candle[4]),  # close
+                    volume=float(candle[5]),  # volume
+                    quote_asset_volume=float(candle[7])
+                    if len(candle) > 7
+                    else 0.0,  # quote_asset_volume
+                    number_of_trades=float(candle[8])
+                    if len(candle) > 8
+                    else 0.0,  # number_of_trades
+                    taker_buy_base_asset_volume=float(candle[9])
+                    if len(candle) > 9
+                    else 0.0,  # taker_buy_base_asset_volume
+                    taker_buy_quote_asset_volume=float(candle[10])
+                    if len(candle) > 10
+                    else 0.0,  # taker_buy_quote_asset_volume
                 )
                 db.add(market_data)
                 count += 1
-            
+
             await db.commit()
             logger.info(f"Stored {count} market data records for {symbol}")
             return count
@@ -149,11 +153,7 @@ class MarketDataService:
             raise
 
     async def get_latest_market_data(
-        self,
-        db: AsyncSession,
-        symbol: str,
-        interval: str = "1h",
-        limit: int = 100
+        self, db: AsyncSession, symbol: str, interval: str = "1h", limit: int = 100
     ) -> List[MarketData]:
         """
         Get latest market data from database.
@@ -170,12 +170,7 @@ class MarketDataService:
         try:
             result = await db.execute(
                 select(MarketData)
-                .where(
-                    and_(
-                        MarketData.symbol == symbol,
-                        MarketData.interval == interval
-                    )
-                )
+                .where(and_(MarketData.symbol == symbol, MarketData.interval == interval))
                 .order_by(MarketData.time.desc())
                 .limit(limit)
             )
@@ -186,12 +181,7 @@ class MarketDataService:
             raise
 
     async def get_market_data_range(
-        self,
-        db: AsyncSession,
-        symbol: str,
-        interval: str,
-        start_time: datetime,
-        end_time: datetime
+        self, db: AsyncSession, symbol: str, interval: str, start_time: datetime, end_time: datetime
     ) -> List[MarketData]:
         """
         Get market data within a time range.
@@ -214,7 +204,7 @@ class MarketDataService:
                         MarketData.symbol == symbol,
                         MarketData.interval == interval,
                         MarketData.time >= start_time,
-                        MarketData.time <= end_time
+                        MarketData.time <= end_time,
                     )
                 )
                 .order_by(MarketData.time.asc())
@@ -225,9 +215,7 @@ class MarketDataService:
             raise
 
     async def sync_market_data(
-        self,
-        db: AsyncSession,
-        symbol: Optional[str] = None
+        self, db: AsyncSession, symbol: Optional[str] = None
     ) -> Dict[str, int]:
         """
         Sync market data from Aster DEX to database.
@@ -244,14 +232,18 @@ class MarketDataService:
 
         for sym in symbols:
             try:
+                # Ensure symbol is in proper format (add USDT as quote currency if needed)
+                # AsterDEX typically uses format like BTCUSDT, ETHUSDT, etc.
+                formatted_symbol = f"{sym}USDT" if "USDT" not in sym.upper() else sym
+
                 # Fetch data from Aster
-                data = await self.fetch_market_data(sym, self.interval, limit=100)
-                
-                # Store in database
-                count = await self.store_market_data(db, sym, self.interval, data)
+                data = await self.fetch_market_data(formatted_symbol, self.interval, limit=100)
+
+                # Store in database using the formatted symbol
+                count = await self.store_market_data(db, formatted_symbol, self.interval, data)
                 results[sym] = count
-                
-                logger.info(f"Synced {count} records for {sym}")
+
+                logger.info(f"Synced {count} records for {sym} (formatted as {formatted_symbol})")
             except Exception as e:
                 logger.error(f"Error syncing data for {sym}: {e}")
                 results[sym] = 0
@@ -269,4 +261,3 @@ def get_market_data_service() -> MarketDataService:
     if _market_data_service is None:
         _market_data_service = MarketDataService()
     return _market_data_service
-

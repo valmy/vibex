@@ -17,10 +17,11 @@ class Position(BaseModel):
         Index("idx_position_account_id", "account_id"),
         Index("idx_position_symbol", "symbol"),
         Index("idx_position_status", "status"),
+        {"schema": "trading"}
     )
 
     # Foreign key
-    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False, index=True)
+    account_id = Column(Integer, ForeignKey("trading.accounts.id"), nullable=False, index=True)
 
     # Position identification
     symbol = Column(String(50), nullable=False)  # e.g., BTC/USDT

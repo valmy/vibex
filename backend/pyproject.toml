@@ -95,7 +95,7 @@ extend-exclude = '''
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-select = [
+lint.select = [
     "E",    # pycodestyle errors
     "W",    # pycodestyle warnings
     "F",    # pyflakes
@@ -103,9 +103,9 @@ select = [
     "C",    # flake8-comprehensions
     "B",    # flake8-bugbear
 ]
-ignore = [
+lint.ignore = [
     "E501",  # line too long (handled by black)
-    "W503",  # line break before binary operator
+#    "W503",  # line break before binary operator
 ]
 
 [tool.mypy]
@@ -161,4 +161,3 @@ aster-connector-python = { git = "https://github.com/asterdex/aster-connector-py
 dev = [
     "podman-compose>=1.5.0",
 ]
-

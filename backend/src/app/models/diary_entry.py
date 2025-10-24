@@ -16,10 +16,11 @@ class DiaryEntry(BaseModel):
     __table_args__ = (
         Index("idx_diary_account_id", "account_id"),
         Index("idx_diary_entry_type", "entry_type"),
+        {"schema": "trading"}
     )
 
     # Foreign key
-    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False, index=True)
+    account_id = Column(Integer, ForeignKey("trading.accounts.id"), nullable=False, index=True)
 
     # Entry details
     entry_type = Column(String(50), nullable=False)  # trade_analysis, market_analysis, reflection, note

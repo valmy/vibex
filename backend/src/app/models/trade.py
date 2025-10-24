@@ -18,12 +18,13 @@ class Trade(BaseModel):
         Index("idx_trade_position_id", "position_id"),
         Index("idx_trade_order_id", "order_id"),
         Index("idx_trade_symbol", "symbol"),
+        {"schema": "trading"}
     )
 
     # Foreign keys
-    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False, index=True)
-    position_id = Column(Integer, ForeignKey("positions.id"), nullable=True, index=True)
-    order_id = Column(Integer, ForeignKey("orders.id"), nullable=True, index=True)
+    account_id = Column(Integer, ForeignKey("trading.accounts.id"), nullable=False, index=True)
+    position_id = Column(Integer, ForeignKey("trading.positions.id"), nullable=True, index=True)
+    order_id = Column(Integer, ForeignKey("trading.orders.id"), nullable=True, index=True)
 
     # Trade identification
     exchange_trade_id = Column(String(255), unique=True, nullable=True)
