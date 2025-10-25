@@ -6,7 +6,7 @@ LLM-powered cryptocurrency trading agent for AsterDEX.
 
 ### Prerequisites
 
-- Python 3.12+
+- Python 3.13+
 - Podman or Docker
 - uv (Python package manager)
 

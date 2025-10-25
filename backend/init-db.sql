@@ -19,15 +19,20 @@ CREATE TABLE IF NOT EXISTS trading.accounts (
 
 -- Market data table (time-series)
 CREATE TABLE IF NOT EXISTS trading.market_data (
+    id SERIAL,
     time TIMESTAMP NOT NULL,
-    symbol VARCHAR(20) NOT NULL,
-    open DECIMAL(20, 8),
-    high DECIMAL(20, 8),
-    low DECIMAL(20, 8),
-    close DECIMAL(20, 8),
-    volume DECIMAL(20, 8),
-    interval VARCHAR(10),
-    PRIMARY KEY (time, symbol)
+    symbol VARCHAR(50) NOT NULL,
+    interval VARCHAR(20) NOT NULL,
+    open DECIMAL(20, 8) NOT NULL,
+    high DECIMAL(20, 8) NOT NULL,
+    low DECIMAL(20, 8) NOT NULL,
+    close DECIMAL(20, 8) NOT NULL,
+    volume DECIMAL(20, 8) NOT NULL,
+    quote_asset_volume DECIMAL(20, 8),
+    number_of_trades DECIMAL(20, 8),
+    taker_buy_base_asset_volume DECIMAL(20, 8),
+    taker_buy_quote_asset_volume DECIMAL(20, 8),
+    PRIMARY KEY (time, id)
 );
 
 -- Convert market_data to hypertable for time-series optimization (TimescaleDB)

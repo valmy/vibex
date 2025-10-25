@@ -117,12 +117,30 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
 
+    # Initialize WebSocket for real-time market data
+    try:
+        from .services import get_market_data_service
+        market_data_service = get_market_data_service()
+        await market_data_service.initialize_websocket()
+        logger.info("WebSocket market data service initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize WebSocket service: {e}")
+
 
 # Shutdown event
 @app.on_event("shutdown")
 async def shutdown_event():
     """Handle shutdown event."""
     logger.info(f"Shutting down {config.APP_NAME}")
+
+    # Close WebSocket connections
+    try:
+        from .services import get_market_data_service
+        market_data_service = get_market_data_service()
+        await market_data_service.close_websocket()
+        logger.info("WebSocket connections closed")
+    except Exception as e:
+        logger.error(f"Error closing WebSocket: {e}")
 
     # Close database
     try:

@@ -16,7 +16,7 @@ TimescaleBase = declarative_base()
 
 class MarketData(TimescaleBase):
     """Market data (OHLCV) model for TimescaleDB hypertable."""
-    
+
     __tablename__ = "market_data"
     __table_args__ = (
         PrimaryKeyConstraint("time", "id"),
@@ -28,7 +28,7 @@ class MarketData(TimescaleBase):
     # Note: Using composite primary key as required by TimescaleDB
     time = Column(DateTime, nullable=False, primary_key=True)
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    
+
     # Market identification
     symbol = Column(String(50), nullable=False, index=True)  # e.g., BTC/USDT
     interval = Column(String(20), nullable=False)  # e.g., 1h, 4h, 1d
@@ -50,19 +50,19 @@ class MarketData(TimescaleBase):
     @hybrid_property
     def timeframe(self):
         return self.interval
-        
+
     @hybrid_property
     def open_price(self):
         return self.open
-        
+
     @hybrid_property
     def high_price(self):
         return self.high
-        
+
     @hybrid_property
     def low_price(self):
         return self.low
-        
+
     @hybrid_property
     def close_price(self):
         return self.close

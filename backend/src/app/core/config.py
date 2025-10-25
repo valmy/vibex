@@ -50,7 +50,8 @@ class BaseConfig(BaseSettings):
     # Trading Configuration
     LLM_MODEL: str = Field(default="x-ai/grok-4", description="LLM model to use")
     ASSETS: str = Field(default="BTC,ETH,SOL", description="Assets to trade (comma-separated)")
-    INTERVAL: str = Field(default="1h", description="Trading interval: 5m, 1h, 4h, 1d")
+    INTERVAL: str = Field(default="1h", description="Trading interval: 3m, 5m, 1h")
+    LONG_INTERVAL: str = Field(default="1h", description="Trading long interval: 15m,1h, 4h, 1d")
     LEVERAGE: float = Field(default=2.0, description="Trading leverage (2x-5x recommended)")
     MAX_POSITION_SIZE_USD: float = Field(default=10000.0, description="Maximum position size in USD")
 

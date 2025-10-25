@@ -1,6 +1,6 @@
 # Implementation Decisions and Clarifications
 
-**Document Version**: 1.0  
+**Document Version**: 1.0
 **Created**: October 23, 2025
 
 ---
@@ -8,8 +8,8 @@
 ## Decisions Made (Based on REQUIREMENTS.md)
 
 ### 1. Web Framework: FastAPI
-**Decision**: Use FastAPI as the web framework  
-**Rationale**: 
+**Decision**: Use FastAPI as the web framework
+**Rationale**:
 - Explicitly specified in REQUIREMENTS.md Section 3.4.1
 - Modern, fast, with automatic OpenAPI documentation
 - Excellent async/await support for real-time operations
@@ -25,7 +25,7 @@
 ---
 
 ### 2. Dependency Manager: uv
-**Decision**: Use `uv` for Python dependency management  
+**Decision**: Use `uv` for Python dependency management
 **Rationale**:
 - Explicitly specified in REQUIREMENTS.md Section 6.2
 - Modern, fast Python package manager
@@ -40,7 +40,7 @@
 ---
 
 ### 3. Database: PostgreSQL with TimescaleDB
-**Decision**: Use PostgreSQL 16 with TimescaleDB extension  
+**Decision**: Use PostgreSQL 16 with TimescaleDB extension
 **Rationale**:
 - Recommended in REQUIREMENTS.md Section 9.2
 - Combines relational and time-series capabilities
@@ -58,7 +58,7 @@
 ---
 
 ### 4. Container Runtime: Podman
-**Decision**: Use Podman with podman-compose  
+**Decision**: Use Podman with podman-compose
 **Rationale**:
 - Explicitly requested (replacing Docker)
 - Rootless container support
@@ -74,7 +74,7 @@
 ---
 
 ### 5. Logging Framework: Python logging + JSON
-**Decision**: Use Python's built-in logging module with JSON formatting  
+**Decision**: Use Python's built-in logging module with JSON formatting
 **Rationale**:
 - No external dependencies required
 - Mature and well-documented
@@ -92,7 +92,7 @@
 ---
 
 ### 6. Architecture: Monorepo
-**Decision**: Use monorepo structure with separate backend and frontend directories  
+**Decision**: Use monorepo structure with separate backend and frontend directories
 **Rationale**:
 - Supports future TypeScript frontend integration
 - Shared documentation and scripts
@@ -112,7 +112,7 @@ vibex/
 ---
 
 ### 7. API Design: REST + WebSocket
-**Decision**: Implement both REST API and WebSocket endpoints  
+**Decision**: Implement both REST API and WebSocket endpoints
 **Rationale**:
 - REST for initial data loading and queries
 - WebSocket for real-time updates
@@ -128,7 +128,7 @@ vibex/
 ---
 
 ### 8. Multi-Account Support
-**Decision**: Implement multi-account support from the start  
+**Decision**: Implement multi-account support from the start
 **Rationale**:
 - Specified in REQUIREMENTS.md Section 3.3.4
 - Requires account isolation at all levels
@@ -146,13 +146,13 @@ vibex/
 ## Decisions Requiring Clarification
 
 ### 1. Frontend Framework Selection
-**Question**: Which frontend framework should be used?  
+**Question**: Which frontend framework should be used?
 **Options**:
 - React (most popular, large ecosystem)
 - Vue (simpler learning curve, good performance)
 - Svelte (smallest bundle size, reactive)
 
-**Recommendation**: React (most common choice for trading dashboards)  
+**Recommendation**: React (most common choice for trading dashboards)
 **Status**: Awaiting confirmation
 
 **Impact**: Affects frontend directory structure and build configuration
@@ -160,13 +160,13 @@ vibex/
 ---
 
 ### 2. Database Backup Strategy
-**Question**: How should database backups be handled?  
+**Question**: How should database backups be handled?
 **Options**:
 - Local backups (simple, limited redundancy)
 - Cloud storage (S3, GCS, Azure Blob)
 - Managed database service (RDS, Cloud SQL)
 
-**Recommendation**: Cloud storage for production, local for development  
+**Recommendation**: Cloud storage for production, local for development
 **Status**: Awaiting confirmation
 
 **Impact**: Affects deployment procedures and disaster recovery
@@ -174,13 +174,13 @@ vibex/
 ---
 
 ### 3. Monitoring and Alerting
-**Question**: What monitoring and alerting system should be used?  
+**Question**: What monitoring and alerting system should be used?
 **Options**:
 - Prometheus + Grafana (open-source, self-hosted)
 - Cloud provider monitoring (CloudWatch, Stackdriver, Azure Monitor)
 - Third-party services (Datadog, New Relic)
 
-**Recommendation**: Prometheus + Grafana for development, cloud provider for production  
+**Recommendation**: Prometheus + Grafana for development, cloud provider for production
 **Status**: Awaiting confirmation
 
 **Impact**: Affects infrastructure setup and operational procedures
@@ -188,14 +188,14 @@ vibex/
 ---
 
 ### 4. Log Aggregation
-**Question**: Should logs be aggregated to a central system?  
+**Question**: Should logs be aggregated to a central system?
 **Options**:
 - ELK Stack (Elasticsearch, Logstash, Kibana)
 - Cloud provider logging (CloudWatch, Stackdriver)
 - Third-party services (Datadog, Splunk)
 - Local file-based logging only
 
-**Recommendation**: Local file-based for development, cloud provider for production  
+**Recommendation**: Local file-based for development, cloud provider for production
 **Status**: Awaiting confirmation
 
 **Impact**: Affects logging infrastructure and operational procedures
@@ -203,14 +203,14 @@ vibex/
 ---
 
 ### 5. CI/CD Pipeline
-**Question**: What CI/CD system should be used?  
+**Question**: What CI/CD system should be used?
 **Options**:
 - GitHub Actions (integrated with GitHub)
 - GitLab CI (if using GitLab)
 - Jenkins (self-hosted)
 - Other cloud provider CI/CD
 
-**Recommendation**: GitHub Actions (integrated, free for public repos)  
+**Recommendation**: GitHub Actions (integrated, free for public repos)
 **Status**: Awaiting confirmation
 
 **Impact**: Affects deployment automation and testing procedures
@@ -218,14 +218,14 @@ vibex/
 ---
 
 ### 6. Authentication and Authorization
-**Question**: Should API endpoints have authentication?  
+**Question**: Should API endpoints have authentication?
 **Options**:
 - No authentication (development only)
 - API key authentication
 - JWT tokens
 - OAuth2
 
-**Recommendation**: API key for development, JWT for production  
+**Recommendation**: API key for development, JWT for production
 **Status**: Awaiting confirmation
 
 **Impact**: Affects API security and frontend integration
@@ -233,13 +233,13 @@ vibex/
 ---
 
 ### 7. Rate Limiting
-**Question**: Should API endpoints have rate limiting?  
+**Question**: Should API endpoints have rate limiting?
 **Options**:
 - No rate limiting (development)
 - Simple rate limiting (per IP)
 - Advanced rate limiting (per user/account)
 
-**Recommendation**: Simple rate limiting for development, advanced for production  
+**Recommendation**: Simple rate limiting for development, advanced for production
 **Status**: Awaiting confirmation
 
 **Impact**: Affects API robustness and security
@@ -247,13 +247,13 @@ vibex/
 ---
 
 ### 8. Error Handling and Recovery
-**Question**: How should application errors be handled?  
+**Question**: How should application errors be handled?
 **Options**:
 - Graceful degradation (continue with reduced functionality)
 - Automatic restart (systemd, supervisor)
 - Manual intervention required
 
-**Recommendation**: Graceful degradation with automatic restart capability  
+**Recommendation**: Graceful degradation with automatic restart capability
 **Status**: Awaiting confirmation
 
 **Impact**: Affects reliability and uptime
@@ -298,7 +298,7 @@ vibex/
 - Rich plugin ecosystem
 
 ### Code Quality Tools
-**Decided**: 
+**Decided**:
 - black (code formatting)
 - ruff (linting)
 - mypy (type checking)
@@ -315,7 +315,7 @@ vibex/
 ## Implementation Constraints
 
 ### Python Version
-- **Minimum**: Python 3.12
+- **Minimum**: Python 3.13
 - **Reason**: Modern features, better performance
 - **Specified in**: REQUIREMENTS.md Section 6.3
 

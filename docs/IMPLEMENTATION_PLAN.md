@@ -1,7 +1,7 @@
 # AI Trading Agent - Implementation Plan
 
-**Document Version**: 1.0  
-**Created**: October 23, 2025  
+**Document Version**: 1.0
+**Created**: October 23, 2025
 **Status**: Planning Phase - Ready for Implementation
 
 ---
@@ -127,7 +127,7 @@ frontend/
 
 **Services**:
 1. **Python Backend Service**
-   - Image: Python 3.12-slim with FastAPI
+   - Image: Python 3.13-slim with FastAPI
    - Port: 3000 (exposed)
    - Volumes: code (hot-reload), logs (persistent)
    - Environment: Development configuration

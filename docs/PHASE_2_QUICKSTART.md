@@ -1,7 +1,7 @@
 # Phase 2: Infrastructure Setup - Quick Start Guide
 
-**Status**: Ready to Begin  
-**Estimated Duration**: 1-2 days  
+**Status**: Ready to Begin
+**Estimated Duration**: 1-2 days
 **Prerequisites**: Phase 1 Complete ✅
 
 ---
@@ -40,7 +40,7 @@ This will:
 
 ```bash
 # Check Python version
-python --version  # Should be 3.12+
+python --version  # Should be 3.13+
 
 # Check FastAPI
 uv run python -c "import fastapi; print(fastapi.__version__)"
@@ -430,7 +430,7 @@ podman-compose down -v
 
 ---
 
-**Status**: Ready to Begin Phase 2  
-**Estimated Time**: 1-2 days  
+**Status**: Ready to Begin Phase 2
+**Estimated Time**: 1-2 days
 **Next Phase**: Phase 3 - FastAPI Skeleton Development
 
