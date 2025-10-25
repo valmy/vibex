@@ -31,7 +31,7 @@ LLM-powered cryptocurrency trading agent for AsterDEX.
 
 4. **Start development environment**
    ```bash
-   podman-compose up -d
+   uv run podman-compose up -d
    ```
 
 5. **Run migrations**
@@ -180,7 +180,7 @@ postgresql://trading_user:trading_password@postgres:5432/trading_db
 
 **Docker Image:**
 ```
-timescale/timescaledb:latest-pg16-oss
+docker.io/timescale/timescaledb:latest-pg17
 ```
 
 **Hypertable Configuration:**
@@ -219,16 +219,16 @@ podman run -p 3000:3000 --env-file .env trading-agent:latest
 
 ```bash
 # Start services
-podman-compose up -d
+uv run podman-compose up -d
 
 # View logs
-podman-compose logs -f backend
+uv run podman-compose logs -f backend
 
 # Stop services
-podman-compose down
+uv run podman-compose down
 
 # Remove volumes
-podman-compose down -v
+uv run podman-compose down -v
 ```
 
 ## Troubleshooting
@@ -237,13 +237,13 @@ podman-compose down -v
 
 ```bash
 # Check PostgreSQL is running
-podman-compose ps
+uv run podman-compose ps
 
 # Check logs
-podman-compose logs postgres
+uv run podman-compose logs postgres
 
 # Restart PostgreSQL
-podman-compose restart postgres
+uv run podman-compose restart postgres
 ```
 
 ### Port Already in Use
