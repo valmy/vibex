@@ -3,8 +3,10 @@ Performance metric schemas for request/response validation.
 """
 
 from typing import Optional
+
 from pydantic import Field
-from .base import BaseSchema, BaseCreateSchema
+
+from .base import BaseCreateSchema, BaseSchema
 
 
 class PerformanceMetricCreate(BaseCreateSchema):
@@ -55,4 +57,3 @@ class PerformanceMetricListResponse(BaseSchema):
 
     total: int
     items: list[PerformanceMetricRead]
-

@@ -4,8 +4,9 @@ Diary entry model for trading journal.
 Represents a journal entry for trading analysis and reflection.
 """
 
-from sqlalchemy import Column, String, Text, Integer, ForeignKey, Index
+from sqlalchemy import Column, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
+
 from .base import BaseModel
 
 
@@ -16,14 +17,16 @@ class DiaryEntry(BaseModel):
     __table_args__ = (
         Index("idx_diary_account_id", "account_id"),
         Index("idx_diary_entry_type", "entry_type"),
-        {"schema": "trading"}
+        {"schema": "trading"},
     )
 
     # Foreign key
     account_id = Column(Integer, ForeignKey("trading.accounts.id"), nullable=False, index=True)
 
     # Entry details
-    entry_type = Column(String(50), nullable=False)  # trade_analysis, market_analysis, reflection, note
+    entry_type = Column(
+        String(50), nullable=False
+    )  # trade_analysis, market_analysis, reflection, note
     title = Column(String(255), nullable=False)
     content = Column(Text, nullable=False)
 
@@ -38,4 +41,3 @@ class DiaryEntry(BaseModel):
     def __repr__(self):
         """String representation."""
         return f"<DiaryEntry(id={self.id}, title={self.title}, type={self.entry_type})>"
-

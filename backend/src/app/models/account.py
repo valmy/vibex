@@ -4,8 +4,9 @@ Account model for trading accounts.
 Represents a trading account with configuration and status.
 """
 
-from sqlalchemy import Column, String, Float, Boolean, Text, Index
+from sqlalchemy import Boolean, Column, Float, Index, String, Text
 from sqlalchemy.orm import relationship
+
 from .base import BaseModel
 
 
@@ -16,7 +17,7 @@ class Account(BaseModel):
     __table_args__ = (
         Index("idx_account_name", "name"),
         Index("idx_account_status", "status"),
-        {"schema": "trading"}
+        {"schema": "trading"},
     )
 
     # Account identification
@@ -43,10 +44,13 @@ class Account(BaseModel):
     positions = relationship("Position", back_populates="account", cascade="all, delete-orphan")
     orders = relationship("Order", back_populates="account", cascade="all, delete-orphan")
     trades = relationship("Trade", back_populates="account", cascade="all, delete-orphan")
-    diary_entries = relationship("DiaryEntry", back_populates="account", cascade="all, delete-orphan")
-    performance_metrics = relationship("PerformanceMetric", back_populates="account", cascade="all, delete-orphan")
+    diary_entries = relationship(
+        "DiaryEntry", back_populates="account", cascade="all, delete-orphan"
+    )
+    performance_metrics = relationship(
+        "PerformanceMetric", back_populates="account", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         """String representation."""
         return f"<Account(id={self.id}, name={self.name}, status={self.status})>"
-

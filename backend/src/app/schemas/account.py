@@ -3,8 +3,10 @@ Account schemas for request/response validation.
 """
 
 from typing import Optional
+
 from pydantic import Field
-from .base import BaseSchema, BaseCreateSchema, BaseUpdateSchema
+
+from .base import BaseCreateSchema, BaseSchema, BaseUpdateSchema
 
 
 class AccountCreate(BaseCreateSchema):
@@ -16,8 +18,12 @@ class AccountCreate(BaseCreateSchema):
     api_secret: Optional[str] = Field(None, description="API secret")
     api_passphrase: Optional[str] = Field(None, description="API passphrase")
     leverage: float = Field(default=2.0, ge=1.0, le=5.0, description="Trading leverage")
-    max_position_size_usd: float = Field(default=10000.0, gt=0, description="Max position size in USD")
-    risk_per_trade: float = Field(default=0.02, ge=0.01, le=0.1, description="Risk per trade (0.01-0.1)")
+    max_position_size_usd: float = Field(
+        default=10000.0, gt=0, description="Max position size in USD"
+    )
+    risk_per_trade: float = Field(
+        default=0.02, ge=0.01, le=0.1, description="Risk per trade (0.01-0.1)"
+    )
     is_paper_trading: bool = Field(default=False, description="Is paper trading")
     is_multi_account: bool = Field(default=False, description="Is multi-account mode")
 
@@ -53,4 +59,3 @@ class AccountListResponse(BaseSchema):
 
     total: int
     items: list[AccountRead]
-

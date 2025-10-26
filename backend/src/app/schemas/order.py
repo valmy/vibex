@@ -3,8 +3,10 @@ Order schemas for request/response validation.
 """
 
 from typing import Optional
+
 from pydantic import Field
-from .base import BaseSchema, BaseCreateSchema, BaseUpdateSchema
+
+from .base import BaseCreateSchema, BaseSchema, BaseUpdateSchema
 
 
 class OrderCreate(BaseCreateSchema):
@@ -53,4 +55,3 @@ class OrderListResponse(BaseSchema):
 
     total: int
     items: list[OrderRead]
-

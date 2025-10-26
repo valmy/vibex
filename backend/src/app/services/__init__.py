@@ -6,8 +6,8 @@ Includes:
 - LLMService: LLM-powered market analysis
 """
 
-from .market_data_service import MarketDataService, get_market_data_service
 from .llm_service import LLMService, get_llm_service
+from .market_data_service import MarketDataService, get_market_data_service
 
 __all__ = [
     "MarketDataService",

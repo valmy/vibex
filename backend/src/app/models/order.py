@@ -4,8 +4,9 @@ Order model for trading orders.
 Represents a trading order (pending, filled, cancelled, etc.).
 """
 
-from sqlalchemy import Column, String, Float, Integer, ForeignKey, Index
+from sqlalchemy import Column, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import relationship
+
 from .base import BaseModel
 
 
@@ -18,7 +19,7 @@ class Order(BaseModel):
         Index("idx_order_position_id", "position_id"),
         Index("idx_order_symbol", "symbol"),
         Index("idx_order_status", "status"),
-        {"schema": "trading"}
+        {"schema": "trading"},
     )
 
     # Foreign keys
@@ -30,7 +31,9 @@ class Order(BaseModel):
     symbol = Column(String(50), nullable=False)
     order_type = Column(String(50), nullable=False)  # market, limit, stop, stop-limit
     side = Column(String(10), nullable=False)  # buy or sell
-    status = Column(String(50), default="pending", nullable=False)  # pending, filled, cancelled, rejected
+    status = Column(
+        String(50), default="pending", nullable=False
+    )  # pending, filled, cancelled, rejected
 
     # Order details
     quantity = Column(Float, nullable=False)
@@ -51,5 +54,6 @@ class Order(BaseModel):
 
     def __repr__(self):
         """String representation."""
-        return f"<Order(id={self.id}, symbol={self.symbol}, side={self.side}, status={self.status})>"
-
+        return (
+            f"<Order(id={self.id}, symbol={self.symbol}, side={self.side}, status={self.status})>"
+        )

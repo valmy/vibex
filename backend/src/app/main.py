@@ -4,16 +4,26 @@ Main FastAPI application for the AI Trading Agent.
 Initializes the FastAPI app with middleware, routes, and WebSocket handlers.
 """
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
 import os
 
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+from .api.routes import (
+    accounts,
+    analysis,
+    diary,
+    market_data,
+    orders,
+    performance,
+    positions,
+    trades,
+)
 from .core.config import config
-from .core.logging import setup_logging, get_logger
-from .db import init_db, close_db, check_db_health
-from .api.routes import accounts, positions, orders, trades, diary, performance, market_data, analysis
+from .core.logging import get_logger, setup_logging
+from .db import check_db_health, close_db, init_db
 
 # Initialize logging
 setup_logging(config)
@@ -103,28 +113,34 @@ async def startup_event():
     """Handle startup event."""
     logger.info(f"Starting {config.APP_NAME} v{config.APP_VERSION}")
     logger.info(f"Environment: {config.ENVIRONMENT}")
-    logger.info(f"Debug mode: {config.DEBUG}")
-    logger.info(f"API listening on {config.API_HOST}:{config.API_PORT}")
 
     # Initialize database
     try:
+        from .db.session import init_db
+
         await init_db()
-        db_health = await check_db_health()
-        if db_health:
-            logger.info("Database connection successful")
-        else:
-            logger.warning("Database health check failed")
+        logger.info("Database initialized")
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
+        raise
 
-    # Initialize WebSocket for real-time market data
+    # Initialize market data service with candle-close scheduling
     try:
         from .services import get_market_data_service
+
         market_data_service = get_market_data_service()
-        await market_data_service.initialize_websocket()
-        logger.info("WebSocket market data service initialized")
+
+        # Start the scheduler for both intervals
+        await market_data_service.start_scheduler()
+        logger.info("Candle-close scheduler started")
+
+        # Log scheduler status
+        status = await market_data_service.get_scheduler_status()
+        logger.info(f"Scheduler status: {status}")
+
     except Exception as e:
-        logger.error(f"Failed to initialize WebSocket service: {e}")
+        logger.error(f"Failed to start candle-close scheduler: {e}")
+        raise
 
 
 # Shutdown event
@@ -133,20 +149,24 @@ async def shutdown_event():
     """Handle shutdown event."""
     logger.info(f"Shutting down {config.APP_NAME}")
 
-    # Close WebSocket connections
+    # Stop the market data scheduler
     try:
         from .services import get_market_data_service
-        market_data_service = get_market_data_service()
-        await market_data_service.close_websocket()
-        logger.info("WebSocket connections closed")
-    except Exception as e:
-        logger.error(f"Error closing WebSocket: {e}")
 
-    # Close database
-    try:
-        await close_db()
+        market_data_service = get_market_data_service()
+        await market_data_service.stop_scheduler()
+        logger.info("Market data scheduler stopped")
     except Exception as e:
-        logger.error(f"Error closing database: {e}")
+        logger.error(f"Error stopping market data scheduler: {e}")
+
+    # Close any remaining database connections
+    try:
+        from .db.session import close_db
+
+        await close_db()
+        logger.info("Database connections closed")
+    except Exception as e:
+        logger.error(f"Error closing database connections: {e}")
 
 
 # Mount static files if they exist
@@ -165,4 +185,3 @@ if __name__ == "__main__":
         reload=config.DEBUG,
         log_level=config.LOG_LEVEL.lower(),
     )
-

@@ -1,365 +1,468 @@
 """
 Market Data Service for fetching and managing real-time market data.
 
-Integrates with Aster Connector for market data fetching and stores data in TimescaleDB.
+Implements candle-close based data fetching with event-driven architecture.
 """
 
-from datetime import datetime, timedelta
-from dataclasses import dataclass
-from enum import Enum
-from typing import Any, Dict, List, Optional, Callable, Awaitable
 import asyncio
 import logging
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum, auto
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
-from sqlalchemy import and_
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 
 from ..core.config import config
 from ..models.market_data import MarketData
 
 logger = logging.getLogger(__name__)
 
+# Type variable for generic event handling
+T = TypeVar("T")
+
+
+@dataclass
+class BaseEvent:
+    """Base class for all market data events."""
+
+    timestamp: datetime = field(default_factory=datetime.utcnow)
+
+
+@dataclass
+class CandleCloseEvent(BaseEvent):
+    """Event triggered when a candle closes."""
+
+    symbol: str = ""
+    interval: str = ""
+    candle: dict = field(default_factory=dict)  # Raw candle data
+    close_time: datetime = field(default_factory=datetime.utcnow)
+
+
+class EventType(Enum):
+    CANDLE_CLOSE = auto()
+    # Add other event types as needed
+
+
+def event_handler(event_type: EventType, interval: str = None):
+    """
+    Decorator for event handler methods.
+
+    Args:
+        event_type: The type of event to handle.
+        interval: Optional interval filter for the event.
+    """
+
+    def decorator(func: Callable) -> Callable:
+        async def wrapper(*args, **kwargs):
+            return await func(*args, **kwargs)
+
+        wrapper._is_event_handler = True
+        wrapper._event_type = event_type
+        wrapper._interval = interval
+        return wrapper
+
+    return decorator
+
+
 class MarketDataService:
-    """Service for managing market data operations."""
+    """
+    Service for managing market data operations with candle-close based scheduling.
 
-    class WSEventType(Enum):
-        KLINE = "kline"
-        TRADE = "trade"
-        TICKER = "ticker"
-        DEPTH = "depth"
-        ALL_TICKERS = "all_tickers"
+    Features:
+    - Interval-based candle close scheduling
+    - Event-driven architecture
+    - Automatic retries with backoff
+    - Support for multiple intervals (e.g., 1h, 4h)
+    """
 
-    @dataclass
-    class WSSubscription:
-        symbol: str
-        interval: str
-        callback: Callable[[Dict], Awaitable[None]]
+    # Default retry configuration
+    DEFAULT_RETRY_ATTEMPTS = 5
+    DEFAULT_RETRY_DELAY = 1.0  # seconds
+    MAX_RETRY_DELAY = 300.0  # 5 minutes
 
     def __init__(self):
         """Initialize the Market Data Service."""
         self.api_key = config.ASTERDEX_API_KEY
         self.api_secret = config.ASTERDEX_API_SECRET
         self.base_url = config.ASTERDEX_BASE_URL
-        self.assets = [asset.strip() for asset in config.ASSETS.split(",")]
+        self.assets = [asset.strip() for asset in config.ASSETS.split(",") if asset.strip()]
         self.interval = config.INTERVAL
         self.long_interval = config.LONG_INTERVAL
 
-        # WebSocket state
-        self._ws_connected = False
-        self._ws_task = None
-        self._subscriptions = []
-        self._ws_lock = asyncio.Lock()
-        self._shutdown_event = asyncio.Event()
-        self._event_loop = None  # Store reference to the main event loop
+        # Validate intervals
+        if self.interval not in ["1m", "5m", "1h", "4h", "1d"]:
+            raise ValueError(f"Invalid interval: {self.interval}")
+        if self.long_interval not in ["1m", "5m", "1h", "4h", "1d"]:
+            raise ValueError(f"Invalid long_interval: {self.long_interval}")
 
-        # Initialize Aster client (lazy loaded)
-        self._aster_client = None
-        self._ws_client = None
+        # Scheduler state
+        self._is_running = False
+        self._scheduled_tasks: Dict[str, asyncio.Task] = {}
+        self._event_handlers: Dict[EventType, Dict[Optional[str], List[Callable]]] = {
+            EventType.CANDLE_CLOSE: {}
+        }
+        self._shutdown_event = asyncio.Event()
+        self._fetch_lock = asyncio.Lock()
+
+        # Aster client is created on-demand via the `aster_client` property
+        # to ensure thread-safety and prevent stale connections.
+
+        # Register default error handler
+        self.register_event_handler(EventType.CANDLE_CLOSE, self._default_candle_close_handler)
+
+    def register_event_handler(
+        self, event_type: EventType, handler: Callable, interval: str = None
+    ):
+        """Register an event handler for a specific event type and optional interval."""
+        if event_type not in self._event_handlers:
+            self._event_handlers[event_type] = {}
+
+        if interval not in self._event_handlers[event_type]:
+            self._event_handlers[event_type][interval] = []
+
+        self._event_handlers[event_type][interval].append(handler)
+        logger.debug(
+            f"Registered {event_type.name} handler for interval {interval}: {handler.__name__}"
+        )
+
+    async def _default_candle_close_handler(self, event: CandleCloseEvent):
+        """Default handler for candle close events."""
+        logger.info(f"Candle closed: {event.symbol} {event.interval} at {event.close_time}")
+
+    async def _trigger_event(self, event: BaseEvent, event_type: EventType, interval: str = None):
+        """Trigger all handlers for a specific event type and optional interval."""
+        if event_type not in self._event_handlers:
+            return
+
+        # Get handlers for this specific interval and global handlers (None interval)
+        handlers = []
+        if interval in self._event_handlers[event_type]:
+            handlers.extend(self._event_handlers[event_type][interval])
+        if None in self._event_handlers[event_type]:
+            handlers.extend(self._event_handlers[event_type][None])
+
+        # Execute all handlers concurrently
+        if handlers:
+            await asyncio.gather(
+                *[self._safe_execute_handler(h, event) for h in handlers], return_exceptions=True
+            )
+
+    async def _safe_execute_handler(self, handler: Callable, event: BaseEvent):
+        """Execute a single event handler with error handling."""
+        try:
+            if asyncio.iscoroutinefunction(handler):
+                await handler(event)
+            else:
+                # Handle synchronous handlers
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, handler, event)
+        except Exception as e:
+            logger.error(f"Error in {handler.__name__}: {e}", exc_info=True)
+
+    # Candle close scheduling methods
+    async def start_scheduler(self):
+        """Start the candle close scheduler for all intervals."""
+        if self._is_running:
+            logger.warning("Scheduler is already running")
+            return
+
+        self._is_running = True
+        self._shutdown_event.clear()
+
+        # Start a task for each interval
+        for interval in {self.interval, self.long_interval}:
+            if interval:
+                self._scheduled_tasks[interval] = asyncio.create_task(
+                    self._schedule_interval(interval), name=f"candle_scheduler_{interval}"
+                )
+                logger.info(f"Started candle scheduler for interval: {interval}")
+
+    async def stop_scheduler(self):
+        """Stop all scheduled tasks gracefully."""
+        if not self._is_running:
+            return
+
+        logger.info("Stopping candle schedulers...")
+        self._is_running = False
+        self._shutdown_event.set()
+
+        # Cancel all running tasks
+        for task in self._scheduled_tasks.values():
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+        self._scheduled_tasks.clear()
+        logger.info("All candle schedulers stopped")
+
+    async def _schedule_interval(self, interval: str):
+        """Schedule candle close events for a specific interval."""
+        logger.info(f"Starting candle scheduler for interval: {interval}")
+
+        while self._is_running and not self._shutdown_event.is_set():
+            try:
+                now = datetime.utcnow()
+                next_close = self._calculate_next_candle_close(interval, now)
+                wait_seconds = (next_close - now).total_seconds()
+
+                # Log the next scheduled candle close
+                logger.info(
+                    f"Next {interval} candle will close at {next_close} (in {wait_seconds:.1f} seconds)"
+                )
+
+                # Sleep until the next candle close
+                while wait_seconds > 0 and self._is_running and not self._shutdown_event.is_set():
+                    sleep_time = min(wait_seconds, 1.0)  # Check every second
+                    await asyncio.sleep(sleep_time)
+                    now = datetime.utcnow()
+                    wait_seconds = (next_close - now).total_seconds()
+
+                # If we get here, it's time to process the candle close
+                if self._is_running and not self._shutdown_event.is_set():
+                    logger.info(f"Processing {interval} candle close at {now}")
+                    await self._process_candle_close(interval)
+
+                    # Small delay to avoid tight loop in case of errors
+                    await asyncio.sleep(1)
+
+            except asyncio.CancelledError:
+                logger.info(f"Candle scheduler for {interval} was cancelled")
+                raise
+            except Exception as e:
+                logger.error(f"Error in {interval} scheduler: {e}", exc_info=True)
+                # Wait a bit before retrying, but not too long
+                await asyncio.sleep(min(60, self._get_interval_seconds(interval) * 0.1))
+
+    async def _process_candle_close(self, interval: str) -> None:
+        """Process a candle close event for the specified interval.
+
+        Fetches and stores the latest candle data for all configured assets.
+        """
+        logger.info("Processing %s candle close", interval)
+
+        try:
+            # Fetch and store the latest candle data for all configured assets
+            await self._fetch_and_store_latest_candle(interval)
+
+            # Calculate and schedule the next candle close
+            next_close = self._calculate_next_candle_close(interval, datetime.utcnow())
+            logger.info("Next %s candle will close at %s", interval, next_close)
+
+        except Exception as e:
+            logger.error("Error processing %s candle close: %s", interval, e, exc_info=True)
+            raise
+
+    async def _fetch_and_store_latest_candle(self, interval: str) -> bool:
+        """Fetch and store the latest candle for all configured assets.
+
+        Args:
+            interval: Candle interval (e.g., '1h', '4h')
+
+        Returns:
+            bool: True if all assets were processed successfully, False otherwise
+        """
+        # Import here to get the initialized version
+        from ..db.session import AsyncSessionLocal
+
+        # Check if database is initialized
+        if AsyncSessionLocal is None:
+            raise RuntimeError("Database not initialized. AsyncSessionLocal is None.")
+
+        # Process each configured asset
+        all_successful = True
+        for asset in self.assets:
+            # Format symbol (e.g., "BTC" -> "BTCUSDT")
+            symbol = f"{asset}USDT" if "USDT" not in asset.upper() else asset
+
+            retry_count = 0
+            last_error = None
+            success = False
+
+            while retry_count < self.DEFAULT_RETRY_ATTEMPTS and not self._shutdown_event.is_set():
+                try:
+                    async with self._fetch_lock, AsyncSessionLocal() as db:
+                        # Add a small delay to ensure the candle is closed
+                        await asyncio.sleep(1)
+
+                        # Use the existing fetch_market_data method to get the latest candles
+                        candles = await self.fetch_market_data(
+                            symbol=symbol,
+                            interval=interval,
+                            limit=2,  # Get current and previous candle for validation
+                        )
+
+                        if not candles or len(candles) < 1:
+                            raise ValueError(f"No candle data returned for {symbol}")
+
+                        # The last candle is the most recent one
+                        latest_candle = candles[-1]
+                        candle_time = datetime.fromtimestamp(latest_candle[0] / 1000)
+
+                        # Validate we got the latest candle
+                        expected_close = self._calculate_previous_candle_close(
+                            interval, datetime.utcnow()
+                        )
+                        if (
+                            abs((candle_time - expected_close).total_seconds()) > 60
+                        ):  # 1 min tolerance
+                            raise ValueError(
+                                f"Received stale candle data for {symbol}. Expected close at {expected_close}, got {candle_time}"
+                            )
+
+                        # Store the candle data
+                        await self.store_market_data(
+                            db=db,
+                            symbol=symbol,
+                            interval=interval,
+                            data=[latest_candle],
+                        )
+
+                        # Commit the transaction
+                        await db.commit()
+
+                        # Trigger event handlers
+                        event = CandleCloseEvent(
+                            symbol=symbol,
+                            interval=interval,
+                            candle=latest_candle,
+                            close_time=candle_time,
+                        )
+                        await self._trigger_event(event, EventType.CANDLE_CLOSE, interval)
+
+                        logger.info(
+                            f"Processed {interval} candle close for {symbol} at {candle_time}"
+                        )
+                        success = True
+                        break  # Success, exit retry loop
+
+                except Exception as e:
+                    last_error = e
+                    retry_delay = min(5 * (2**retry_count), 60)  # Exponential backoff, max 60s
+                    logger.warning(
+                        f"Attempt {retry_count + 1}/{self.DEFAULT_RETRY_ATTEMPTS} failed for {symbol} ({interval}): {e}. "
+                        f"Retrying in {retry_delay}s..."
+                    )
+                    await asyncio.sleep(retry_delay)
+                    retry_count += 1
+
+            if not success:
+                all_successful = False
+                if last_error:
+                    logger.error(
+                        f"Failed to fetch {interval} candle for {symbol} after {self.DEFAULT_RETRY_ATTEMPTS} attempts: {last_error}"
+                    )
+
+        return all_successful
+
+    def _calculate_next_candle_close(self, interval: str, current_time: datetime) -> datetime:
+        """
+        Calculate the next candle close time for a given interval.
+
+        Args:
+            interval: Candle interval (e.g., '1h', '4h')
+            current_time: Current UTC time
+
+        Returns:
+            datetime: Next candle close time in UTC
+        """
+        interval_seconds = self._get_interval_seconds(interval)
+        current_timestamp = int(current_time.timestamp())
+
+        # Calculate the next close time
+        next_close_timestamp = (
+            current_timestamp - (current_timestamp % interval_seconds) + interval_seconds
+        )
+        return datetime.utcfromtimestamp(next_close_timestamp)
+
+    def _calculate_previous_candle_close(self, interval: str, current_time: datetime) -> datetime:
+        """
+        Calculate the most recent candle close time for a given interval.
+
+        Args:
+            interval: Candle interval (e.g., '1h', '4h')
+            current_time: Current UTC time
+
+        Returns:
+            datetime: Previous candle close time in UTC
+        """
+        interval_seconds = self._get_interval_seconds(interval)
+        current_timestamp = int(current_time.timestamp())
+
+        # Calculate the previous close time
+        prev_close_timestamp = current_timestamp - (current_timestamp % interval_seconds)
+        return datetime.utcfromtimestamp(prev_close_timestamp)
+
+    def _get_interval_seconds(self, interval: str) -> int:
+        """
+        Convert interval string to seconds.
+
+        Args:
+            interval: Candle interval (e.g., '1m', '5m', '1h', '4h', '1d')
+
+        Returns:
+            int: Interval duration in seconds
+
+        Raises:
+            ValueError: If the interval format is invalid
+        """
+        if not interval:
+            raise ValueError("Interval cannot be empty")
+
+        if interval.endswith("m"):
+            return int(interval[:-1]) * 60
+        elif interval.endswith("h"):
+            return int(interval[:-1]) * 3600
+        elif interval.endswith("d"):
+            return int(interval[:-1]) * 86400
+        else:
+            raise ValueError(f"Invalid interval format: {interval}")
+
+    async def get_scheduler_status(self) -> dict:
+        """
+        Get the current status of the scheduler.
+
+        Returns:
+            dict: Status information including next scheduled runs
+        """
+        status = {"running": self._is_running, "intervals": {}, "next_runs": {}}
+
+        now = datetime.utcnow()
+        for interval in {self.interval, self.long_interval}:
+            if not interval:
+                continue
+
+            next_close = self._calculate_next_candle_close(interval, now)
+            status["intervals"][interval] = {
+                "next_close": next_close.isoformat(),
+                "in": (next_close - now).total_seconds(),
+                "active": interval in self._scheduled_tasks,
+                "seconds": self._get_interval_seconds(interval),
+            }
+
+        return status
 
     @property
     def aster_client(self):
-        """Lazy load Aster REST API client."""
-        if self._aster_client is None:
-            try:
-                from aster.rest_api import Client
-
-                self._aster_client = Client(
-                    key=self.api_key, secret=self.api_secret, base_url=self.base_url
-                )
-                logger.info("Aster REST API client initialized")
-            except Exception as e:
-                logger.error(f"Failed to initialize Aster client: {e}")
-                raise
-        return self._aster_client
-
-    @property
-    def ws_client(self):
-        """Lazy load Aster WebSocket client."""
-        if self._ws_client is None:
-            try:
-                from aster.websocket.client.stream import WebsocketClient
-
-                self._ws_client = WebsocketClient()
-                logger.info("Aster WebSocket client initialized")
-            except Exception as e:
-                logger.error(f"Failed to initialize WebSocket client: {e}")
-                raise
-        return self._ws_client
-
-
-    async def connect_websocket(self) -> None:
-        """Initialize WebSocket connection."""
-        if self._ws_connected:
-            return
-
-        try:
-            # Store reference to the current event loop
-            self._event_loop = asyncio.get_running_loop()
-            
-            # Start the WebSocket client
-            self.ws_client.start()
-            self._ws_connected = True
-            logger.info("WebSocket connected successfully")
-
-        except Exception as e:
-            logger.error(f"Failed to connect WebSocket: {e}")
-            self._ws_connected = False
-            raise
-
-
-    async def subscribe_market_data(
-        self,
-        symbol: str,
-        interval: str,
-        callback: Callable[[Dict], Awaitable[None]]
-    ) -> None:
-        """Subscribe to market data updates.
-
-        Args:
-            symbol: Trading pair symbol (e.g., 'BTCUSDT')
-            interval: Time interval (e.g., '1h', '4h')
-            callback: Async function to handle updates
         """
-        # Ensure WebSocket is connected
-        if not self._ws_connected:
-            await self.connect_websocket()
+        Create and return a new Aster REST API client on each access.
 
-        # Format symbol if needed
-        formatted_symbol = f"{symbol}USDT" if not symbol.upper().endswith("USDT") else symbol.upper()
-
-        # Create and store subscription
-        subscription = self.WSSubscription(
-            symbol=formatted_symbol,
-            interval=interval,
-            callback=callback
-        )
-
-        async with self._ws_lock:
-            self._subscriptions.append(subscription)
-
-        # Subscribe to the WebSocket stream
-        await self._subscribe_kline(formatted_symbol, interval)
-
-    async def _subscribe_kline(self, symbol: str, interval: str) -> None:
-        """Subscribe to kline/candlestick WebSocket stream."""
-        if not self._ws_connected:
-            return
-
+        This approach avoids issues with thread-safety and stale connections
+        by ensuring each operation gets a fresh, isolated client instance.
+        """
         try:
-            # Use the kline method from Aster WebSocket client
-            # Generate a unique ID for this subscription
-            subscription_id = len(self._subscriptions) + 1
-            self.ws_client.kline(
-                symbol=symbol.lower(),
-                id=subscription_id,
-                interval=interval,
-                callback=self._handle_market_data_update
-            )
-            logger.info(f"Subscribed to {symbol}@kline_{interval} (id={subscription_id})")
+            from aster.rest_api import Client
+
+            # Create a new client instance for each call.
+            client = Client(key=self.api_key, secret=self.api_secret, base_url=self.base_url)
+            logger.debug("New Aster REST API client instance created.")
+            return client
         except Exception as e:
-            logger.error(f"Failed to subscribe to {symbol}@{interval}: {e}")
-            raise
-
-    async def initialize_websocket(self) -> None:
-        """Initialize WebSocket connection and subscribe to market data for all assets."""
-        if self._ws_connected or self._shutdown_event.is_set():
-            return
-
-        try:
-            # Connect to WebSocket
-            await self.connect_websocket()
-
-            # Subscribe to all assets and intervals
-            for symbol in self.assets:
-                # Subscribe to both short and long intervals
-                for interval in [self.interval, self.long_interval]:
-                    try:
-                        await self.subscribe_market_data(
-                            symbol=symbol,
-                            interval=interval,
-                            callback=self._handle_market_data_update
-                        )
-                    except Exception as e:
-                        logger.error(f"Failed to subscribe to {symbol}@{interval}: {e}")
-                        continue
-
-            logger.info("WebSocket market data subscriptions initialized")
-
-        except Exception as e:
-            logger.error(f"Failed to initialize WebSocket: {e}")
-            self._ws_connected = False
-            raise
-
-    def _handle_market_data_update(self, kline_data: Dict) -> None:
-        """Handle incoming market data update from WebSocket (synchronous callback)."""
-        try:
-            # Skip subscription confirmation messages
-            if 'result' in kline_data:
-                return
-
-            # Log the raw data for debugging
-            logger.debug(f"Received WebSocket data: {kline_data}")
-
-            # Extract data from kline update
-            # The data structure might be nested under 'k' key or directly available
-            if 'k' in kline_data:
-                kline = kline_data['k']
-                symbol = kline.get('s', 'UNKNOWN')
-                interval = kline.get('i', 'UNKNOWN')
-                open_price = float(kline.get('o', 0))
-                close_price = float(kline.get('c', 0))
-                high_price = float(kline.get('h', 0))
-                low_price = float(kline.get('l', 0))
-                volume = float(kline.get('v', 0))
-                open_time = int(kline.get('t', 0))
-                quote_volume = float(kline.get('q', 0))
-                num_trades = float(kline.get('n', 0))
-                taker_buy_base = float(kline.get('V', 0))
-                taker_buy_quote = float(kline.get('Q', 0))
-            else:
-                # Fallback for direct structure
-                symbol = kline_data.get('s', 'UNKNOWN')
-                interval = kline_data.get('i', 'UNKNOWN')
-                open_price = float(kline_data.get('o', 0))
-                close_price = float(kline_data.get('c', 0))
-                high_price = float(kline_data.get('h', 0))
-                low_price = float(kline_data.get('l', 0))
-                volume = float(kline_data.get('v', 0))
-                open_time = int(kline_data.get('t', 0))
-                quote_volume = float(kline_data.get('q', 0))
-                num_trades = float(kline_data.get('n', 0))
-                taker_buy_base = float(kline_data.get('V', 0))
-                taker_buy_quote = float(kline_data.get('Q', 0))
-
-            # Skip if essential data is missing
-            if symbol == 'UNKNOWN' or open_time == 0:
-                return
-
-            # Log the update
-            logger.info(f"Market data update - {symbol} {interval}: {open_price} -> {close_price}")
-
-            # Store to database asynchronously using the stored event loop
-            if self._event_loop and not self._event_loop.is_closed():
-                asyncio.run_coroutine_threadsafe(
-                    self._store_websocket_data(
-                        symbol=symbol,
-                        interval=interval,
-                        open_time=open_time,
-                        open_price=open_price,
-                        high_price=high_price,
-                        low_price=low_price,
-                        close_price=close_price,
-                        volume=volume,
-                        quote_volume=quote_volume,
-                        num_trades=num_trades,
-                        taker_buy_base=taker_buy_base,
-                        taker_buy_quote=taker_buy_quote
-                    ),
-                    self._event_loop
-                )
-            else:
-                logger.warning("Cannot store market data: event loop not available")
-
-        except Exception as e:
-            logger.error(f"Error processing market data update: {e}")
-
-    async def _store_websocket_data(
-        self,
-        symbol: str,
-        interval: str,
-        open_time: int,
-        open_price: float,
-        high_price: float,
-        low_price: float,
-        close_price: float,
-        volume: float,
-        quote_volume: float,
-        num_trades: float,
-        taker_buy_base: float,
-        taker_buy_quote: float
-    ) -> None:
-        """Store WebSocket market data to database with duplicate prevention."""
-        try:
-            from ..db.session import AsyncSessionLocal
-
-            # Get database session
-            async with AsyncSessionLocal() as db:
-                # Convert timestamp to datetime
-                candle_time = datetime.fromtimestamp(open_time / 1000)
-
-                # Check if record already exists
-                existing = await db.execute(
-                    select(MarketData).where(
-                        and_(
-                            MarketData.symbol == symbol,
-                            MarketData.interval == interval,
-                            MarketData.time == candle_time
-                        )
-                    )
-                )
-                existing_record = existing.scalar_one_or_none()
-
-                if existing_record:
-                    # Update existing record
-                    existing_record.open = open_price
-                    existing_record.high = high_price
-                    existing_record.low = low_price
-                    existing_record.close = close_price
-                    existing_record.volume = volume
-                    existing_record.quote_asset_volume = quote_volume
-                    existing_record.number_of_trades = num_trades
-                    existing_record.taker_buy_base_asset_volume = taker_buy_base
-                    existing_record.taker_buy_quote_asset_volume = taker_buy_quote
-                    logger.debug(f"Updated market data for {symbol} {interval} at {candle_time}")
-                else:
-                    # Create new record
-                    market_data = MarketData(
-                        symbol=symbol,
-                        interval=interval,
-                        time=candle_time,
-                        open=open_price,
-                        high=high_price,
-                        low=low_price,
-                        close=close_price,
-                        volume=volume,
-                        quote_asset_volume=quote_volume,
-                        number_of_trades=num_trades,
-                        taker_buy_base_asset_volume=taker_buy_base,
-                        taker_buy_quote_asset_volume=taker_buy_quote
-                    )
-                    db.add(market_data)
-                    logger.debug(f"Inserted new market data for {symbol} {interval} at {candle_time}")
-
-                await db.commit()
-
-        except Exception as e:
-            logger.error(f"Error storing WebSocket market data: {e}")
-            if 'db' in locals():
-                await db.rollback()
-
-    async def close_websocket(self) -> None:
-        """Close WebSocket connection and clean up resources."""
-        if not self._ws_connected:
-            return
-
-        try:
-            # Signal shutdown to background tasks
-            self._shutdown_event.set()
-
-            # Close the WebSocket connection
-            if self._ws_client:
-                self._ws_client.stop()
-
-            # Reset state
-            self._ws_connected = False
-            self._subscriptions.clear()
-            self._shutdown_event.clear()
-
-            logger.info("WebSocket connection closed")
-
-        except Exception as e:
-            logger.error(f"Error closing WebSocket: {e}")
+            logger.error(f"Failed to initialize Aster client: {e}", exc_info=True)
             raise
 
     async def fetch_market_data(
@@ -368,27 +471,44 @@ class MarketDataService:
         """
         Fetch market data from Aster DEX.
 
+        This method uses the aster_client property and fetches data within a separate
+        thread to avoid blocking the async event loop with synchronous I/O.
+
         Args:
-            symbol: Trading pair symbol (e.g., BTC/USDT)
-            interval: Candlestick interval (1m, 5m, 1h, 4h, 1d)
+            symbol: Trading pair symbol (e.g., "BTCUSDT")
+            interval: Candle interval (e.g., "1m", "1h", "4h")
             limit: Number of candles to fetch
 
         Returns:
-            List of market data dictionaries
+            List of candle data dictionaries
+
+        Raises:
+            Exception: If the API call fails
         """
         try:
-            logger.info(f"Fetching market data for {symbol} ({interval})")
+            # The actual fetching is done in a separate thread to handle blocking I/O.
+            def _fetch_in_thread():
+                try:
+                    # Use the aster_client property to get a fresh client instance
+                    client = self.aster_client
 
-            # Call Aster API to get market data
-            # Use the klines method from the Client class
-            data = await asyncio.to_thread(
-                self.aster_client.klines, symbol=symbol, interval=interval, limit=limit
-            )
+                    # Call klines with positional arguments for symbol and interval
+                    result = client.klines(symbol, interval, limit=limit)
+                    return result
 
-            logger.info(f"Successfully fetched {len(data)} candles for {symbol}")
+                except Exception as e:
+                    logger.error(f"Error fetching market data in thread: {e}", exc_info=True)
+                    raise
+
+            # Run the blocking I/O in a thread pool
+            loop = asyncio.get_event_loop()
+            data = await loop.run_in_executor(None, _fetch_in_thread)
+
+            logger.debug(f"Successfully fetched {len(data)} candles for {symbol} ({interval})")
             return data
         except Exception as e:
-            logger.error(f"Error fetching market data for {symbol}: {e}")
+            # This will catch errors from the thread and log them.
+            logger.error(f"Error in fetch_market_data task: {e}", exc_info=True)
             raise
 
     async def store_market_data(
@@ -420,11 +540,10 @@ class MarketDataService:
 
                 # Check if record already exists
                 existing = await db.execute(
-                    select(MarketData)
-                    .where(
+                    select(MarketData).where(
                         MarketData.symbol == symbol,
                         MarketData.interval == interval,
-                        MarketData.time == candle_time
+                        MarketData.time == candle_time,
                     )
                 )
                 existing = existing.scalar_one_or_none()
@@ -438,8 +557,12 @@ class MarketDataService:
                     existing.volume = float(candle[5])
                     existing.quote_asset_volume = float(candle[7]) if len(candle) > 7 else 0.0
                     existing.number_of_trades = float(candle[8]) if len(candle) > 8 else 0.0
-                    existing.taker_buy_base_asset_volume = float(candle[9]) if len(candle) > 9 else 0.0
-                    existing.taker_buy_quote_asset_volume = float(candle[10]) if len(candle) > 10 else 0.0
+                    existing.taker_buy_base_asset_volume = (
+                        float(candle[9]) if len(candle) > 9 else 0.0
+                    )
+                    existing.taker_buy_quote_asset_volume = (
+                        float(candle[10]) if len(candle) > 10 else 0.0
+                    )
                     logger.debug(f"Updated existing market data for {symbol} at {candle_time}")
                 else:
                     # Create new record

@@ -4,8 +4,9 @@ Position model for open trading positions.
 Represents an open position in a trading pair.
 """
 
-from sqlalchemy import Column, String, Float, Integer, ForeignKey, Index
+from sqlalchemy import Column, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import relationship
+
 from .base import BaseModel
 
 
@@ -17,7 +18,7 @@ class Position(BaseModel):
         Index("idx_position_account_id", "account_id"),
         Index("idx_position_symbol", "symbol"),
         Index("idx_position_status", "status"),
-        {"schema": "trading"}
+        {"schema": "trading"},
     )
 
     # Foreign key
@@ -52,4 +53,3 @@ class Position(BaseModel):
     def __repr__(self):
         """String representation."""
         return f"<Position(id={self.id}, symbol={self.symbol}, side={self.side}, status={self.status})>"
-

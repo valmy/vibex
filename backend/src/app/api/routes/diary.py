@@ -4,15 +4,20 @@ API routes for trading diary management.
 Provides endpoints for creating, reading, updating, and deleting diary entries.
 """
 
-from fastapi import APIRouter, Depends, status, HTTPException
-from sqlalchemy import select, func
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...core.exceptions import ResourceNotFoundError, to_http_exception
+from ...core.logging import get_logger
 from ...db.session import get_db
 from ...models.diary_entry import DiaryEntry
-from ...schemas.diary_entry import DiaryEntryCreate, DiaryEntryUpdate, DiaryEntryRead, DiaryEntryListResponse
-from ...core.logging import get_logger
-from ...core.exceptions import ResourceNotFoundError, to_http_exception
+from ...schemas.diary_entry import (
+    DiaryEntryCreate,
+    DiaryEntryListResponse,
+    DiaryEntryRead,
+    DiaryEntryUpdate,
+)
 
 logger = get_logger(__name__)
 
@@ -42,13 +47,11 @@ async def list_diary_entries(skip: int = 0, limit: int = 100, db: AsyncSession =
         # Get total count
         count_result = await db.execute(select(func.count(DiaryEntry.id)))
         total = count_result.scalar()
-        
+
         # Get paginated results
-        result = await db.execute(
-            select(DiaryEntry).offset(skip).limit(limit)
-        )
+        result = await db.execute(select(DiaryEntry).offset(skip).limit(limit))
         entries = result.scalars().all()
-        
+
         return DiaryEntryListResponse(items=entries, total=total)
     except Exception as e:
         logger.error(f"Error listing diary entries: {e}")
@@ -61,10 +64,10 @@ async def get_diary_entry(entry_id: int, db: AsyncSession = Depends(get_db)):
     try:
         result = await db.execute(select(DiaryEntry).where(DiaryEntry.id == entry_id))
         entry = result.scalar_one_or_none()
-        
+
         if not entry:
             raise ResourceNotFoundError("DiaryEntry", entry_id)
-        
+
         return entry
     except ResourceNotFoundError as e:
         raise to_http_exception(e)
@@ -75,23 +78,21 @@ async def get_diary_entry(entry_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{entry_id}", response_model=DiaryEntryRead)
 async def update_diary_entry(
-    entry_id: int,
-    entry_data: DiaryEntryUpdate,
-    db: AsyncSession = Depends(get_db)
+    entry_id: int, entry_data: DiaryEntryUpdate, db: AsyncSession = Depends(get_db)
 ):
     """Update a diary entry."""
     try:
         result = await db.execute(select(DiaryEntry).where(DiaryEntry.id == entry_id))
         entry = result.scalar_one_or_none()
-        
+
         if not entry:
             raise ResourceNotFoundError("DiaryEntry", entry_id)
-        
+
         # Update fields
         update_data = entry_data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(entry, field, value)
-        
+
         await db.commit()
         await db.refresh(entry)
         logger.info(f"Updated diary entry {entry_id}")
@@ -110,10 +111,10 @@ async def delete_diary_entry(entry_id: int, db: AsyncSession = Depends(get_db)):
     try:
         result = await db.execute(select(DiaryEntry).where(DiaryEntry.id == entry_id))
         entry = result.scalar_one_or_none()
-        
+
         if not entry:
             raise ResourceNotFoundError("DiaryEntry", entry_id)
-        
+
         await db.delete(entry)
         await db.commit()
         logger.info(f"Deleted diary entry {entry_id}")
@@ -123,4 +124,3 @@ async def delete_diary_entry(entry_id: int, db: AsyncSession = Depends(get_db)):
         await db.rollback()
         logger.error(f"Error deleting diary entry: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete diary entry")
-

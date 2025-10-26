@@ -4,11 +4,10 @@ Market data model for OHLCV data.
 Represents candlestick data for trading pairs.
 """
 
-from sqlalchemy import Column, String, Float, DateTime, Integer, Index
-from sqlalchemy.schema import PrimaryKeyConstraint
+from sqlalchemy import Column, DateTime, Float, Index, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.hybrid import hybrid_property
-
+from sqlalchemy.schema import PrimaryKeyConstraint
 
 # Create a separate base for TimescaleDB models since they have different requirements
 TimescaleBase = declarative_base()
@@ -22,7 +21,7 @@ class MarketData(TimescaleBase):
         PrimaryKeyConstraint("time", "id"),
         Index("idx_market_data_symbol", "symbol"),
         Index("idx_market_data_id", "id"),
-        {"schema": "trading"}
+        {"schema": "trading"},
     )
 
     # Note: Using composite primary key as required by TimescaleDB
@@ -70,4 +69,3 @@ class MarketData(TimescaleBase):
     def __repr__(self):
         """String representation."""
         return f"<MarketData(symbol={self.symbol}, time={self.time}, close={self.close})>"
-

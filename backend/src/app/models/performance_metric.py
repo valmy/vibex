@@ -4,8 +4,9 @@ Performance metric model for tracking trading performance.
 Represents performance metrics and statistics.
 """
 
-from sqlalchemy import Column, String, Float, Integer, ForeignKey, Index
+from sqlalchemy import Column, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import relationship
+
 from .base import BaseModel
 
 
@@ -16,7 +17,7 @@ class PerformanceMetric(BaseModel):
     __table_args__ = (
         Index("idx_performance_account_id", "account_id"),
         Index("idx_performance_period", "period"),
-        {"schema": "trading"}
+        {"schema": "trading"},
     )
 
     # Foreign key
@@ -52,4 +53,3 @@ class PerformanceMetric(BaseModel):
     def __repr__(self):
         """String representation."""
         return f"<PerformanceMetric(id={self.id}, period={self.period}, win_rate={self.win_rate})>"
-

@@ -5,12 +5,12 @@ Provides structured JSON logging with support for multiple log files,
 log rotation, and sensitive data masking.
 """
 
+import json
 import logging
 import logging.handlers
-import json
 import os
-from typing import Any, Dict
 from datetime import datetime
+from typing import Any, Dict
 
 
 class SensitiveDataFilter(logging.Filter):
@@ -163,4 +163,3 @@ def get_logger(name: str) -> logging.Logger:
         logging.Logger: Logger instance
     """
     return logging.getLogger(name)
-

@@ -89,9 +89,9 @@ def to_http_exception(exc: TradingAgentException) -> HTTPException:
         "CONFIGURATION_ERROR": status.HTTP_500_INTERNAL_SERVER_ERROR,
         "INTERNAL_ERROR": status.HTTP_500_INTERNAL_SERVER_ERROR,
     }
-    
+
     status_code = status_code_map.get(exc.code, status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
     return HTTPException(
         status_code=status_code,
         detail={
@@ -99,4 +99,3 @@ def to_http_exception(exc: TradingAgentException) -> HTTPException:
             "message": exc.message,
         },
     )
-

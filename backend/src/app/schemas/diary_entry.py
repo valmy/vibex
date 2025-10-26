@@ -3,15 +3,19 @@ Diary entry schemas for request/response validation.
 """
 
 from typing import Optional
+
 from pydantic import Field
-from .base import BaseSchema, BaseCreateSchema, BaseUpdateSchema
+
+from .base import BaseCreateSchema, BaseSchema, BaseUpdateSchema
 
 
 class DiaryEntryCreate(BaseCreateSchema):
     """Schema for creating a diary entry."""
 
     account_id: int = Field(..., description="Account ID")
-    entry_type: str = Field(..., description="Entry type: trade_analysis, market_analysis, reflection, note")
+    entry_type: str = Field(
+        ..., description="Entry type: trade_analysis, market_analysis, reflection, note"
+    )
     title: str = Field(..., min_length=1, max_length=255, description="Entry title")
     content: str = Field(..., min_length=1, description="Entry content")
     tags: Optional[str] = Field(None, description="Comma-separated tags")
@@ -46,4 +50,3 @@ class DiaryEntryListResponse(BaseSchema):
 
     total: int
     items: list[DiaryEntryRead]
-

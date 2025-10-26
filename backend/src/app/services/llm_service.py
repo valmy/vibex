@@ -4,11 +4,11 @@ LLM Service for market analysis and trading insights.
 Integrates with OpenRouter API for LLM-powered analysis.
 """
 
-from typing import Optional, Dict, Any, List
 import asyncio
 import json
 import logging
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from ..core.config import config
 from ..core.logging import get_logger
@@ -26,7 +26,7 @@ class LLMService:
         self.model = config.LLM_MODEL
         self.referer = config.OPENROUTER_REFERER
         self.app_title = config.OPENROUTER_APP_TITLE
-        
+
         # Initialize OpenRouter client (lazy loaded)
         self._client = None
 
@@ -36,13 +36,14 @@ class LLMService:
         if self._client is None:
             try:
                 import openai
+
                 self._client = openai.AsyncOpenAI(
                     api_key=self.api_key,
                     base_url=self.base_url,
                     default_headers={
                         "HTTP-Referer": self.referer,
                         "X-Title": self.app_title,
-                    }
+                    },
                 )
                 logger.info(f"OpenRouter client initialized with model: {self.model}")
             except Exception as e:
@@ -51,10 +52,7 @@ class LLMService:
         return self._client
 
     async def analyze_market(
-        self,
-        symbol: str,
-        market_data: Dict[str, Any],
-        additional_context: Optional[str] = None
+        self, symbol: str, market_data: Dict[str, Any], additional_context: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Analyze market data and provide trading insights.
@@ -69,27 +67,24 @@ class LLMService:
         """
         try:
             prompt = self._build_analysis_prompt(symbol, market_data, additional_context)
-            
+
             logger.info(f"Analyzing market for {symbol}")
-            
+
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert cryptocurrency trading analyst. Provide concise, actionable market analysis."
+                        "content": "You are an expert cryptocurrency trading analyst. Provide concise, actionable market analysis.",
                     },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=0.7,
-                max_tokens=500
+                max_tokens=500,
             )
-            
+
             analysis_text = response.choices[0].message.content
-            
+
             # Parse the response
             result = {
                 "symbol": symbol,
@@ -99,10 +94,10 @@ class LLMService:
                 "usage": {
                     "prompt_tokens": response.usage.prompt_tokens,
                     "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens
-                }
+                    "total_tokens": response.usage.total_tokens,
+                },
             }
-            
+
             logger.info(f"Market analysis completed for {symbol}")
             return result
         except Exception as e:
@@ -113,7 +108,7 @@ class LLMService:
         self,
         symbol: str,
         market_data: Dict[str, Any],
-        account_info: Optional[Dict[str, Any]] = None
+        account_info: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Get trading signal based on market analysis.
@@ -128,47 +123,40 @@ class LLMService:
         """
         try:
             prompt = self._build_signal_prompt(symbol, market_data, account_info)
-            
+
             logger.info(f"Generating trading signal for {symbol}")
-            
+
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a professional trading advisor. Provide trading signals in JSON format with: signal (BUY/SELL/HOLD), confidence (0-100), reason."
+                        "content": "You are a professional trading advisor. Provide trading signals in JSON format with: signal (BUY/SELL/HOLD), confidence (0-100), reason.",
                     },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=0.5,
-                max_tokens=300
+                max_tokens=300,
             )
-            
+
             signal_text = response.choices[0].message.content
-            
+
             # Try to parse JSON response
             try:
                 signal_data = json.loads(signal_text)
             except json.JSONDecodeError:
                 # If not JSON, extract signal from text
-                signal_data = {
-                    "signal": "HOLD",
-                    "confidence": 50,
-                    "reason": signal_text
-                }
-            
+                signal_data = {"signal": "HOLD", "confidence": 50, "reason": signal_text}
+
             result = {
                 "symbol": symbol,
                 "timestamp": datetime.utcnow().isoformat(),
                 "signal": signal_data.get("signal", "HOLD"),
                 "confidence": signal_data.get("confidence", 50),
                 "reason": signal_data.get("reason", ""),
-                "model": self.model
+                "model": self.model,
             }
-            
+
             logger.info(f"Trading signal generated for {symbol}: {result['signal']}")
             return result
         except Exception as e:
@@ -176,8 +164,7 @@ class LLMService:
             raise
 
     async def summarize_market_conditions(
-        self,
-        market_data_list: List[Dict[str, Any]]
+        self, market_data_list: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
         Summarize overall market conditions.
@@ -190,34 +177,31 @@ class LLMService:
         """
         try:
             prompt = self._build_summary_prompt(market_data_list)
-            
+
             logger.info("Generating market summary")
-            
+
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a market analyst. Provide a concise summary of market conditions."
+                        "content": "You are a market analyst. Provide a concise summary of market conditions.",
                     },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=0.7,
-                max_tokens=400
+                max_tokens=400,
             )
-            
+
             summary_text = response.choices[0].message.content
-            
+
             result = {
                 "timestamp": datetime.utcnow().isoformat(),
                 "summary": summary_text,
                 "symbols_analyzed": len(market_data_list),
-                "model": self.model
+                "model": self.model,
             }
-            
+
             logger.info("Market summary generated")
             return result
         except Exception as e:
@@ -225,10 +209,7 @@ class LLMService:
             raise
 
     def _build_analysis_prompt(
-        self,
-        symbol: str,
-        market_data: Dict[str, Any],
-        additional_context: Optional[str] = None
+        self, symbol: str, market_data: Dict[str, Any], additional_context: Optional[str] = None
     ) -> str:
         """Build market analysis prompt."""
         prompt = f"""
@@ -255,7 +236,7 @@ Provide:
         self,
         symbol: str,
         market_data: Dict[str, Any],
-        account_info: Optional[Dict[str, Any]] = None
+        account_info: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Build trading signal prompt."""
         prompt = f"""
@@ -274,16 +255,15 @@ Respond in JSON format:
 """
         return prompt.strip()
 
-    def _build_summary_prompt(
-        self,
-        market_data_list: List[Dict[str, Any]]
-    ) -> str:
+    def _build_summary_prompt(self, market_data_list: List[Dict[str, Any]]) -> str:
         """Build market summary prompt."""
-        symbols_summary = "\n".join([
-            f"- {data.get('symbol', 'N/A')}: ${data.get('close', 0):.2f} ({data.get('change_percent', 0):.2f}%)"
-            for data in market_data_list
-        ])
-        
+        symbols_summary = "\n".join(
+            [
+                f"- {data.get('symbol', 'N/A')}: ${data.get('close', 0):.2f} ({data.get('change_percent', 0):.2f}%)"
+                for data in market_data_list
+            ]
+        )
+
         prompt = f"""
 Summarize the current market conditions for these assets:
 
@@ -308,4 +288,3 @@ def get_llm_service() -> LLMService:
     if _llm_service is None:
         _llm_service = LLMService()
     return _llm_service
-

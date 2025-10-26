@@ -4,8 +4,9 @@ Trade model for executed trades.
 Represents a completed trade execution.
 """
 
-from sqlalchemy import Column, String, Float, Integer, ForeignKey, Index
+from sqlalchemy import Column, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import relationship
+
 from .base import BaseModel
 
 
@@ -18,7 +19,7 @@ class Trade(BaseModel):
         Index("idx_trade_position_id", "position_id"),
         Index("idx_trade_order_id", "order_id"),
         Index("idx_trade_symbol", "symbol"),
-        {"schema": "trading"}
+        {"schema": "trading"},
     )
 
     # Foreign keys
@@ -51,4 +52,3 @@ class Trade(BaseModel):
     def __repr__(self):
         """String representation."""
         return f"<Trade(id={self.id}, symbol={self.symbol}, side={self.side}, quantity={self.quantity})>"
-

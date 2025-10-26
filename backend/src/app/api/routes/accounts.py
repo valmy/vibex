@@ -3,14 +3,14 @@ API routes for account management.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 
-from ...db import get_db
-from ...models import Account
-from ...schemas import AccountCreate, AccountUpdate, AccountRead, AccountListResponse
 from ...core.exceptions import ResourceNotFoundError, ValidationError, to_http_exception
 from ...core.logging import get_logger
+from ...db import get_db
+from ...models import Account
+from ...schemas import AccountCreate, AccountListResponse, AccountRead, AccountUpdate
 
 logger = get_logger(__name__)
 
@@ -28,13 +28,13 @@ async def create_account(
         result = await db.execute(select(Account).where(Account.name == account_data.name))
         if result.scalar_one_or_none():
             raise ValidationError(f"Account with name '{account_data.name}' already exists")
-        
+
         # Create new account
         account = Account(**account_data.model_dump())
         db.add(account)
         await db.commit()
         await db.refresh(account)
-        
+
         logger.info(f"Created account: {account.name}")
         return account
     except ValidationError as e:
@@ -55,13 +55,11 @@ async def list_accounts(
         # Get total count
         count_result = await db.execute(select(func.count(Account.id)))
         total = count_result.scalar()
-        
+
         # Get accounts
-        result = await db.execute(
-            select(Account).offset(skip).limit(limit)
-        )
+        result = await db.execute(select(Account).offset(skip).limit(limit))
         accounts = result.scalars().all()
-        
+
         return AccountListResponse(total=total, accounts=accounts)
     except Exception as e:
         logger.error(f"Error listing accounts: {e}")
@@ -77,10 +75,10 @@ async def get_account(
     try:
         result = await db.execute(select(Account).where(Account.id == account_id))
         account = result.scalar_one_or_none()
-        
+
         if not account:
             raise ResourceNotFoundError("Account", account_id)
-        
+
         return account
     except ResourceNotFoundError as e:
         raise to_http_exception(e)
@@ -99,18 +97,18 @@ async def update_account(
     try:
         result = await db.execute(select(Account).where(Account.id == account_id))
         account = result.scalar_one_or_none()
-        
+
         if not account:
             raise ResourceNotFoundError("Account", account_id)
-        
+
         # Update fields
         update_data = account_data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(account, field, value)
-        
+
         await db.commit()
         await db.refresh(account)
-        
+
         logger.info(f"Updated account: {account.name}")
         return account
     except ResourceNotFoundError as e:
@@ -129,17 +127,16 @@ async def delete_account(
     try:
         result = await db.execute(select(Account).where(Account.id == account_id))
         account = result.scalar_one_or_none()
-        
+
         if not account:
             raise ResourceNotFoundError("Account", account_id)
-        
+
         await db.delete(account)
         await db.commit()
-        
+
         logger.info(f"Deleted account: {account.name}")
     except ResourceNotFoundError as e:
         raise to_http_exception(e)
     except Exception as e:
         logger.error(f"Error deleting account: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete account")
-

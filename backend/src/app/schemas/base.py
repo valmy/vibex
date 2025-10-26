@@ -5,6 +5,7 @@ Provides common fields and configuration.
 """
 
 from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -28,4 +29,3 @@ class BaseUpdateSchema(BaseModel):
     """Base schema for update operations."""
 
     model_config = ConfigDict(from_attributes=True)
-

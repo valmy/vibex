@@ -3,7 +3,9 @@ Market data schemas for request/response validation.
 """
 
 from typing import Optional
+
 from pydantic import Field
+
 from .base import BaseSchema
 
 
@@ -25,4 +27,3 @@ class MarketDataListResponse(BaseSchema):
 
     total: int
     items: list[MarketDataRead]
-

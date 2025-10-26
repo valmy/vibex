@@ -3,8 +3,10 @@ Position schemas for request/response validation.
 """
 
 from typing import Optional
+
 from pydantic import Field
-from .base import BaseSchema, BaseCreateSchema, BaseUpdateSchema
+
+from .base import BaseCreateSchema, BaseSchema, BaseUpdateSchema
 
 
 class PositionCreate(BaseCreateSchema):
@@ -53,4 +55,3 @@ class PositionListResponse(BaseSchema):
 
     total: int
     items: list[PositionRead]
-
