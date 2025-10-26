@@ -1,0 +1,131 @@
+"""Event system for market data notifications."""
+
+import asyncio
+import logging
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum, auto
+from typing import Callable, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class BaseEvent:
+    """Base class for all market data events."""
+
+    timestamp: datetime = field(default_factory=datetime.utcnow)
+
+
+@dataclass
+class CandleCloseEvent(BaseEvent):
+    """Event triggered when a candle closes."""
+
+    symbol: str = ""
+    interval: str = ""
+    candle: dict = field(default_factory=dict)  # Raw candle data
+    close_time: datetime = field(default_factory=datetime.utcnow)
+
+
+class EventType(Enum):
+    """Types of market data events."""
+
+    CANDLE_CLOSE = auto()
+    # Add other event types as needed
+
+
+def event_handler(event_type: EventType, interval: str = None):
+    """
+    Decorator for event handler methods.
+
+    Args:
+        event_type: The type of event to handle.
+        interval: Optional interval filter for the event.
+    """
+
+    def decorator(func: Callable) -> Callable:
+        async def wrapper(*args, **kwargs):
+            return await func(*args, **kwargs)
+
+        wrapper._is_event_handler = True
+        wrapper._event_type = event_type
+        wrapper._interval = interval
+        return wrapper
+
+    return decorator
+
+
+class EventManager:
+    """Manages event handlers and dispatching."""
+
+    def __init__(self):
+        """Initialize the event manager."""
+        self._event_handlers: Dict[EventType, Dict[Optional[str], List[Callable]]] = {
+            EventType.CANDLE_CLOSE: {}
+        }
+
+    def register_handler(
+        self, event_type: EventType, handler: Callable, interval: str = None
+    ):
+        """Register an event handler for a specific event type and optional interval.
+
+        Args:
+            event_type: The type of event to handle
+            handler: The handler function to call
+            interval: Optional interval filter (e.g., '1h', '4h')
+        """
+        if event_type not in self._event_handlers:
+            self._event_handlers[event_type] = {}
+
+        if interval not in self._event_handlers[event_type]:
+            self._event_handlers[event_type][interval] = []
+
+        self._event_handlers[event_type][interval].append(handler)
+        logger.debug(
+            f"Registered {event_type.name} handler for interval {interval}: {handler.__name__}"
+        )
+
+    async def trigger_event(
+        self, event: BaseEvent, event_type: EventType, interval: str = None
+    ):
+        """Trigger all handlers for a specific event type and optional interval.
+
+        Args:
+            event: The event object to pass to handlers
+            event_type: The type of event being triggered
+            interval: Optional interval filter
+        """
+        if event_type not in self._event_handlers:
+            return
+
+        # Get handlers for this specific interval and global handlers (None interval)
+        handlers = []
+        if interval in self._event_handlers[event_type]:
+            handlers.extend(self._event_handlers[event_type][interval])
+        if None in self._event_handlers[event_type]:
+            handlers.extend(self._event_handlers[event_type][None])
+
+        # Execute all handlers concurrently
+        if handlers:
+            await asyncio.gather(
+                *[self._safe_execute_handler(h, event) for h in handlers],
+                return_exceptions=True,
+            )
+
+    async def _safe_execute_handler(self, handler: Callable, event: BaseEvent):
+        """Execute a single event handler with error handling.
+
+        Args:
+            handler: The handler function to execute
+            event: The event object to pass to the handler
+        """
+        try:
+            if asyncio.iscoroutinefunction(handler):
+                await handler(event)
+            else:
+                # Handle synchronous handlers
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, handler, event)
+        except Exception as e:
+            logger.error(f"Error in {handler.__name__}: {e}", exc_info=True)
+
