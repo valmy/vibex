@@ -22,6 +22,7 @@ from .api.routes import (
     trades,
 )
 from .core.config import config
+from .core.config_manager import get_config_manager
 from .core.logging import get_logger, setup_logging
 from .db import check_db_health, close_db, init_db
 
@@ -114,6 +115,15 @@ async def startup_event():
     logger.info(f"Starting {config.APP_NAME} v{config.APP_VERSION}")
     logger.info(f"Environment: {config.ENVIRONMENT}")
 
+    # Initialize configuration manager
+    try:
+        config_manager = get_config_manager()
+        await config_manager.initialize()
+        logger.info("Configuration manager initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize configuration manager: {e}")
+        raise
+
     # Initialize database
     try:
         from .db.session import init_db
@@ -148,6 +158,14 @@ async def startup_event():
 async def shutdown_event():
     """Handle shutdown event."""
     logger.info(f"Shutting down {config.APP_NAME}")
+
+    # Shutdown configuration manager
+    try:
+        config_manager = get_config_manager()
+        await config_manager.shutdown()
+        logger.info("Configuration manager shut down")
+    except Exception as e:
+        logger.error(f"Error shutting down configuration manager: {e}")
 
     # Stop the market data scheduler
     try:
