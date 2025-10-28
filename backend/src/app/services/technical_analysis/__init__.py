@@ -38,4 +38,3 @@ __all__ = [
     "TechnicalIndicators",
     "get_technical_analysis_service",
 ]
-

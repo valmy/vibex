@@ -133,7 +133,7 @@ frontend/
 
 1. **backend/src/app/core/constants.py** (200 lines)
    - Trading actions (BUY, SELL, HOLD)
-   - Trading intervals (5m, 1h, 4h, 1d)
+   - Trading intervals (1m, 3m, 5m, 15m, 1h, 4h, 1d)
    - Order statuses
    - Position statuses
    - Account statuses

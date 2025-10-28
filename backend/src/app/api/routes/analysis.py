@@ -4,8 +4,7 @@ API routes for market analysis powered by LLM.
 Provides endpoints for market analysis, trading signals, and market summaries.
 """
 
-from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession

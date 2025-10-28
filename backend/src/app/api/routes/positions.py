@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...core.exceptions import ResourceNotFoundError, ValidationError, to_http_exception
+from ...core.exceptions import ResourceNotFoundError, to_http_exception
 from ...core.logging import get_logger
 from ...db.session import get_db
 from ...models.position import Position

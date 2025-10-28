@@ -4,7 +4,7 @@ API routes for trade management.
 Provides endpoints for reading and managing completed trades.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 

@@ -11,7 +11,7 @@ import numpy as np
 
 from ...models.market_data import MarketData
 from . import indicators
-from .exceptions import InvalidCandleDataError, InsufficientDataError
+from .exceptions import InsufficientDataError, InvalidCandleDataError
 from .schemas import TechnicalIndicators
 
 logger = logging.getLogger(__name__)
@@ -26,9 +26,7 @@ class TechnicalAnalysisService:
         """Initialize the Technical Analysis Service."""
         logger.info("TechnicalAnalysisService initialized")
 
-    def calculate_all_indicators(
-        self, candles: List[MarketData]
-    ) -> TechnicalIndicators:
+    def calculate_all_indicators(self, candles: List[MarketData]) -> TechnicalIndicators:
         """
         Calculate all technical indicators from a list of candles.
 
@@ -128,4 +126,3 @@ class TechnicalAnalysisService:
         )
 
         return close_prices, high_prices, low_prices, volume
-

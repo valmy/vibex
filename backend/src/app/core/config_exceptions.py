@@ -134,4 +134,3 @@ class CacheOperationError(ConfigurationError):
         full_message = f"Cache operation '{operation}' failed: {message}"
         super().__init__(full_message)
         self.code = "CACHE_OPERATION_ERROR"
-

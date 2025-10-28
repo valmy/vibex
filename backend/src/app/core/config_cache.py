@@ -7,7 +7,7 @@ configuration values, with statistics tracking and thread-safe access.
 
 import asyncio
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from .logging import get_logger
@@ -28,7 +28,7 @@ class CacheEntry:
         """
         self.value = value
         self.ttl = ttl
-        self.created_at = datetime.utcnow()
+        self.created_at = datetime.now(timezone.utc)
         self.hits = 0
         self.misses = 0
 
@@ -40,7 +40,7 @@ class CacheEntry:
             True if expired, False otherwise
         """
         expiration_time = self.created_at + timedelta(seconds=self.ttl)
-        return datetime.utcnow() > expiration_time
+        return datetime.now(timezone.utc) > expiration_time
 
     def get_expires_at(self) -> datetime:
         """
@@ -220,9 +220,7 @@ class ConfigCache:
             Number of entries removed
         """
         async with self._lock:
-            expired_keys = [
-                key for key, entry in self._cache.items() if entry.is_expired()
-            ]
+            expired_keys = [key for key, entry in self._cache.items() if entry.is_expired()]
             for key in expired_keys:
                 del self._cache[key]
 
@@ -296,4 +294,3 @@ class ConfigCache:
                     "is_expired": entry.is_expired(),
                 }
             return entries_info
-

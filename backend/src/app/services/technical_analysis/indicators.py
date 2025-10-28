@@ -5,7 +5,6 @@ Provides pure functions for calculating technical indicators using TA-Lib and Nu
 """
 
 import logging
-from typing import Tuple
 
 import numpy as np
 import talib
@@ -37,9 +36,7 @@ def _validate_array_length(arr: np.ndarray, min_length: int = 50) -> None:
         raise InsufficientDataError(len(arr), min_length)
 
 
-def _handle_calculation_error(
-    indicator_name: str, error: Exception
-) -> CalculationError:
+def _handle_calculation_error(indicator_name: str, error: Exception) -> CalculationError:
     """
     Convert calculation errors to service exceptions.
 
@@ -97,11 +94,11 @@ def calculate_macd(close_prices: np.ndarray) -> MACDOutput:
     try:
         _validate_array_length(close_prices)
         macd_values, signal_values, histogram_values = talib.MACD(close_prices)
-        
+
         macd = float(macd_values[-1]) if not np.isnan(macd_values[-1]) else None
         signal = float(signal_values[-1]) if not np.isnan(signal_values[-1]) else None
         histogram = float(histogram_values[-1]) if not np.isnan(histogram_values[-1]) else None
-        
+
         logger.debug(f"MACD calculated: macd={macd}, signal={signal}, histogram={histogram}")
         return MACDOutput(macd=macd, signal=signal, histogram=histogram)
     except InsufficientDataError:
@@ -157,11 +154,11 @@ def calculate_bollinger_bands(close_prices: np.ndarray) -> BollingerBandsOutput:
         upper_values, middle_values, lower_values = talib.BBANDS(
             close_prices, timeperiod=20, nbdevup=2, nbdevdn=2
         )
-        
+
         upper = float(upper_values[-1]) if not np.isnan(upper_values[-1]) else None
         middle = float(middle_values[-1]) if not np.isnan(middle_values[-1]) else None
         lower = float(lower_values[-1]) if not np.isnan(lower_values[-1]) else None
-        
+
         logger.debug(f"Bollinger Bands calculated: upper={upper}, middle={middle}, lower={lower}")
         return BollingerBandsOutput(upper=upper, middle=middle, lower=lower, period=20, std_dev=2.0)
     except InsufficientDataError:
@@ -200,4 +197,3 @@ def calculate_atr(
     except Exception as e:
         logger.error(f"ATR calculation failed: {e}")
         raise _handle_calculation_error("ATR", e)
-

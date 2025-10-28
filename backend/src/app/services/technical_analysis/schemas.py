@@ -4,7 +4,7 @@ Pydantic schemas for Technical Analysis Service.
 Defines data contracts for indicator outputs and aggregated results.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -13,9 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class EMAOutput(BaseModel):
     """Exponential Moving Average (EMA) indicator output."""
 
-    model_config = ConfigDict(
-        json_schema_extra={"example": {"ema": 45000.5, "period": 12}}
-    )
+    model_config = ConfigDict(json_schema_extra={"example": {"ema": 45000.5, "period": 12}})
 
     ema: Optional[float] = Field(None, description="EMA value")
     period: int = Field(default=12, description="EMA period")
@@ -36,9 +34,7 @@ class MACDOutput(BaseModel):
 class RSIOutput(BaseModel):
     """Relative Strength Index (RSI) indicator output."""
 
-    model_config = ConfigDict(
-        json_schema_extra={"example": {"rsi": 65.5, "period": 14}}
-    )
+    model_config = ConfigDict(json_schema_extra={"example": {"rsi": 65.5, "period": 14}})
 
     rsi: Optional[float] = Field(None, description="RSI value (0-100)")
     period: int = Field(default=14, description="RSI period")
@@ -69,9 +65,7 @@ class BollingerBandsOutput(BaseModel):
 class ATROutput(BaseModel):
     """Average True Range (ATR) indicator output."""
 
-    model_config = ConfigDict(
-        json_schema_extra={"example": {"atr": 500.0, "period": 14}}
-    )
+    model_config = ConfigDict(json_schema_extra={"example": {"atr": 500.0, "period": 14}})
 
     atr: Optional[float] = Field(None, description="ATR value")
     period: int = Field(default=14, description="ATR period")
@@ -105,6 +99,7 @@ class TechnicalIndicators(BaseModel):
     rsi: RSIOutput = Field(description="RSI indicator")
     bollinger_bands: BollingerBandsOutput = Field(description="Bollinger Bands indicator")
     atr: ATROutput = Field(description="ATR indicator")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Calculation timestamp")
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="Calculation timestamp"
+    )
     candle_count: int = Field(description="Number of candles used for calculation")
-

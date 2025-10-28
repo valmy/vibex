@@ -24,9 +24,7 @@ class InsufficientDataError(TechnicalAnalysisException):
         """
         self.provided = provided
         self.required = required
-        super().__init__(
-            f"Insufficient candle data: {provided} provided, {required} required"
-        )
+        super().__init__(f"Insufficient candle data: {provided} provided, {required} required")
 
 
 class InvalidCandleDataError(TechnicalAnalysisException):
@@ -61,7 +59,4 @@ class CalculationError(TechnicalAnalysisException):
         """
         self.indicator_name = indicator_name
         self.original_error = original_error
-        super().__init__(
-            f"Failed to calculate {indicator_name}: {str(original_error)}"
-        )
-
+        super().__init__(f"Failed to calculate {indicator_name}: {str(original_error)}")

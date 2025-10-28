@@ -1,8 +1,8 @@
 # Configuration System Design: Validation, Reloading & Caching
 
-**Document Version**: 1.0  
-**Date**: 2025-10-27  
-**Status**: Design Phase (Implementation Pending)  
+**Document Version**: 1.0
+**Date**: 2025-10-27
+**Status**: Design Phase (Implementation Pending)
 **Scope**: Configuration Validation, Hot-Reloading, and Caching System
 
 ---
@@ -98,9 +98,9 @@ Configuration is accessed in:
 - Validate field values are within acceptable ranges
 - Validate API keys format
 - Validate URLs are valid
-- Validate leverage limits (1.0-5.0)
-- Validate position size limits (100-100000 USD)
-- Validate intervals are supported (5m, 1h, 4h, 1d)
+-- Validate leverage limits (1.0-25.0)
+-- Validate position size limits (20.0-100000.0 USD)
+-- Validate intervals are supported (1m, 3m, 5m, 15m, 1h, 4h, 1d)
 - Validate assets are non-empty
 - Validate database URL format
 
@@ -118,11 +118,11 @@ class ConfigValidator:
 
 **Validation Rules**:
 - Required: ASTERDEX_API_KEY, ASTERDEX_API_SECRET, OPENROUTER_API_KEY, DATABASE_URL
-- Leverage: 1.0 ≤ value ≤ 5.0
-- Position Size: 100 ≤ value ≤ 100000
-- Intervals: Must be in {5m, 1h, 4h, 1d}
+- Leverage: 1.0 ≤ value ≤ 25.0
+- Position Size: 20.0 ≤ value ≤ 100000.0
+- Intervals: Must be in {1m, 3m, 5m, 15m, 1h, 4h, 1d}
 - Assets: Non-empty comma-separated list
-- URLs: Valid HTTP/HTTPS URLs
+- URLs: Accepts HTTP/HTTPS and database URLs (postgresql, mysql, sqlite, mongodb)
 - API Keys: Non-empty strings
 
 #### 3.2.2 ConfigCache
@@ -457,6 +457,6 @@ POST /api/v1/admin/config/validate     # Validate configuration
 
 ---
 
-**Document Status**: Ready for Implementation  
+**Document Status**: Ready for Implementation
 **Next Step**: Create implementation tasks based on this design
 

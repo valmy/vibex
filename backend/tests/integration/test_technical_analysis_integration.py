@@ -4,14 +4,13 @@ Integration tests for Technical Analysis Service.
 Tests integration with other services and components.
 """
 
+from datetime import datetime, timezone
+
 import pytest
-from datetime import datetime
 
 from app.models.market_data import MarketData
 from app.services import (
     get_technical_analysis_service,
-    get_market_data_service,
-    TechnicalAnalysisService,
 )
 
 
@@ -29,7 +28,7 @@ def market_data_candles():
 
         candles.append(
             MarketData(
-                time=datetime.utcnow(),
+                time=datetime.now(timezone.utc),
                 symbol="BTC/USDT",
                 interval="1h",
                 open=open_price,
@@ -76,7 +75,7 @@ class TestTechnicalAnalysisIntegration:
         for i in range(100):
             candles1.append(
                 MarketData(
-                    time=datetime.utcnow(),
+                    time=datetime.now(timezone.utc),
                     symbol="BTC/USDT",
                     interval="1h",
                     open=45000.0 + i * 10,
@@ -94,7 +93,7 @@ class TestTechnicalAnalysisIntegration:
         for i in range(100):
             candles2.append(
                 MarketData(
-                    time=datetime.utcnow(),
+                    time=datetime.now(timezone.utc),
                     symbol="ETH/USDT",
                     interval="1h",
                     open=2500.0 - i * 5,
@@ -123,7 +122,7 @@ class TestTechnicalAnalysisIntegration:
         for i in range(100):
             candles.append(
                 MarketData(
-                    time=datetime.utcnow(),
+                    time=datetime.now(timezone.utc),
                     symbol="SHIB/USDT",
                     interval="1h",
                     open=base_price + i * 0.00001,
@@ -150,7 +149,7 @@ class TestTechnicalAnalysisIntegration:
             volatility = 500 * (i % 3)
             candles.append(
                 MarketData(
-                    time=datetime.utcnow(),
+                    time=datetime.now(timezone.utc),
                     symbol="BTC/USDT",
                     interval="1h",
                     open=base_price + volatility,
@@ -178,7 +177,7 @@ class TestTechnicalAnalysisIntegration:
             trend = i * 100  # Strong uptrend
             candles.append(
                 MarketData(
-                    time=datetime.utcnow(),
+                    time=datetime.now(timezone.utc),
                     symbol="BTC/USDT",
                     interval="1h",
                     open=base_price + trend,
@@ -206,7 +205,7 @@ class TestTechnicalAnalysisIntegration:
             trend = i * 100  # Strong downtrend
             candles.append(
                 MarketData(
-                    time=datetime.utcnow(),
+                    time=datetime.now(timezone.utc),
                     symbol="BTC/USDT",
                     interval="1h",
                     open=base_price - trend,
@@ -252,7 +251,7 @@ class TestTechnicalAnalysisIntegration:
         for i in range(500):
             candles.append(
                 MarketData(
-                    time=datetime.utcnow(),
+                    time=datetime.now(timezone.utc),
                     symbol="BTC/USDT",
                     interval="1h",
                     open=base_price + i,
@@ -267,4 +266,3 @@ class TestTechnicalAnalysisIntegration:
         result = service.calculate_all_indicators(candles)
         assert result.candle_count == 500
         assert result.ema.ema is not None
-

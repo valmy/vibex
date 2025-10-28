@@ -1,7 +1,7 @@
 # Configuration System Implementation Guide
 
-**Document Version**: 1.0  
-**Date**: 2025-10-27  
+**Document Version**: 1.0
+**Date**: 2025-10-27
 **Status**: Implementation Guide (Ready for Development)
 
 ---
@@ -46,10 +46,10 @@ class ConfigValidator:
 **Validation Rules to Implement**:
 1. Required fields: ASTERDEX_API_KEY, ASTERDEX_API_SECRET, OPENROUTER_API_KEY, DATABASE_URL
 2. Type validation: Ensure types match (str, int, float, bool)
-3. Range validation: Leverage (1.0-5.0), Position Size (100-100000)
-4. Interval validation: Must be in {5m, 1h, 4h, 1d}
+3. Range validation: Leverage (1.0-25.0), Position Size (20.0-100000.0)
+4. Interval validation: Must be in {1m, 3m, 5m, 15m, 1h, 4h, 1d}
 5. Assets validation: Non-empty comma-separated list
-6. URL validation: Valid HTTP/HTTPS URLs
+6. URL validation: Accepts HTTP/HTTPS and database URLs (postgresql, mysql, sqlite, mongodb)
 7. API key validation: Non-empty strings (no format check to avoid leaking info)
 
 **Error Handling**:
@@ -77,7 +77,7 @@ class CacheEntry:
     created_at: datetime
     ttl: int
     hits: int
-    
+
     def is_expired(self) -> bool
 
 class CacheStats:
@@ -308,11 +308,11 @@ async def startup_event():
     # Initialize configuration manager
     config_manager = get_config_manager()
     await config_manager.initialize()
-    
+
     # Validate configuration
     if not config_manager.validate_config(config):
         raise ConfigValidationError("Configuration validation failed")
-    
+
     # Subscribe to configuration changes
     config_manager.subscribe_to_changes(on_config_change)
 
@@ -334,7 +334,7 @@ class MarketDataService:
     def __init__(self):
         self.config_manager = get_config_manager()
         self.config_manager.subscribe_to_changes(self.on_config_change)
-    
+
     async def on_config_change(self, old_config, new_config, changes):
         if "ASSETS" in changes or "INTERVAL" in changes:
             # Update service state
@@ -470,6 +470,6 @@ CONFIG_HISTORY_SIZE=100            # Keep last N changes
 
 ---
 
-**Status**: Ready for Implementation  
+**Status**: Ready for Implementation
 **Next Step**: Create implementation tasks and start Phase 1
 

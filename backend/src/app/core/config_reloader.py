@@ -7,11 +7,11 @@ the .env file for changes, validating new configuration, and notifying subscribe
 
 import asyncio
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .config import BaseConfig, get_config
-from .config_exceptions import ConfigReloadError, FileWatchError
+from .config_exceptions import FileWatchError
 from .config_validator import ConfigValidator
 from .logging import get_logger
 
@@ -48,7 +48,7 @@ class ConfigChange:
             new_value: New value
             status: Change status (pending, success, failed, rolled_back)
         """
-        self.timestamp = datetime.utcnow()
+        self.timestamp = datetime.now(timezone.utc)
         self.field_name = field_name
         self.old_value = old_value
         self.new_value = new_value
@@ -75,8 +75,7 @@ class ConfigChange:
         if isinstance(value, str) and len(value) > 0:
             # Mask API keys and secrets
             if any(
-                keyword in str(value).lower()
-                for keyword in ["key", "secret", "password", "token"]
+                keyword in str(value).lower() for keyword in ["key", "secret", "password", "token"]
             ):
                 return "***MASKED***"
         return value
@@ -161,9 +160,7 @@ class ConfigReloader:
                 return True
 
             # Check for non-reloadable changes
-            non_reloadable = [
-                field for field in changes.keys() if field in NON_RELOADABLE_FIELDS
-            ]
+            non_reloadable = [field for field in changes.keys() if field in NON_RELOADABLE_FIELDS]
             if non_reloadable:
                 logger.warning(
                     f"Cannot hot-reload non-reloadable fields: {non_reloadable}. "
@@ -289,10 +286,19 @@ class ConfigReloader:
         """
         changes = {}
 
-        for field_name in dir(new_config):
-            if field_name.startswith("_"):
-                continue
+        # Prefer iterating declared model fields from the class to avoid
+        # accessing Pydantic internals on the instance (which triggers
+        # deprecated instance attribute access like model_fields/model_computed_fields).
+        model_cls = type(new_config)
+        model_fields = getattr(model_cls, "model_fields", None)
 
+        if model_fields:
+            field_iterable = list(model_fields.keys())
+        else:
+            # Fallback: mirror previous behavior but filter private attributes
+            field_iterable = [n for n in dir(new_config) if not n.startswith("_")]
+
+        for field_name in field_iterable:
             try:
                 old_value = getattr(old_config, field_name, None)
                 new_value = getattr(new_config, field_name, None)
@@ -300,6 +306,7 @@ class ConfigReloader:
                 if old_value != new_value:
                     changes[field_name] = (old_value, new_value)
             except Exception:
+                # Skip attributes that cannot be accessed or compared
                 continue
 
         return changes
@@ -326,9 +333,7 @@ class ConfigReloader:
                 else:
                     callback(old_config, new_config, changes)
             except Exception as e:
-                logger.error(
-                    f"Error calling subscriber {subscription_id}: {e}", exc_info=True
-                )
+                logger.error(f"Error calling subscriber {subscription_id}: {e}", exc_info=True)
 
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -345,4 +350,3 @@ class ConfigReloader:
         # Keep history size under control
         if len(self._change_history) > self._max_history_size:
             self._change_history = self._change_history[-self._max_history_size :]
-

@@ -167,4 +167,3 @@ class MarketDataRepository:
         except Exception as e:
             logger.error(f"Error retrieving market data range: {e}")
             raise
-

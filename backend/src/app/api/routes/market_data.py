@@ -5,10 +5,9 @@ Provides endpoints for reading and managing market data (OHLCV).
 Integrates with MarketDataService for real-time data fetching and storage.
 """
 
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 

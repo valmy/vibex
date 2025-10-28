@@ -4,7 +4,7 @@ API routes for performance metrics management.
 Provides endpoints for reading and managing performance metrics.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 

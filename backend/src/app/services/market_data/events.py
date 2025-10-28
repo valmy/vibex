@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum, auto
 from typing import Callable, Dict, List, Optional
 
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class BaseEvent:
     """Base class for all market data events."""
 
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -24,7 +24,7 @@ class CandleCloseEvent(BaseEvent):
     symbol: str = ""
     interval: str = ""
     candle: dict = field(default_factory=dict)  # Raw candle data
-    close_time: datetime = field(default_factory=datetime.utcnow)
+    close_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class EventType(Enum):
@@ -64,9 +64,7 @@ class EventManager:
             EventType.CANDLE_CLOSE: {}
         }
 
-    def register_handler(
-        self, event_type: EventType, handler: Callable, interval: str = None
-    ):
+    def register_handler(self, event_type: EventType, handler: Callable, interval: str = None):
         """Register an event handler for a specific event type and optional interval.
 
         Args:
@@ -85,9 +83,7 @@ class EventManager:
             f"Registered {event_type.name} handler for interval {interval}: {handler.__name__}"
         )
 
-    async def trigger_event(
-        self, event: BaseEvent, event_type: EventType, interval: str = None
-    ):
+    async def trigger_event(self, event: BaseEvent, event_type: EventType, interval: str = None):
         """Trigger all handlers for a specific event type and optional interval.
 
         Args:
@@ -128,4 +124,3 @@ class EventManager:
                 await loop.run_in_executor(None, handler, event)
         except Exception as e:
             logger.error(f"Error in {handler.__name__}: {e}", exc_info=True)
-

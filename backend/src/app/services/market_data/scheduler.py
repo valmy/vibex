@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable, Dict, List
 
 from .events import EventManager
@@ -90,7 +90,7 @@ class CandleScheduler:
 
         while self._is_running and not self._shutdown_event.is_set():
             try:
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc)
                 next_close = calculate_next_candle_close(interval, now)
                 wait_seconds = (next_close - now).total_seconds()
 
@@ -103,7 +103,7 @@ class CandleScheduler:
                 while wait_seconds > 0 and self._is_running and not self._shutdown_event.is_set():
                     sleep_time = min(wait_seconds, 1.0)  # Check every second
                     await asyncio.sleep(sleep_time)
-                    now = datetime.utcnow()
+                    now = datetime.now(timezone.utc)
                     wait_seconds = (next_close - now).total_seconds()
 
                 # If we get here, it's time to process the candle close
@@ -138,7 +138,7 @@ class CandleScheduler:
             await self.fetch_callback(interval)
 
             # Calculate and schedule the next candle close
-            next_close = calculate_next_candle_close(interval, datetime.utcnow())
+            next_close = calculate_next_candle_close(interval, datetime.now(timezone.utc))
             logger.info("Next %s candle will close at %s", interval, next_close)
 
         except Exception as e:
@@ -153,8 +153,7 @@ class CandleScheduler:
             dict: Status information including next scheduled runs
         """
         status = {"running": self._is_running, "intervals": {}, "next_runs": {}}
-
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         for interval in self.intervals:
             if not interval:
                 continue
@@ -168,4 +167,3 @@ class CandleScheduler:
             }
 
         return status
-

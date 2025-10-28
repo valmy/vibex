@@ -105,7 +105,7 @@ The system is designed to:
 
 #### 3.1.1 Asset Monitoring
 - **FR-001**: The system SHALL monitor multiple cryptocurrency assets simultaneously
-- **FR-002**: The system SHALL support configurable monitoring intervals (5m, 1h, 4h, 1d)
+-- **FR-002**: The system SHALL support configurable monitoring intervals (1m, 3m, 5m, 15m, 1h, 4h, 1d)
 - **FR-003**: The system SHALL fetch real-time market data for each monitored asset
 - **FR-004**: The system SHALL maintain price history for trend analysis
 
@@ -473,7 +473,7 @@ OPENROUTER_API_KEY=your_openrouter_api_key
 # Trading Configuration
 LLM_MODEL=x-ai/grok-4  # or other supported model
 ASSETS=BTC ETH SOL     # space or comma separated
-INTERVAL=1h            # 5m, 1h, 4h, 1d
+INTERVAL=1h            # 1m, 3m, 5m, 15m, 1h, 4h, 1d
 ```
 
 #### 7.1.2 Optional Configuration

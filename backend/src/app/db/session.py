@@ -6,9 +6,8 @@ Provides engine creation, session factory, and async session support.
 
 from typing import AsyncGenerator
 
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool, QueuePool
 
 from ..core.config import config
 from ..core.logging import get_logger

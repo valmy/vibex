@@ -5,7 +5,7 @@ Tests caching operations, TTL expiration, statistics, and cleanup.
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -215,7 +215,7 @@ def test_cache_entry_is_expired():
     assert not entry.is_expired()
 
     # Manually set created_at to past
-    entry.created_at = datetime.utcnow() - timedelta(seconds=2)
+    entry.created_at = datetime.now(timezone.utc) - timedelta(seconds=2)
 
     # Should be expired
     assert entry.is_expired()
@@ -227,7 +227,7 @@ def test_cache_entry_get_expires_at():
     expires_at = entry.get_expires_at()
 
     # Should be approximately 1 hour from now
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     diff = (expires_at - now).total_seconds()
     assert 3599 < diff < 3601
 
@@ -248,4 +248,3 @@ def test_cache_stats_hit_rate_all_misses():
     """Test cache stats hit rate with all misses."""
     stats = CacheStats(total_hits=0, total_misses=10)
     assert stats.hit_rate == 0.0
-

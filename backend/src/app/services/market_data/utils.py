@@ -1,6 +1,6 @@
 """Utility functions for time and interval calculations."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def get_interval_seconds(interval: str) -> int:
@@ -47,7 +47,7 @@ def calculate_next_candle_close(interval: str, current_time: datetime) -> dateti
     next_close_timestamp = (
         current_timestamp - (current_timestamp % interval_seconds) + interval_seconds
     )
-    return datetime.utcfromtimestamp(next_close_timestamp)
+    return datetime.fromtimestamp(next_close_timestamp, timezone.utc)
 
 
 def calculate_previous_candle_close(interval: str, current_time: datetime) -> datetime:
@@ -66,7 +66,7 @@ def calculate_previous_candle_close(interval: str, current_time: datetime) -> da
 
     # Calculate the previous close time
     prev_close_timestamp = current_timestamp - (current_timestamp % interval_seconds)
-    return datetime.utcfromtimestamp(prev_close_timestamp)
+    return datetime.fromtimestamp(prev_close_timestamp, timezone.utc)
 
 
 def format_symbol(asset: str, quote_currency: str = "USDT") -> str:
@@ -102,4 +102,3 @@ def validate_interval(interval: str) -> bool:
         bool: True if interval is valid, False otherwise
     """
     return interval in ["1m", "5m", "1h", "4h", "1d"]
-

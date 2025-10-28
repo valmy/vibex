@@ -5,8 +5,8 @@ Represents candlestick data for trading pairs.
 """
 
 from sqlalchemy import Column, DateTime, Float, Index, Integer, String
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.schema import PrimaryKeyConstraint
 
 # Create a separate base for TimescaleDB models since they have different requirements

@@ -1,8 +1,8 @@
 # Phase 4: Core Services Implementation - COMPLETE ✅
 
-**Date**: 2025-10-23  
-**Status**: ✅ **COMPLETE**  
-**Scope**: Market Data Service + LLM Service (Reduced Scope)  
+**Date**: 2025-10-23
+**Status**: ✅ **COMPLETE**
+**Scope**: Market Data Service + LLM Service (Reduced Scope)
 **Deferred**: Trading Service + Notification Service (Phase 5)
 
 ---
@@ -45,7 +45,7 @@
 #### 3. Configuration
 - Uses `ASTERDEX_API_KEY` and `ASTERDEX_API_SECRET` from `.env`
 - Supports multiple assets via `ASSETS` config
-- Configurable intervals (1m, 5m, 1h, 4h, 1d)
+	- Configurable intervals (1m, 3m, 5m, 15m, 1h, 4h, 1d)
 
 ### API Endpoints
 
@@ -260,7 +260,7 @@ Successfully implemented:
 
 ---
 
-**Commit Hash**: [To be added after commit]  
-**Implementation Date**: 2025-10-23  
+**Commit Hash**: [To be added after commit]
+**Implementation Date**: 2025-10-23
 **Status**: ✅ Ready for Testing and Phase 5
 

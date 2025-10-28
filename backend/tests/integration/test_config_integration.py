@@ -8,7 +8,6 @@ import asyncio
 
 import pytest
 
-from app.core.config import BaseConfig
 from app.core.config_manager import ConfigurationManager, get_config_manager
 
 
@@ -277,4 +276,3 @@ async def test_reload_count_tracking(manager):
     assert manager._reload_count == initial_count + 1
 
     await manager.shutdown()
-

@@ -279,7 +279,7 @@ Using Pydantic v2 BaseSettings:
 - Database URLs and credentials
 - API keys (AsterDEX, OpenRouter)
 - Feature flags
-- Trading intervals (5m, 1h, 4h, 1d)
+- Trading intervals (1m, 3m, 5m, 15m, 1h, 4h, 1d)
 - Asset lists
 - Leverage limits
 - Position size limits

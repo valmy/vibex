@@ -93,4 +93,3 @@ class AsterClient:
             # This will catch errors from the thread and log them.
             logger.error(f"Error in fetch_klines task: {e}", exc_info=True)
             raise
-

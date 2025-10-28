@@ -24,7 +24,6 @@ from .api.routes import (
 from .core.config import config
 from .core.config_manager import get_config_manager
 from .core.logging import get_logger, setup_logging
-from .db import check_db_health, close_db, init_db
 
 # Initialize logging
 setup_logging(config)

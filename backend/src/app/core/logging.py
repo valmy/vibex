@@ -9,7 +9,7 @@ import json
 import logging
 import logging.handlers
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 
@@ -39,7 +39,7 @@ class SensitiveDataFilter(logging.Filter):
         """Mask sensitive data in text."""
         for key in self.SENSITIVE_KEYS:
             if key.lower() in text.lower():
-                text = text.replace(text, f"***MASKED***")
+                text = text.replace(text, "***MASKED***")
         return text
 
     def _mask_dict(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -61,7 +61,8 @@ class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """Format log record as JSON."""
         log_data = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            # Use timezone-aware UTC timestamp and represent Z for UTC
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),

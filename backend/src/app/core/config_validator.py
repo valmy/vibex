@@ -5,17 +5,10 @@ Validates configuration values at startup and runtime, ensuring all required fie
 are present, have correct types, and are within acceptable ranges.
 """
 
-import re
-from typing import Any, List, Optional
+from typing import List
 from urllib.parse import urlparse
 
 from .config import BaseConfig
-from .config_exceptions import (
-    ConfigValidationError,
-    InvalidFieldTypeError,
-    InvalidFieldValueError,
-    MissingRequiredFieldError,
-)
 from .logging import get_logger
 
 logger = get_logger(__name__)
@@ -67,15 +60,15 @@ class ConfigValidator:
     }
 
     # Valid values for specific fields
-    VALID_INTERVALS = {"5m", "1h", "4h", "1d"}
+    VALID_INTERVALS = {"1m", "3m", "5m", "15m", "1h", "4h", "1d"}
     VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
     VALID_ENVIRONMENTS = {"development", "testing", "production"}
     VALID_NETWORKS = {"mainnet", "testnet"}
 
     # Range constraints
     LEVERAGE_MIN = 1.0
-    LEVERAGE_MAX = 5.0
-    POSITION_SIZE_MIN = 100.0
+    LEVERAGE_MAX = 25.0
+    POSITION_SIZE_MIN = 20.0
     POSITION_SIZE_MAX = 100000.0
     API_PORT_MIN = 1
     API_PORT_MAX = 65535
@@ -244,8 +237,12 @@ class ConfigValidator:
         """
         errors = []
         url_fields = {
-            "ASTERDEX_BASE_URL": config.ASTERDEX_BASE_URL if hasattr(config, "ASTERDEX_BASE_URL") else None,
-            "OPENROUTER_BASE_URL": config.OPENROUTER_BASE_URL if hasattr(config, "OPENROUTER_BASE_URL") else None,
+            "ASTERDEX_BASE_URL": config.ASTERDEX_BASE_URL
+            if hasattr(config, "ASTERDEX_BASE_URL")
+            else None,
+            "OPENROUTER_BASE_URL": config.OPENROUTER_BASE_URL
+            if hasattr(config, "OPENROUTER_BASE_URL")
+            else None,
             "DATABASE_URL": config.DATABASE_URL if hasattr(config, "DATABASE_URL") else None,
         }
 
@@ -336,4 +333,3 @@ class ConfigValidator:
             return all([result.scheme in valid_schemes, result.netloc or result.path])
         except Exception:
             return False
-

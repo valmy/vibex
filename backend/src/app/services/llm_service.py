@@ -4,10 +4,8 @@ LLM Service for market analysis and trading insights.
 Integrates with OpenRouter API for LLM-powered analysis.
 """
 
-import asyncio
 import json
-import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from ..core.config import config
@@ -88,7 +86,7 @@ class LLMService:
             # Parse the response
             result = {
                 "symbol": symbol,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "analysis": analysis_text,
                 "model": self.model,
                 "usage": {
@@ -150,7 +148,7 @@ class LLMService:
 
             result = {
                 "symbol": symbol,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "signal": signal_data.get("signal", "HOLD"),
                 "confidence": signal_data.get("confidence", 50),
                 "reason": signal_data.get("reason", ""),
@@ -196,7 +194,7 @@ class LLMService:
             summary_text = response.choices[0].message.content
 
             result = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "summary": summary_text,
                 "symbols_analyzed": len(market_data_list),
                 "model": self.model,

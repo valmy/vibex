@@ -4,8 +4,9 @@ Unit tests for Technical Analysis Service.
 Tests indicator calculations, validation, and error handling.
 """
 
+from datetime import datetime, timezone
+
 import pytest
-from datetime import datetime
 
 from app.models.market_data import MarketData
 from app.services.technical_analysis import (
@@ -13,7 +14,6 @@ from app.services.technical_analysis import (
     get_technical_analysis_service,
 )
 from app.services.technical_analysis.exceptions import (
-    CalculationError,
     InsufficientDataError,
     InvalidCandleDataError,
 )
@@ -33,7 +33,7 @@ def valid_candles():
     for i in range(100):
         candles.append(
             MarketData(
-                time=datetime.utcnow(),
+                time=datetime.now(timezone.utc),
                 symbol="BTC/USDT",
                 interval="1h",
                 open=base_price + i,
@@ -54,7 +54,7 @@ def insufficient_candles():
     for i in range(30):  # Less than 50 required
         candles.append(
             MarketData(
-                time=datetime.utcnow(),
+                time=datetime.now(timezone.utc),
                 symbol="BTC/USDT",
                 interval="1h",
                 open=base_price + i,
@@ -169,7 +169,7 @@ class TestTechnicalAnalysisService:
         for i in range(50):
             candles.append(
                 MarketData(
-                    time=datetime.utcnow(),
+                    time=datetime.now(timezone.utc),
                     symbol="BTC/USDT",
                     interval="1h",
                     open=base_price + i,
@@ -221,4 +221,3 @@ class TestTechnicalAnalysisService:
             # Histogram should be approximately MACD - Signal
             expected_histogram = macd.macd - macd.signal
             assert abs(macd.histogram - expected_histogram) < 0.01
-

@@ -100,6 +100,7 @@ async def test_manager_subscribe_to_changes(manager):
 @pytest.mark.asyncio
 async def test_manager_unsubscribe_from_changes(manager):
     """Test unsubscribing from configuration changes."""
+
     async def callback(old_config, new_config, changes):
         pass
 
@@ -191,4 +192,3 @@ async def test_manager_reload_config(manager):
     # For now, we just test that reload_config returns a boolean
     result = await manager.reload_config()
     assert isinstance(result, bool)
-

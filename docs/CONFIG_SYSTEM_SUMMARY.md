@@ -1,7 +1,7 @@
 # Configuration System Enhancement - Complete Summary
 
-**Date**: 2025-10-27  
-**Status**: Design Complete - Ready for Implementation  
+**Date**: 2025-10-27
+**Status**: Design Complete - Ready for Implementation
 **Scope**: Configuration Validation, Reloading, and Caching
 
 ---
@@ -161,12 +161,12 @@ ConfigurationManager (Orchestrator)
 - DATABASE_URL
 
 **Range Validations**:
-- Leverage: 1.0 ≤ value ≤ 5.0
-- Position Size: 100 ≤ value ≤ 100000 USD
-- Intervals: {5m, 1h, 4h, 1d}
+- Leverage: 1.0 ≤ value ≤ 25.0
+- Position Size: 20.0 ≤ value ≤ 100000.0 USD
+- Intervals: {1m, 3m, 5m, 15m, 1h, 4h, 1d}
 
 **Format Validations**:
-- URLs: Valid HTTP/HTTPS
+- URLs: Accepts HTTP/HTTPS and database URLs (postgresql, mysql, sqlite, mongodb)
 - Assets: Non-empty comma-separated list
 - API Keys: Non-empty strings
 
@@ -360,13 +360,13 @@ This comprehensive design provides a robust, scalable, and secure configuration 
 - ✅ Enhance observability through monitoring
 - ✅ Maintain security through proper handling of sensitive data
 
-**Status**: Ready for Implementation  
-**Estimated Effort**: 4 weeks  
+**Status**: Ready for Implementation
+**Estimated Effort**: 4 weeks
 **Team Size**: 1-2 developers
 
 ---
 
-**Document Created**: 2025-10-27  
-**Last Updated**: 2025-10-27  
+**Document Created**: 2025-10-27
+**Last Updated**: 2025-10-27
 **Version**: 1.0
 

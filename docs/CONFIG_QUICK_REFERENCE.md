@@ -1,6 +1,6 @@
 # Configuration System - Quick Reference
 
-**Date**: 2025-10-27  
+**Date**: 2025-10-27
 **Version**: 1.0
 
 ---
@@ -36,10 +36,10 @@ class ConfigValidator:
 **Validates**:
 - Required fields (API keys, database URL)
 - Field types (str, int, float, bool)
-- Field ranges (leverage 1.0-5.0, position size 100-100000)
-- Intervals (5m, 1h, 4h, 1d)
+- Field ranges (leverage 1.0-25.0, position size 20.0-100000.0)
+- Intervals (1m, 3m, 5m, 15m, 1h, 4h, 1d)
 - Assets (non-empty list)
-- URLs (valid HTTP/HTTPS)
+- URLs (accepts HTTP/HTTPS and database URLs: postgresql, mysql, sqlite, mongodb)
 
 ---
 
@@ -155,14 +155,14 @@ DATABASE_URL
 
 ### Range Validations
 ```
-LEVERAGE: 1.0 ≤ x ≤ 5.0
-MAX_POSITION_SIZE_USD: 100 ≤ x ≤ 100000
+LEVERAGE: 1.0 ≤ x ≤ 25.0
+MAX_POSITION_SIZE_USD: 20.0 ≤ x ≤ 100000.0
 ```
 
 ### Enum Validations
 ```
-INTERVAL: {5m, 1h, 4h, 1d}
-LONG_INTERVAL: {5m, 1h, 4h, 1d}
+INTERVAL: {1m, 3m, 5m, 15m, 1h, 4h, 1d}
+LONG_INTERVAL: {1m, 3m, 5m, 15m, 1h, 4h, 1d}
 ENVIRONMENT: {development, testing, production}
 ```
 
@@ -382,7 +382,7 @@ For questions or issues:
 
 ---
 
-**Last Updated**: 2025-10-27  
-**Version**: 1.0  
+**Last Updated**: 2025-10-27
+**Version**: 1.0
 **Status**: Ready for Implementation
 

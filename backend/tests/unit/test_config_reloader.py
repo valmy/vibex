@@ -4,10 +4,8 @@ Unit tests for the configuration reloader.
 Tests file watching, reload workflow, subscriber notifications, and change history.
 """
 
-import asyncio
 import os
 import tempfile
-from pathlib import Path
 
 import pytest
 
@@ -82,6 +80,7 @@ async def test_reloader_initialization(reloader):
 @pytest.mark.asyncio
 async def test_reloader_subscribe(reloader):
     """Test subscribing to configuration changes."""
+
     async def callback(old_config, new_config, changes):
         pass
 
@@ -93,6 +92,7 @@ async def test_reloader_subscribe(reloader):
 @pytest.mark.asyncio
 async def test_reloader_unsubscribe(reloader):
     """Test unsubscribing from configuration changes."""
+
     async def callback(old_config, new_config, changes):
         pass
 
@@ -258,4 +258,3 @@ async def test_reloader_rollback_insufficient_history(reloader):
     """Test rollback fails with insufficient history."""
     result = await reloader.rollback_to_previous()
     assert result is False
-

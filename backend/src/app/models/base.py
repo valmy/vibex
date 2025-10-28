@@ -4,8 +4,6 @@ Base model for all SQLAlchemy ORM models.
 Provides common functionality like timestamps and ID generation.
 """
 
-from datetime import datetime
-
 from sqlalchemy import Column, DateTime, Integer, func
 from sqlalchemy.orm import declarative_base
 

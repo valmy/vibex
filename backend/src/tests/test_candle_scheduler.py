@@ -8,7 +8,6 @@ candle-close based scheduling system.
 import asyncio
 import logging
 import sys
-from datetime import datetime
 from pathlib import Path
 
 # Add the project root to the Python path

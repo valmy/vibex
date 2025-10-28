@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -81,9 +81,7 @@ class MarketDataService:
         return await self.scheduler.get_status()
 
     # Event system delegation
-    def register_event_handler(
-        self, event_type: EventType, handler, interval: str = None
-    ):
+    def register_event_handler(self, event_type: EventType, handler, interval: str = None):
         """Register an event handler."""
         self.event_manager.register_handler(event_type, handler, interval)
 
@@ -140,11 +138,11 @@ class MarketDataService:
 
                         # The last candle is the most recent one
                         latest_candle = candles[-1]
-                        candle_time = datetime.fromtimestamp(latest_candle[0] / 1000)
+                        candle_time = datetime.fromtimestamp(latest_candle[0] / 1000, timezone.utc)
 
                         # Validate we got the latest candle
                         expected_close = calculate_previous_candle_close(
-                            interval, datetime.utcnow()
+                            interval, datetime.now(timezone.utc)
                         )
                         if (
                             abs((candle_time - expected_close).total_seconds()) > 60
@@ -319,4 +317,3 @@ def get_market_data_service() -> MarketDataService:
     if _market_data_service is None:
         _market_data_service = MarketDataService()
     return _market_data_service
-

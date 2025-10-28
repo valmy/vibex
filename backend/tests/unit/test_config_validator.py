@@ -83,8 +83,8 @@ async def test_validate_leverage_range(validator, valid_config):
     assert len(errors) > 0
     assert any("LEVERAGE" in error for error in errors)
 
-    # Test too high
-    valid_config.LEVERAGE = 10.0
+    # Test too high (above updated max 25.0)
+    valid_config.LEVERAGE = 30.0
     errors = await validator.validate_field_ranges(valid_config)
     assert len(errors) > 0
     assert any("LEVERAGE" in error for error in errors)
@@ -98,8 +98,8 @@ async def test_validate_leverage_range(validator, valid_config):
 @pytest.mark.asyncio
 async def test_validate_position_size_range(validator, valid_config):
     """Test position size range validation."""
-    # Test too low
-    valid_config.MAX_POSITION_SIZE_USD = 50.0
+    # Test too low (below updated min 20.0)
+    valid_config.MAX_POSITION_SIZE_USD = 10.0
     errors = await validator.validate_field_ranges(valid_config)
     assert len(errors) > 0
     assert any("MAX_POSITION_SIZE_USD" in error for error in errors)
@@ -238,4 +238,3 @@ def test_is_valid_url():
     assert not validator._is_valid_url("not-a-url")
     assert not validator._is_valid_url("ftp://example.com")
     assert not validator._is_valid_url("")
-

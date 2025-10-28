@@ -5,11 +5,11 @@ Orchestrates configuration validation, caching, and reloading as a singleton,
 providing a unified interface for configuration management.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from .config import BaseConfig, get_config
-from .config_cache import ConfigCache, CacheStats
+from .config_cache import CacheStats, ConfigCache
 from .config_exceptions import ConfigValidationError
 from .config_reloader import ConfigReloader
 from .config_validator import ConfigValidator
@@ -110,7 +110,7 @@ class ConfigurationManager:
 
             # Validate configuration
             self._validation_errors = await self._validator.validate_all(self._config)
-            self._last_validated = datetime.utcnow()
+            self._last_validated = datetime.now(timezone.utc)
 
             if self._validation_errors:
                 logger.error(
@@ -209,7 +209,7 @@ class ConfigurationManager:
         """
         config = config or self._config
         self._validation_errors = await self._validator.validate_all(config)
-        self._last_validated = datetime.utcnow()
+        self._last_validated = datetime.now(timezone.utc)
         return len(self._validation_errors) == 0
 
     async def reload_config(self) -> bool:
@@ -302,4 +302,3 @@ def get_config_manager() -> ConfigurationManager:
     if _config_manager is None:
         _config_manager = ConfigurationManager()
     return _config_manager
-

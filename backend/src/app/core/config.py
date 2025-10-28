@@ -5,9 +5,9 @@ Supports multiple environments (development, testing, production) with
 environment-specific settings and multi-account configuration.
 """
 
-from typing import List, Optional
+from typing import List
 
-from pydantic import Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -83,10 +83,13 @@ class BaseConfig(BaseSettings):
         """Parse CORS origins from comma-separated string."""
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
+    # Pydantic v2 configuration: use model_config (dict) instead of inner Config class
+    # Keep keys compatible with pydantic-settings expectations for BaseSettings
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": True,
+    }
 
 
 class DevelopmentConfig(BaseConfig):

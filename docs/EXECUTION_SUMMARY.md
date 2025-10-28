@@ -136,7 +136,7 @@ vibex/
 **File**: `backend/src/app/core/constants.py`
 
 - Trading actions (BUY, SELL, HOLD)
-- Trading intervals (5m, 1h, 4h, 1d)
+- Trading intervals (1m, 3m, 5m, 15m, 1h, 4h, 1d)
 - Order and position statuses
 - Technical indicators
 - Risk management parameters
