@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from .api.routes import (
     accounts,
     analysis,
+    decision_engine,
     diary,
     llm_decisions,
     market_data,
@@ -57,6 +58,7 @@ app.include_router(performance.router)
 app.include_router(market_data.router)
 app.include_router(analysis.router)
 app.include_router(llm_decisions.router)
+app.include_router(decision_engine.router)
 
 
 # Health check endpoint
@@ -177,6 +179,16 @@ async def shutdown_event():
         logger.info("Market data scheduler stopped")
     except Exception as e:
         logger.error(f"Error stopping market data scheduler: {e}")
+
+    # Shutdown decision engine
+    try:
+        from .services.decision_engine import get_decision_engine
+
+        decision_engine = get_decision_engine()
+        await decision_engine.shutdown()
+        logger.info("Decision engine shut down")
+    except Exception as e:
+        logger.error(f"Error shutting down decision engine: {e}")
 
     # Close any remaining database connections
     try:
