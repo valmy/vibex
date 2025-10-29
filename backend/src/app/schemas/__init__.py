@@ -15,6 +15,17 @@ from .performance_metric import (
 )
 from .position import PositionCreate, PositionListResponse, PositionRead, PositionUpdate
 from .trade import TradeCreate, TradeListResponse, TradeRead
+from .trading_decision import (
+    AccountContext,
+    DecisionResult,
+    MarketContext,
+    OrderAdjustment,
+    PositionAdjustment,
+    TechnicalIndicators,
+    TradingContext,
+    TradingDecision,
+    TradingStrategy,
+)
 
 __all__ = [
     "BaseSchema",
@@ -42,4 +53,13 @@ __all__ = [
     "PerformanceMetricCreate",
     "PerformanceMetricRead",
     "PerformanceMetricListResponse",
+    "TradingDecision",
+    "PositionAdjustment",
+    "OrderAdjustment",
+    "TechnicalIndicators",
+    "MarketContext",
+    "AccountContext",
+    "TradingContext",
+    "TradingStrategy",
+    "DecisionResult",
 ]

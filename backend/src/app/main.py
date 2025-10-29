@@ -15,6 +15,7 @@ from .api.routes import (
     accounts,
     analysis,
     diary,
+    llm_decisions,
     market_data,
     orders,
     performance,
@@ -55,6 +56,7 @@ app.include_router(diary.router)
 app.include_router(performance.router)
 app.include_router(market_data.router)
 app.include_router(analysis.router)
+app.include_router(llm_decisions.router)
 
 
 # Health check endpoint
