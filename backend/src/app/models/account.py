@@ -50,6 +50,7 @@ class Account(BaseModel):
     performance_metrics = relationship(
         "PerformanceMetric", back_populates="account", cascade="all, delete-orphan"
     )
+    decisions = relationship("Decision", back_populates="account", cascade="all, delete-orphan")
 
     def __repr__(self):
         """String representation."""

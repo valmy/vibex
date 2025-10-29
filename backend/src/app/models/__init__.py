@@ -13,14 +13,36 @@ from .performance_metric import PerformanceMetric
 from .position import Position
 from .trade import Trade
 
-__all__ = [
-    "Base",
-    "BaseModel",
-    "Account",
-    "MarketData",
-    "Position",
-    "Order",
-    "Trade",
-    "DiaryEntry",
-    "PerformanceMetric",
-]
+# Import new models if they exist
+try:
+    from .decision import Decision, DecisionResult
+    from .strategy import Strategy, StrategyAssignment, StrategyPerformance
+
+    __all__ = [
+        "Base",
+        "BaseModel",
+        "Account",
+        "Decision",
+        "DecisionResult",
+        "MarketData",
+        "Position",
+        "Order",
+        "Strategy",
+        "StrategyAssignment",
+        "StrategyPerformance",
+        "Trade",
+        "DiaryEntry",
+        "PerformanceMetric",
+    ]
+except ImportError:
+    __all__ = [
+        "Base",
+        "BaseModel",
+        "Account",
+        "MarketData",
+        "Position",
+        "Order",
+        "Trade",
+        "DiaryEntry",
+        "PerformanceMetric",
+    ]
