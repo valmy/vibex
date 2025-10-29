@@ -14,15 +14,15 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple, Any
 from collections import defaultdict
 
-from ..core.exceptions import ValidationError
-from ..schemas.trading_decision import (
+from ...core.exceptions import ValidationError
+from ...schemas.trading_decision import (
     DecisionResult,
     TradingContext,
     TradingDecision,
     UsageMetrics,
     HealthStatus,
 )
-from ..schemas.context import ContextValidationResult
+from ...schemas.context import ContextValidationResult
 from .llm_service import get_llm_service
 from .context_builder import get_context_builder_service
 from .decision_validator import get_decision_validator
@@ -504,8 +504,8 @@ class DecisionEngine:
                 )
 
                 # Create minimal context for error result
-                from ..schemas.context import TradingContext, MarketContext, AccountContext
-                from ..schemas.trading_decision import TechnicalIndicators, PerformanceMetrics, RiskMetrics
+                from ...schemas.context import TradingContext, MarketContext, AccountContext
+                from ...schemas.trading_decision import TechnicalIndicators, PerformanceMetrics, RiskMetrics
 
                 error_context = TradingContext(
                     symbol=symbols[i],

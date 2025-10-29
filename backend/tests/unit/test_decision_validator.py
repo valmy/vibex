@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch
 from pydantic import ValidationError
 
-from app.services.decision_validator import DecisionValidator, get_decision_validator
+from app.services.llm.decision_validator import DecisionValidator, get_decision_validator
 from app.schemas.trading_decision import (
     TradingDecision,
     TradingContext,

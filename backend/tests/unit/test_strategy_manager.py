@@ -21,7 +21,7 @@ from src.app.schemas.trading_decision import (
     StrategyAssignment,
     StrategyComparison
 )
-from src.app.services.strategy_manager import StrategyManager
+from src.app.services.llm.strategy_manager import StrategyManager
 
 
 class TestStrategyManager:

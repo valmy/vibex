@@ -18,7 +18,7 @@ from ...schemas.trading_decision import (
     UsageMetrics,
     HealthStatus,
 )
-from ...services.decision_engine import get_decision_engine, RateLimitExceededError, DecisionEngineError
+from ...services.llm.decision_engine import get_decision_engine, RateLimitExceededError, DecisionEngineError
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +205,7 @@ async def validate_decision(decision: TradingDecision):
     without generating a full decision through the LLM.
     """
     try:
-        from ...services.decision_validator import get_decision_validator
+        from ...services.llm.decision_validator import get_decision_validator
         from ...schemas.context import TradingContext, MarketContext, AccountContext
         from ...schemas.trading_decision import TechnicalIndicators, PerformanceMetrics, RiskMetrics
 

@@ -9,7 +9,7 @@ import time
 from enum import Enum
 from typing import Any, Callable, Optional
 
-from ..core.logging import get_logger
+from ...core.logging import get_logger
 from .llm_exceptions import CircuitBreakerError
 
 logger = get_logger(__name__)

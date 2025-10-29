@@ -15,12 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
 
 # Removed unused import
-from ..db.session import AsyncSessionLocal
-from ..models.account import Account
-from ..models.position import Position
-from ..models.trade import Trade
-from ..models.market_data import MarketData
-from ..schemas.context import (
+from ...db.session import AsyncSessionLocal
+from ...models.account import Account
+from ...models.position import Position
+from ...models.trade import Trade
+from ...models.market_data import MarketData
+from ...schemas.context import (
     TradingContext,
     MarketContext,
     AccountContext,
@@ -31,9 +31,9 @@ from ..schemas.context import (
     PricePoint,
     ContextValidationResult,
 )
-from ..services.market_data.service import get_market_data_service
-from ..services.technical_analysis.service import TechnicalAnalysisService
-from ..services.technical_analysis.exceptions import InsufficientDataError as TAInsufficientDataError
+from ...services.market_data.service import get_market_data_service
+from ...services.technical_analysis.service import TechnicalAnalysisService
+from ...services.technical_analysis.exceptions import InsufficientDataError as TAInsufficientDataError
 
 logger = logging.getLogger(__name__)
 
@@ -688,7 +688,7 @@ class ContextBuilderService:
             Partial TechnicalIndicators object or None
         """
         try:
-            from ..services.technical_analysis.schemas import (
+            from ...services.technical_analysis.schemas import (
                 TechnicalIndicators, EMAOutput, MACDOutput, RSIOutput,
                 BollingerBandsOutput, ATROutput
             )

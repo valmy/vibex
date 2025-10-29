@@ -6,7 +6,7 @@ import pytest
 from datetime import datetime, timezone, timedelta
 from unittest.mock import Mock, AsyncMock, patch
 
-from app.services.context_builder import (
+from app.services.llm.context_builder import (
     ContextBuilderService,
     get_context_builder_service,
     ContextBuilderError,

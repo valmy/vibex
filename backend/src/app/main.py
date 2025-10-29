@@ -5,6 +5,7 @@ Initializes the FastAPI app with middleware, routes, and WebSocket handlers.
 """
 
 import os
+from datetime import datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,9 +19,11 @@ from .api.routes import (
     diary,
     llm_decisions,
     market_data,
+    monitoring,
     orders,
     performance,
     positions,
+    strategies,
     trades,
 )
 from .core.config import config
@@ -34,9 +37,45 @@ logger = get_logger(__name__)
 # Create FastAPI app
 app = FastAPI(
     title=config.APP_NAME,
-    description="LLM-powered cryptocurrency trading agent for AsterDEX",
+    description="LLM-powered cryptocurrency trading agent for AsterDEX with advanced decision engine",
     version=config.APP_VERSION,
     debug=config.DEBUG,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_tags=[
+        {
+            "name": "Decision Engine",
+            "description": "LLM-powered trading decision generation and management"
+        },
+        {
+            "name": "Strategy Management",
+            "description": "Trading strategy configuration and assignment"
+        },
+        {
+            "name": "Monitoring & Analytics",
+            "description": "System monitoring, health checks, and performance analytics"
+        },
+        {
+            "name": "LLM Decisions",
+            "description": "Direct LLM service interactions and model management"
+        },
+        {
+            "name": "Market Data",
+            "description": "Market data collection and technical analysis"
+        },
+        {
+            "name": "Trading",
+            "description": "Trading operations including positions, orders, and trades"
+        },
+        {
+            "name": "Performance",
+            "description": "Performance tracking and analytics"
+        },
+        {
+            "name": "System",
+            "description": "System health, status, and configuration"
+        }
+    ]
 )
 
 # Add CORS middleware
@@ -59,24 +98,37 @@ app.include_router(market_data.router)
 app.include_router(analysis.router)
 app.include_router(llm_decisions.router)
 app.include_router(decision_engine.router)
+app.include_router(strategies.router)
+app.include_router(monitoring.router)
 
 
 # Health check endpoint
-@app.get("/health")
+@app.get("/health", tags=["System"])
 async def health_check():
-    """Health check endpoint."""
+    """
+    Basic health check endpoint.
+
+    Returns basic application health status. For comprehensive health
+    monitoring, use /api/v1/monitoring/health/system.
+    """
     return {
         "status": "healthy",
         "app": config.APP_NAME,
         "version": config.APP_VERSION,
         "environment": config.ENVIRONMENT,
+        "timestamp": datetime.utcnow().isoformat(),
+        "detailed_health": "/api/v1/monitoring/health/system"
     }
 
 
 # Status endpoint
-@app.get("/status")
+@app.get("/status", tags=["System"])
 async def status():
-    """System status endpoint."""
+    """
+    System status endpoint.
+
+    Returns detailed system configuration and runtime information.
+    """
     return {
         "status": "running",
         "app": config.APP_NAME,
@@ -85,22 +137,102 @@ async def status():
         "debug": config.DEBUG,
         "api_host": config.API_HOST,
         "api_port": config.API_PORT,
+        "timestamp": datetime.utcnow().isoformat(),
+        "components": {
+            "decision_engine": "active",
+            "llm_service": "active",
+            "strategy_manager": "active",
+            "monitoring": "active"
+        },
+        "detailed_status": "/api/v1/monitoring/health/system"
     }
 
 
 # Root endpoint
-@app.get("/")
+@app.get("/", tags=["System"])
 async def root():
-    """Root endpoint."""
+    """
+    Root endpoint with API overview.
+
+    Returns basic API information and available endpoint categories.
+    """
     return {
-        "message": "AI Trading Agent API",
+        "message": "AI Trading Agent API with LLM Decision Engine",
         "version": config.APP_VERSION,
+        "environment": config.ENVIRONMENT,
         "docs": "/docs",
+        "redoc": "/redoc",
         "openapi": "/openapi.json",
+        "endpoints": {
+            "decision_engine": "/api/v1/decisions",
+            "strategies": "/api/v1/strategies",
+            "monitoring": "/api/v1/monitoring",
+            "llm_decisions": "/api/v1/decisions",
+            "market_data": "/api/v1/market-data",
+            "trading": {
+                "accounts": "/api/v1/accounts",
+                "positions": "/api/v1/positions",
+                "orders": "/api/v1/orders",
+                "trades": "/api/v1/trades"
+            },
+            "performance": "/api/v1/performance",
+            "system": {
+                "health": "/health",
+                "status": "/status"
+            }
+        },
+        "features": [
+            "LLM-powered trading decisions",
+            "Multi-strategy support",
+            "Real-time monitoring",
+            "Performance analytics",
+            "Risk management",
+            "A/B testing",
+            "Multi-account support"
+        ]
     }
 
 
 # Error handlers
+from .services.llm.decision_engine import DecisionEngineError, RateLimitExceededError
+from .core.exceptions import ValidationError, ConfigurationError
+
+@app.exception_handler(DecisionEngineError)
+async def decision_engine_exception_handler(request, exc):
+    """Handle decision engine specific exceptions."""
+    logger.error(f"Decision engine error: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=400,
+        content={"detail": str(exc), "error_type": "decision_engine_error"},
+    )
+
+@app.exception_handler(RateLimitExceededError)
+async def rate_limit_exception_handler(request, exc):
+    """Handle rate limit exceeded exceptions."""
+    logger.warning(f"Rate limit exceeded: {exc}")
+    return JSONResponse(
+        status_code=429,
+        content={"detail": str(exc), "error_type": "rate_limit_exceeded"},
+    )
+
+@app.exception_handler(ValidationError)
+async def validation_exception_handler(request, exc):
+    """Handle validation errors."""
+    logger.warning(f"Validation error: {exc}")
+    return JSONResponse(
+        status_code=400,
+        content={"detail": str(exc), "error_type": "validation_error"},
+    )
+
+@app.exception_handler(ConfigurationError)
+async def configuration_exception_handler(request, exc):
+    """Handle configuration errors."""
+    logger.error(f"Configuration error: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "error_type": "configuration_error"},
+    )
+
 @app.exception_handler(Exception)
 async def general_exception_handler(request, exc):
     """Handle general exceptions."""
@@ -182,7 +314,7 @@ async def shutdown_event():
 
     # Shutdown decision engine
     try:
-        from .services.decision_engine import get_decision_engine
+        from .services.llm.decision_engine import get_decision_engine
 
         decision_engine = get_decision_engine()
         await decision_engine.shutdown()

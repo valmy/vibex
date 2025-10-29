@@ -10,8 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ...schemas.trading_decision import DecisionResult, TradingContext, TradingDecision
-from ...services.llm_service import get_llm_service
-from ...services.llm_metrics import HealthStatus, UsageMetrics
+from ...services.llm.llm_service import get_llm_service
+from ...services.llm.llm_metrics import HealthStatus, UsageMetrics
 
 router = APIRouter(prefix="/api/v1/decisions", tags=["LLM Decisions"])
 

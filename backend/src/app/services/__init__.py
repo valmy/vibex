@@ -7,7 +7,7 @@ Includes:
 - TechnicalAnalysisService: Technical indicator calculations
 """
 
-from .llm_service import LLMService, get_llm_service
+from .llm.llm_service import LLMService, get_llm_service
 from .market_data import MarketDataService, get_market_data_service
 from .technical_analysis import (
     TechnicalAnalysisService,
