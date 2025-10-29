@@ -6,6 +6,30 @@ The LLM Decision Engine Integration enhances the existing AI Trading Agent by im
 
 The design focuses on creating a robust, scalable, and maintainable system that can handle real-time trading decisions while ensuring data integrity, error handling, and performance optimization.
 
+## LLM Services Package Organization
+
+All LLM Decision Engine components are organized in the `services/llm/` package for better maintainability and clear separation of concerns:
+
+```
+backend/src/app/services/llm/
+├── __init__.py              # Package interface with clean exports
+├── decision_engine.py       # Main orchestrator and entry point
+├── llm_service.py          # LLM API integration and model management
+├── decision_validator.py    # Decision validation and business rules
+├── strategy_manager.py      # Trading strategy management
+├── context_builder.py       # Trading context assembly
+├── ab_testing.py           # A/B testing framework for models
+├── circuit_breaker.py      # Fault tolerance and error handling
+├── llm_metrics.py          # Performance and usage metrics
+└── llm_exceptions.py       # Structured exception hierarchy
+```
+
+This organization provides:
+- **Clear Separation**: LLM components are isolated from other services
+- **Easy Maintenance**: Related functionality is grouped together
+- **Clean Imports**: Package interface provides clean access to services
+- **Scalability**: Easy to add new LLM-related components
+
 ## Architecture
 
 ### High-Level System Architecture
@@ -56,7 +80,7 @@ The design focuses on creating a robust, scalable, and maintainable system that 
 
 ### 1. Enhanced LLM Service
 
-**File**: `backend/src/app/services/llm_service.py` (Enhanced)
+**File**: `backend/src/app/services/llm/llm_service.py` (Enhanced)
 
 **Responsibilities**:
 - Manage OpenRouter API connections with multiple model support
@@ -82,7 +106,7 @@ async def switch_model(self, model_name: str) -> bool
 
 ### 2. Context Builder Service
 
-**File**: `backend/src/app/services/context_builder.py` (New)
+**File**: `backend/src/app/services/llm/context_builder.py` (New)
 
 **Responsibilities**:
 - Aggregate market data from multiple timeframes
@@ -110,7 +134,7 @@ async def get_account_context(self, account_id: int) -> AccountContext
 
 ### 3. Decision Validator Service
 
-**File**: `backend/src/app/services/decision_validator.py` (New)
+**File**: `backend/src/app/services/llm/decision_validator.py` (New)
 
 **Responsibilities**:
 - Validate trading decisions against JSON schema
@@ -138,7 +162,7 @@ async def get_validation_metrics(self) -> ValidationMetrics
 
 ### 4. Strategy Manager Service
 
-**File**: `backend/src/app/services/strategy_manager.py` (New)
+**File**: `backend/src/app/services/llm/strategy_manager.py` (New)
 
 **Responsibilities**:
 - Manage trading strategies for each account
@@ -173,7 +197,7 @@ async def get_strategy_performance(
 
 ### 5. Decision Engine Orchestrator
 
-**File**: `backend/src/app/services/decision_engine.py` (New)
+**File**: `backend/src/app/services/llm/decision_engine.py` (New)
 
 **Responsibilities**:
 - Orchestrate the complete decision-making workflow

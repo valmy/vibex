@@ -29,6 +29,20 @@ src/app/
 
 ### Detailed Structure
 
+#### LLM Decision Engine (`services/llm/`)
+
+The LLM Decision Engine is a comprehensive system for AI-powered trading decisions:
+
+- **Decision Engine** (`decision_engine.py`) - Main orchestrator that coordinates all components
+- **LLM Service** (`llm_service.py`) - Handles LLM API communication and model management
+- **Decision Validator** (`decision_validator.py`) - Validates trading decisions against business rules
+- **Strategy Manager** (`strategy_manager.py`) - Manages trading strategies and assignments
+- **Context Builder** (`context_builder.py`) - Assembles comprehensive trading context
+- **A/B Testing** (`ab_testing.py`) - Framework for testing different models and strategies
+- **Circuit Breaker** (`circuit_breaker.py`) - Fault tolerance for external API calls
+- **Metrics Tracker** (`llm_metrics.py`) - Performance and usage metrics
+- **Exception Classes** (`llm_exceptions.py`) - Structured error handling
+
 #### Core (`core/`)
 
 - `config.py` - Environment-based configuration management
@@ -57,23 +71,34 @@ src/app/
 
 #### Services (`services/`)
 
-- `llm_service.py` - LLM integration and decision making
-- `context_builder.py` - Trading context assembly
-- `circuit_breaker.py` - Fault tolerance patterns
-- `ab_testing.py` - A/B testing framework
-- `llm_metrics.py` - LLM performance tracking
-- `market_data_service.py` - Market data collection with Aster integration
-- `trading/` - Trading operations and execution
+- `llm/` - LLM Decision Engine services package
+  - `decision_engine.py` - Main LLM decision orchestrator
+  - `llm_service.py` - LLM API integration and model management
+  - `decision_validator.py` - Trading decision validation
+  - `strategy_manager.py` - Trading strategy management
+  - `context_builder.py` - Trading context assembly
+  - `ab_testing.py` - A/B testing framework for models
+  - `circuit_breaker.py` - Fault tolerance patterns
+  - `llm_metrics.py` - LLM performance tracking
+  - `llm_exceptions.py` - LLM-specific exception classes
 - `market_data/` - Market data collection and processing
-- `decision_engine/` - LLM decision making
-- `execution/` - Order execution
-- `account/` - Account management
-- `reconciliation/` - State reconciliation
 - `technical_analysis/` - Technical indicators and analysis
+- `trading/` - Trading operations and execution (future)
+- `execution/` - Order execution (future)
+- `account/` - Account management (future)
+- `reconciliation/` - State reconciliation (future)
 
 #### API (`api/`)
 
 - `routes/` - REST API endpoints organized by domain
+  - `decision_engine.py` - LLM decision generation endpoints
+  - `strategies.py` - Strategy management endpoints
+  - `monitoring.py` - System monitoring and analytics endpoints
+  - `llm_decisions.py` - Direct LLM service endpoints
+  - `market_data.py` - Market data endpoints
+  - `accounts.py`, `positions.py`, `orders.py`, `trades.py` - Trading endpoints
+  - `performance.py` - Performance tracking endpoints
+  - `analysis.py` - Technical analysis endpoints
 - `websockets/` - WebSocket handlers for real-time data
 
 ## Configuration Structure
@@ -160,7 +185,8 @@ logs/
 ### Service Layer
 
 - Custom exceptions in `core/exceptions.py`
-- Service-specific exceptions (e.g., `llm_exceptions.py`)
+- LLM-specific exceptions in `services/llm/llm_exceptions.py`
+- Service-specific exceptions for each domain
 - Structured error responses with context
 
 ### API Layer
