@@ -25,10 +25,12 @@ from .api.routes import (
     positions,
     strategies,
     trades,
+    auth,
 )
 from .core.config import config
 from .core.config_manager import get_config_manager
 from .core.logging import get_logger, setup_logging
+from .middleware import AdminOnlyMiddleware
 
 # Initialize logging
 setup_logging(config)
@@ -45,40 +47,33 @@ app = FastAPI(
     openapi_tags=[
         {
             "name": "Decision Engine",
-            "description": "LLM-powered trading decision generation and management"
+            "description": "LLM-powered trading decision generation and management",
         },
         {
             "name": "Strategy Management",
-            "description": "Trading strategy configuration and assignment"
+            "description": "Trading strategy configuration and assignment",
         },
         {
             "name": "Monitoring & Analytics",
-            "description": "System monitoring, health checks, and performance analytics"
+            "description": "System monitoring, health checks, and performance analytics",
         },
         {
             "name": "LLM Decisions",
-            "description": "Direct LLM service interactions and model management"
+            "description": "Direct LLM service interactions and model management",
         },
-        {
-            "name": "Market Data",
-            "description": "Market data collection and technical analysis"
-        },
+        {"name": "Market Data", "description": "Market data collection and technical analysis"},
         {
             "name": "Trading",
-            "description": "Trading operations including positions, orders, and trades"
+            "description": "Trading operations including positions, orders, and trades",
         },
-        {
-            "name": "Performance",
-            "description": "Performance tracking and analytics"
-        },
-        {
-            "name": "System",
-            "description": "System health, status, and configuration"
-        }
-    ]
+        {"name": "Performance", "description": "Performance tracking and analytics"},
+        {"name": "Authentication", "description": "User authentication and authorization"},
+        {"name": "System", "description": "System health, status, and configuration"},
+    ],
 )
 
 # Add CORS middleware
+app.add_middleware(AdminOnlyMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.cors_origins_list,
@@ -100,6 +95,7 @@ app.include_router(llm_decisions.router)
 app.include_router(decision_engine.router)
 app.include_router(strategies.router)
 app.include_router(monitoring.router)
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 
 
 # Health check endpoint
@@ -117,7 +113,7 @@ async def health_check():
         "version": config.APP_VERSION,
         "environment": config.ENVIRONMENT,
         "timestamp": datetime.utcnow().isoformat(),
-        "detailed_health": "/api/v1/monitoring/health/system"
+        "detailed_health": "/api/v1/monitoring/health/system",
     }
 
 
@@ -142,9 +138,9 @@ async def status():
             "decision_engine": "active",
             "llm_service": "active",
             "strategy_manager": "active",
-            "monitoring": "active"
+            "monitoring": "active",
         },
-        "detailed_status": "/api/v1/monitoring/health/system"
+        "detailed_status": "/api/v1/monitoring/health/system",
     }
 
 
@@ -173,13 +169,10 @@ async def root():
                 "accounts": "/api/v1/accounts",
                 "positions": "/api/v1/positions",
                 "orders": "/api/v1/orders",
-                "trades": "/api/v1/trades"
+                "trades": "/api/v1/trades",
             },
             "performance": "/api/v1/performance",
-            "system": {
-                "health": "/health",
-                "status": "/status"
-            }
+            "system": {"health": "/health", "status": "/status"},
         },
         "features": [
             "LLM-powered trading decisions",
@@ -188,14 +181,15 @@ async def root():
             "Performance analytics",
             "Risk management",
             "A/B testing",
-            "Multi-account support"
-        ]
+            "Multi-account support",
+        ],
     }
 
 
 # Error handlers
 from .services.llm.decision_engine import DecisionEngineError, RateLimitExceededError
 from .core.exceptions import ValidationError, ConfigurationError
+
 
 @app.exception_handler(DecisionEngineError)
 async def decision_engine_exception_handler(request, exc):
@@ -206,6 +200,7 @@ async def decision_engine_exception_handler(request, exc):
         content={"detail": str(exc), "error_type": "decision_engine_error"},
     )
 
+
 @app.exception_handler(RateLimitExceededError)
 async def rate_limit_exception_handler(request, exc):
     """Handle rate limit exceeded exceptions."""
@@ -214,6 +209,7 @@ async def rate_limit_exception_handler(request, exc):
         status_code=429,
         content={"detail": str(exc), "error_type": "rate_limit_exceeded"},
     )
+
 
 @app.exception_handler(ValidationError)
 async def validation_exception_handler(request, exc):
@@ -224,6 +220,7 @@ async def validation_exception_handler(request, exc):
         content={"detail": str(exc), "error_type": "validation_error"},
     )
 
+
 @app.exception_handler(ConfigurationError)
 async def configuration_exception_handler(request, exc):
     """Handle configuration errors."""
@@ -232,6 +229,7 @@ async def configuration_exception_handler(request, exc):
         status_code=500,
         content={"detail": str(exc), "error_type": "configuration_error"},
     )
+
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request, exc):

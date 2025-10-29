@@ -8,6 +8,33 @@ from pydantic import Field
 
 from .base import BaseCreateSchema, BaseSchema, BaseUpdateSchema
 
+# ============================================================================
+# USER SCHEMAS
+# ============================================================================
+
+
+class UserCreate(BaseCreateSchema):
+    address: str = Field(..., min_length=42, max_length=42, description="Ethereum address")
+    is_admin: bool = Field(default=False, description="Is user an admin")
+
+
+class UserUpdate(BaseUpdateSchema):
+    is_admin: Optional[bool] = None
+
+
+class UserRead(BaseSchema):
+    address: str
+    is_admin: bool
+
+
+class User(UserRead):
+    pass
+
+
+# ============================================================================
+# ACCOUNT SCHEMAS
+# ============================================================================
+
 
 class AccountCreate(BaseCreateSchema):
     """Schema for creating an account."""
@@ -26,6 +53,7 @@ class AccountCreate(BaseCreateSchema):
     )
     is_paper_trading: bool = Field(default=False, description="Is paper trading")
     is_multi_account: bool = Field(default=False, description="Is multi-account mode")
+    user_id: str = Field(..., description="User ID")
 
 
 class AccountUpdate(BaseUpdateSchema):

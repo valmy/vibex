@@ -4,8 +4,9 @@ SQLAlchemy ORM models for the AI Trading Agent application.
 Exports all models for easy importing.
 """
 
-from .account import Account
+from .account import Account, User
 from .base import Base, BaseModel
+from .challenge import Challenge
 from .diary_entry import DiaryEntry
 from .market_data import MarketData
 from .order import Order
@@ -22,6 +23,8 @@ try:
         "Base",
         "BaseModel",
         "Account",
+        "User",
+        "Challenge",
         "Decision",
         "DecisionResult",
         "MarketData",
@@ -39,6 +42,8 @@ except ImportError:
         "Base",
         "BaseModel",
         "Account",
+        "User",
+        "Challenge",
         "MarketData",
         "Position",
         "Order",

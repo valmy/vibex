@@ -4,10 +4,23 @@ Account model for trading accounts.
 Represents a trading account with configuration and status.
 """
 
-from sqlalchemy import Boolean, Column, Float, Index, String, Text
+from sqlalchemy import Boolean, Column, Float, Index, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
 
 from .base import BaseModel
+
+
+class User(BaseModel):
+    __tablename__ = "users"
+    __table_args__ = ({"schema": "trading", "extend_existing": True},)
+
+    address = Column(String(42), unique=True, nullable=False, index=True)
+    is_admin = Column(Boolean, default=False, nullable=False)
+
+    accounts = relationship("Account", back_populates="user", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<User(address={self.address}, is_admin={self.is_admin})>"
 
 
 class Account(BaseModel):
@@ -15,15 +28,17 @@ class Account(BaseModel):
 
     __tablename__ = "accounts"
     __table_args__ = (
-        Index("idx_account_name", "name"),
-        Index("idx_account_status", "status"),
-        {"schema": "trading"},
+        {"schema": "trading", "extend_existing": True},
     )
 
     # Account identification
     name = Column(String(255), unique=True, nullable=False, index=True)
     description = Column(Text, nullable=True)
     status = Column(String(50), default="active", nullable=False)  # active, inactive, suspended
+
+    # User relationship
+    user_id = Column(String, ForeignKey("trading.users.id"), nullable=False)
+    user = relationship("User", back_populates="accounts")
 
     # Account configuration
     api_key = Column(String(255), nullable=True)

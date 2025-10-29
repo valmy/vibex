@@ -83,6 +83,15 @@ class BaseConfig(BaseSettings):
         """Parse CORS origins from comma-separated string."""
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
+    # JWT Settings
+    SECRET_KEY: str = Field(
+        default="a_very_secret_key", description="Secret key for signing JWT tokens"
+    )
+    ALGORITHM: str = Field(default="HS256", description="Algorithm for signing JWT tokens")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
+        default=30, description="Access token expiration time in minutes"
+    )
+
     # Pydantic v2 configuration: use model_config (dict) instead of inner Config class
     # Keep keys compatible with pydantic-settings expectations for BaseSettings
     model_config = {
