@@ -16,7 +16,7 @@ from ...schemas.trade import TradeListResponse, TradeRead
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/api/v1/trades", tags=["trades"])
+router = APIRouter(prefix="/api/v1/trades", tags=["Trading"])
 
 
 @router.get("", response_model=TradeListResponse)

@@ -10,17 +10,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.exceptions import ResourceNotFoundError, to_http_exception
 from ...core.logging import get_logger
+from ...core.security import get_current_user
 from ...db.session import get_db
 from ...models.order import Order
 from ...schemas.order import OrderCreate, OrderListResponse, OrderRead, OrderUpdate
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
+router = APIRouter(prefix="/api/v1/orders", tags=["Trading"])
 
 
 @router.post("", response_model=OrderRead, status_code=status.HTTP_201_CREATED)
-async def create_order(order_data: OrderCreate, db: AsyncSession = Depends(get_db)):
+async def create_order(
+    order_data: OrderCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """Create a new order."""
     try:
         order = Order(**order_data.model_dump())
@@ -36,7 +41,11 @@ async def create_order(order_data: OrderCreate, db: AsyncSession = Depends(get_d
 
 
 @router.get("", response_model=OrderListResponse)
-async def list_orders(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+async def list_orders(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db)
+):
     """List all orders with pagination."""
     try:
         # Get total count
@@ -54,7 +63,10 @@ async def list_orders(skip: int = 0, limit: int = 100, db: AsyncSession = Depend
 
 
 @router.get("/{order_id}", response_model=OrderRead)
-async def get_order(order_id: int, db: AsyncSession = Depends(get_db)):
+async def get_order(
+    order_id: int,
+    db: AsyncSession = Depends(get_db)
+):
     """Get a specific order by ID."""
     try:
         result = await db.execute(select(Order).where(Order.id == order_id))
@@ -72,7 +84,12 @@ async def get_order(order_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/{order_id}", response_model=OrderRead)
-async def update_order(order_id: int, order_data: OrderUpdate, db: AsyncSession = Depends(get_db)):
+async def update_order(
+    order_id: int,
+    order_data: OrderUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """Update an order."""
     try:
         result = await db.execute(select(Order).where(Order.id == order_id))
@@ -99,7 +116,11 @@ async def update_order(order_id: int, order_data: OrderUpdate, db: AsyncSession 
 
 
 @router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_order(order_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_order(
+    order_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """Delete an order."""
     try:
         result = await db.execute(select(Order).where(Order.id == order_id))

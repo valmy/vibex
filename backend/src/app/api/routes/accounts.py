@@ -8,19 +8,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.exceptions import ResourceNotFoundError, ValidationError, to_http_exception
 from ...core.logging import get_logger
+from ...core.security import get_current_user
 from ...db import get_db
 from ...models import Account
 from ...schemas import AccountCreate, AccountListResponse, AccountRead, AccountUpdate
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/api/v1/accounts", tags=["accounts"])
+router = APIRouter(prefix="/api/v1/accounts", tags=["Trading"])
 
 
 @router.post("", response_model=AccountRead, status_code=status.HTTP_201_CREATED)
 async def create_account(
     account_data: AccountCreate,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
 ):
     """Create a new trading account."""
     try:
@@ -60,7 +62,7 @@ async def list_accounts(
         result = await db.execute(select(Account).offset(skip).limit(limit))
         accounts = result.scalars().all()
 
-        return AccountListResponse(total=total, accounts=accounts)
+        return AccountListResponse(total=total, items=accounts)
     except Exception as e:
         logger.error(f"Error listing accounts: {e}")
         raise HTTPException(status_code=500, detail="Failed to list accounts")
@@ -92,6 +94,7 @@ async def update_account(
     account_id: int,
     account_data: AccountUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
 ):
     """Update a trading account."""
     try:
@@ -122,6 +125,7 @@ async def update_account(
 async def delete_account(
     account_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
 ):
     """Delete a trading account."""
     try:

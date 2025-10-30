@@ -14,14 +14,17 @@ To begin authentication, request a challenge message for the user's wallet addre
 
 **Endpoint:** `POST /api/v1/auth/challenge`
 **Query Parameters:**
+
 - `address` (string, required): The Ethereum wallet address to authenticate
 
 **Example Request:**
+
 ```bash
 curl -X POST "http://localhost:3000/api/v1/auth/challenge?address=0xCfE0358A18a20790c49F35c09A120083f1882045"
 ```
 
 **Response:**
+
 ```json
 {
   "challenge": "37124602975658db84981bd4c9c88f1da3f7f6114e8085a2966989900277f456"
@@ -38,16 +41,19 @@ Submit the signed challenge to authenticate and receive a JWT token.
 
 **Endpoint:** `POST /api/v1/auth/login`
 **Query Parameters:**
+
 - `challenge` (string, required): The challenge message received in step 1
 - `signature` (string, required): The signature produced in step 2 (0x-prefixed hex)
 - `address` (string, required): The Ethereum wallet address
 
 **Example Request:**
+
 ```bash
 curl -X POST "http://localhost:3000/api/v1/auth/login?challenge=37124602975658db84981bd4c9c88f1da3f7f6114e8085a2966989900277f456&signature=0x...&address=0xCfE0358A18a20790c49F35c09A120083f1882045"
 ```
 
 **Response:**
+
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -156,14 +162,43 @@ The first user to authenticate is automatically granted admin privileges.
 
 ## Protected Endpoints
 
-Certain endpoints require authentication:
+### Authentication Required
+
+The following endpoints require authentication:
 
 - `GET /api/v1/auth/me` - Get current user information
-- All trading-related endpoints (accounts, positions, orders, etc.)
+- **Write Operations** (POST/PUT/DELETE) for trading endpoints:
+  - `POST /api/v1/accounts` - Create account
+  - `PUT /api/v1/accounts/{id}` - Update account
+  - `DELETE /api/v1/accounts/{id}` - Delete account
+  - `POST /api/v1/positions` - Create position
+  - `PUT /api/v1/positions/{id}` - Update position
+  - `DELETE /api/v1/positions/{id}` - Delete position
+  - `POST /api/v1/orders` - Create order
+  - `PUT /api/v1/orders/{id}` - Update order
+  - `DELETE /api/v1/orders/{id}` - Delete order
+
+### Public Endpoints (No Authentication Required)
+
+The following endpoints are publicly accessible:
+
+- **Read Operations** (GET) for trading data:
+  - `GET /api/v1/accounts` - List accounts
+  - `GET /api/v1/accounts/{id}` - Get account details
+  - `GET /api/v1/positions` - List positions
+  - `GET /api/v1/positions/{id}` - Get position details
+  - `GET /api/v1/orders` - List orders
+  - `GET /api/v1/orders/{id}` - Get order details
+  - `GET /api/v1/trades` - List trades (read-only)
+  - `GET /api/v1/trades/{id}` - Get trade details (read-only)
+- **Market Data** endpoints (all public)
+- **System** endpoints (health, status)
+
+### Admin-Only Endpoints
 
 Some endpoints require admin privileges:
 
-- User management
+- User management operations
 - System configuration changes
 - Certain administrative trading operations
 

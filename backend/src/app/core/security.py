@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from .config import config
 from ..db.session import get_db
 
-http_bearer = HTTPBearer(auto_error=True)
+http_bearer = HTTPBearer(auto_error=True, scheme_name="BearerAuth")
 
 credentials_exception = HTTPException(
     status_code=401,

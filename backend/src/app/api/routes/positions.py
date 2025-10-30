@@ -10,17 +10,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.exceptions import ResourceNotFoundError, to_http_exception
 from ...core.logging import get_logger
+from ...core.security import get_current_user
 from ...db.session import get_db
 from ...models.position import Position
 from ...schemas.position import PositionCreate, PositionListResponse, PositionRead, PositionUpdate
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/api/v1/positions", tags=["positions"])
+router = APIRouter(prefix="/api/v1/positions", tags=["Trading"])
 
 
 @router.post("", response_model=PositionRead, status_code=status.HTTP_201_CREATED)
-async def create_position(position_data: PositionCreate, db: AsyncSession = Depends(get_db)):
+async def create_position(
+    position_data: PositionCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """Create a new position."""
     try:
         position = Position(**position_data.model_dump())
@@ -36,7 +41,11 @@ async def create_position(position_data: PositionCreate, db: AsyncSession = Depe
 
 
 @router.get("", response_model=PositionListResponse)
-async def list_positions(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+async def list_positions(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db)
+):
     """List all positions with pagination."""
     try:
         # Get total count
@@ -54,7 +63,10 @@ async def list_positions(skip: int = 0, limit: int = 100, db: AsyncSession = Dep
 
 
 @router.get("/{position_id}", response_model=PositionRead)
-async def get_position(position_id: int, db: AsyncSession = Depends(get_db)):
+async def get_position(
+    position_id: int,
+    db: AsyncSession = Depends(get_db)
+):
     """Get a specific position by ID."""
     try:
         result = await db.execute(select(Position).where(Position.id == position_id))
@@ -73,7 +85,10 @@ async def get_position(position_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{position_id}", response_model=PositionRead)
 async def update_position(
-    position_id: int, position_data: PositionUpdate, db: AsyncSession = Depends(get_db)
+    position_id: int,
+    position_data: PositionUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     """Update a position."""
     try:
@@ -101,7 +116,11 @@ async def update_position(
 
 
 @router.delete("/{position_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_position(position_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_position(
+    position_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """Delete a position."""
     try:
         result = await db.execute(select(Position).where(Position.id == position_id))

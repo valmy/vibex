@@ -7,6 +7,7 @@ Exports all schemas for easy importing.
 from .account import AccountCreate, AccountListResponse, AccountRead, AccountUpdate
 from .base import BaseCreateSchema, BaseSchema, BaseUpdateSchema
 from .diary_entry import DiaryEntryCreate, DiaryEntryListResponse, DiaryEntryRead, DiaryEntryUpdate
+from .market_data import MarketDataListResponse, MarketDataRead
 from .order import OrderCreate, OrderListResponse, OrderRead, OrderUpdate
 from .performance_metric import (
     PerformanceMetricCreate,
@@ -35,6 +36,8 @@ __all__ = [
     "AccountUpdate",
     "AccountRead",
     "AccountListResponse",
+    "MarketDataRead",
+    "MarketDataListResponse",
     "PositionCreate",
     "PositionUpdate",
     "PositionRead",

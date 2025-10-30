@@ -4,7 +4,7 @@ Account model for trading accounts.
 Represents a trading account with configuration and status.
 """
 
-from sqlalchemy import Boolean, Column, Float, Index, String, Text, ForeignKey
+from sqlalchemy import Boolean, Column, Float, Index, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
 
 from .base import BaseModel
@@ -37,7 +37,7 @@ class Account(BaseModel):
     status = Column(String(50), default="active", nullable=False)  # active, inactive, suspended
 
     # User relationship
-    user_id = Column(String, ForeignKey("trading.users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("trading.users.id"), nullable=False)
     user = relationship("User", back_populates="accounts")
 
     # Account configuration

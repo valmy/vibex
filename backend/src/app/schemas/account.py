@@ -53,7 +53,7 @@ class AccountCreate(BaseCreateSchema):
     )
     is_paper_trading: bool = Field(default=False, description="Is paper trading")
     is_multi_account: bool = Field(default=False, description="Is multi-account mode")
-    user_id: str = Field(..., description="User ID")
+    user_id: int = Field(..., description="User ID")
 
 
 class AccountUpdate(BaseUpdateSchema):

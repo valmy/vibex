@@ -20,7 +20,7 @@ from ...services import get_market_data_service
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/api/v1/market-data", tags=["market-data"])
+router = APIRouter(prefix="/api/v1/market-data", tags=["Market Data"])
 
 
 @router.get("", response_model=MarketDataListResponse)
