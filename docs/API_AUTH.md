@@ -177,6 +177,9 @@ The following endpoints require authentication:
   - `POST /api/v1/orders` - Create order
   - `PUT /api/v1/orders/{id}` - Update order
   - `DELETE /api/v1/orders/{id}` - Delete order
+- **Market Data** write operations:
+  - `POST /api/v1/market-data/sync/{symbol}` - Sync market data for symbol
+  - `POST /api/v1/market-data/sync-all` - Sync all market data
 
 ### Public Endpoints (No Authentication Required)
 
@@ -191,7 +194,11 @@ The following endpoints are publicly accessible:
   - `GET /api/v1/orders/{id}` - Get order details
   - `GET /api/v1/trades` - List trades (read-only)
   - `GET /api/v1/trades/{id}` - Get trade details (read-only)
-- **Market Data** endpoints (all public)
+- **Market Data** read endpoints:
+  - `GET /api/v1/market-data` - List market data
+  - `GET /api/v1/market-data/{id}` - Get market data details
+  - `GET /api/v1/market-data/symbol/{symbol}` - Get market data by symbol
+  - `GET /api/v1/market-data/range/{symbol}` - Get market data range
 - **System** endpoints (health, status)
 
 ### Admin-Only Endpoints

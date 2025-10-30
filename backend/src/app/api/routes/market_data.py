@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.exceptions import ResourceNotFoundError, to_http_exception
 from ...core.logging import get_logger
+from ...core.security import get_current_user
 from ...db.session import get_db
 from ...models.market_data import MarketData
 from ...schemas.market_data import MarketDataListResponse, MarketDataRead
@@ -83,7 +84,11 @@ async def get_market_data_by_symbol(
 
 
 @router.post("/sync/{symbol}")
-async def sync_market_data(symbol: str, db: AsyncSession = Depends(get_db)):
+async def sync_market_data(
+    symbol: str,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """Sync market data from Aster DEX for a specific symbol."""
     try:
         service = get_market_data_service()
@@ -100,7 +105,10 @@ async def sync_market_data(symbol: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/sync-all")
-async def sync_all_market_data(db: AsyncSession = Depends(get_db)):
+async def sync_all_market_data(
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """Sync market data from Aster DEX for all configured assets."""
     try:
         service = get_market_data_service()
