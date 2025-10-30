@@ -29,7 +29,7 @@ def market_data_candles():
         candles.append(
             MarketData(
                 time=datetime.now(timezone.utc),
-                symbol="BTC/USDT",
+                symbol="BTCUSDT",
                 interval="1h",
                 open=open_price,
                 high=high_price,
@@ -76,7 +76,7 @@ class TestTechnicalAnalysisIntegration:
             candles1.append(
                 MarketData(
                     time=datetime.now(timezone.utc),
-                    symbol="BTC/USDT",
+                    symbol="BTCUSDT",
                     interval="1h",
                     open=45000.0 + i * 10,
                     high=45100.0 + i * 10,
@@ -94,7 +94,7 @@ class TestTechnicalAnalysisIntegration:
             candles2.append(
                 MarketData(
                     time=datetime.now(timezone.utc),
-                    symbol="ETH/USDT",
+                    symbol="ETHUSDT",
                     interval="1h",
                     open=2500.0 - i * 5,
                     high=2600.0 - i * 5,
@@ -123,7 +123,7 @@ class TestTechnicalAnalysisIntegration:
             candles.append(
                 MarketData(
                     time=datetime.now(timezone.utc),
-                    symbol="SHIB/USDT",
+                    symbol="SHIBUSDT",
                     interval="1h",
                     open=base_price + i * 0.00001,
                     high=base_price + i * 0.00001 + 0.000001,
@@ -150,7 +150,7 @@ class TestTechnicalAnalysisIntegration:
             candles.append(
                 MarketData(
                     time=datetime.now(timezone.utc),
-                    symbol="BTC/USDT",
+                    symbol="BTCUSDT",
                     interval="1h",
                     open=base_price + volatility,
                     high=base_price + volatility + 1000,
@@ -178,7 +178,7 @@ class TestTechnicalAnalysisIntegration:
             candles.append(
                 MarketData(
                     time=datetime.now(timezone.utc),
-                    symbol="BTC/USDT",
+                    symbol="BTCUSDT",
                     interval="1h",
                     open=base_price + trend,
                     high=base_price + trend + 100,
@@ -206,7 +206,7 @@ class TestTechnicalAnalysisIntegration:
             candles.append(
                 MarketData(
                     time=datetime.now(timezone.utc),
-                    symbol="BTC/USDT",
+                    symbol="BTCUSDT",
                     interval="1h",
                     open=base_price - trend,
                     high=base_price - trend + 50,
@@ -252,7 +252,7 @@ class TestTechnicalAnalysisIntegration:
             candles.append(
                 MarketData(
                     time=datetime.now(timezone.utc),
-                    symbol="BTC/USDT",
+                    symbol="BTCUSDT",
                     interval="1h",
                     open=base_price + i,
                     high=base_price + i + 100,

@@ -75,6 +75,38 @@ class DecisionValidator:
             "concentration_validation": self._validate_concentration_risk
         }
 
+    def _extract_base_currency(self, symbol: str) -> str:
+        """
+        Extract base currency from symbol.
+
+        For symbols like 'BTCUSDT', 'ETHUSDT', 'SOLUSDT', etc.,
+        this extracts the base currency (BTC, ETH, SOL).
+
+        Args:
+            symbol: Trading pair symbol (e.g., 'BTCUSDT', 'ETHUSDT')
+
+        Returns:
+            Base currency (e.g., 'BTC', 'ETH')
+        """
+        # Common quote currencies to remove from the end
+        quote_currencies = ['USDT', 'USDC', 'USD', 'BTC', 'ETH', 'EUR', 'GBP']
+
+        symbol_upper = symbol.upper()
+
+        # Try to find a matching quote currency at the end
+        for quote in quote_currencies:
+            if symbol_upper.endswith(quote):
+                base = symbol_upper[:-len(quote)]
+                if base:  # Make sure we have something left
+                    return base
+
+        # Fallback: if no quote currency found, assume first 3-4 characters
+        # This handles cases like BTC, ETH, SOL, ADA, DOT, etc.
+        if len(symbol) >= 6:
+            return symbol[:3]  # Most common case
+        else:
+            return symbol  # Return as-is if too short
+
     async def validate_decision(
         self,
         decision: TradingDecision,
@@ -489,13 +521,14 @@ class DecisionValidator:
 
         # Check if adding similar positions (simplified correlation check)
         if decision.action in ["buy", "sell"]:
+            decision_base = self._extract_base_currency(decision.asset)
             similar_positions = [
                 pos for pos in context.account_state.open_positions
-                if pos.symbol.split('/')[0] == decision.asset.split('/')[0]  # Same base currency
+                if self._extract_base_currency(pos.symbol) == decision_base
             ]
 
             if len(similar_positions) >= 2:
-                warnings.append(f"High correlation risk: multiple positions in {decision.asset.split('/')[0]} assets")
+                warnings.append(f"High correlation risk: multiple positions in {decision_base} assets")
 
         return errors, warnings
 
@@ -562,9 +595,10 @@ class DecisionValidator:
         # Correlation risk (simplified)
         correlation_risk_high = False
         if decision.action in ["buy", "sell"]:
+            decision_base = self._extract_base_currency(decision.asset)
             similar_positions = [
                 pos for pos in account_context.open_positions
-                if pos.symbol.split('/')[0] == decision.asset.split('/')[0]
+                if self._extract_base_currency(pos.symbol) == decision_base
             ]
             correlation_risk_high = len(similar_positions) >= 2
 

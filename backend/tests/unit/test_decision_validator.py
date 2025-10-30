@@ -116,7 +116,7 @@ class TestDecisionValidator:
         )
 
         return TradingContext(
-            symbol="BTC/USDT",
+            symbol="BTCUSDT",
             account_id=1,
             market_data=market_context,
             account_state=account_context,
@@ -127,7 +127,7 @@ class TestDecisionValidator:
     def valid_buy_decision(self):
         """Create a valid buy decision for testing."""
         return TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=1000.0,
             tp_price=50000.0,
@@ -154,7 +154,7 @@ class TestDecisionValidator:
         # Test with Pydantic validation error handling
         try:
             invalid_decision = TradingDecision(
-                asset="BTC/USDT",
+                asset="BTCUSDT",
                 action="buy",
                 allocation_usd=1000.0,
                 exit_plan="Test",
@@ -173,7 +173,7 @@ class TestDecisionValidator:
     async def test_schema_validation_requires_position_adjustment(self, validator, sample_trading_context):
         """Test schema validation requires position_adjustment for adjust_position action."""
         invalid_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="adjust_position",
             allocation_usd=500.0,
             exit_plan="Adjust position",
@@ -191,7 +191,7 @@ class TestDecisionValidator:
     async def test_allocation_validation_against_available_balance(self, validator, sample_trading_context):
         """Test allocation validation against available balance."""
         excessive_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=9000.0,  # Exceeds available balance of 8000
             exit_plan="Test",
@@ -209,7 +209,7 @@ class TestDecisionValidator:
     async def test_price_logic_validation_buy_order(self, validator, sample_trading_context):
         """Test price logic validation for buy orders."""
         invalid_price_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=1000.0,
             tp_price=45000.0,  # Invalid: TP should be higher than current (48000)
@@ -230,7 +230,7 @@ class TestDecisionValidator:
     async def test_position_size_validation(self, validator, sample_trading_context):
         """Test position size validation against maximum allowed."""
         oversized_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=2500.0,  # Exceeds max position size of 2000
             exit_plan="Test",
@@ -250,7 +250,7 @@ class TestDecisionValidator:
         # Add positions to reach the limit
         sample_trading_context.account_state.open_positions = [
             PositionSummary(
-                symbol="ETH/USDT",
+                symbol="ETHUSDT",
                 side="long",
                 size=1000.0,
                 entry_price=3000.0,
@@ -259,7 +259,7 @@ class TestDecisionValidator:
                 percentage_pnl=3.33
             ),
             PositionSummary(
-                symbol="SOL/USDT",
+                symbol="SOLUSDT",
                 side="long",
                 size=500.0,
                 entry_price=100.0,
@@ -268,7 +268,7 @@ class TestDecisionValidator:
                 percentage_pnl=5.0
             ),
             PositionSummary(
-                symbol="ADA/USDT",
+                symbol="ADAUSDT",
                 side="short",
                 size=2000.0,
                 entry_price=0.5,
@@ -279,7 +279,7 @@ class TestDecisionValidator:
         ]
 
         new_position_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=1000.0,
             exit_plan="Test",
@@ -297,7 +297,7 @@ class TestDecisionValidator:
     async def test_adjust_position_without_existing_position(self, validator, sample_trading_context):
         """Test that adjust_position fails when no existing position exists."""
         adjust_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="adjust_position",
             allocation_usd=0.0,
             position_adjustment=PositionAdjustment(
@@ -322,7 +322,7 @@ class TestDecisionValidator:
         sample_trading_context.account_state.risk_exposure = 90.0
 
         high_risk_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=1500.0,
             exit_plan="Test",
@@ -343,7 +343,7 @@ class TestDecisionValidator:
         # Add existing BTC positions to create correlation risk
         sample_trading_context.account_state.open_positions = [
             PositionSummary(
-                symbol="BTC/EUR",
+                symbol="BTCEUR",
                 side="long",
                 size=1000.0,
                 entry_price=40000.0,
@@ -352,7 +352,7 @@ class TestDecisionValidator:
                 percentage_pnl=2.5
             ),
             PositionSummary(
-                symbol="BTC/GBP",
+                symbol="BTCGBP",
                 side="long",
                 size=500.0,
                 entry_price=35000.0,
@@ -363,7 +363,7 @@ class TestDecisionValidator:
         ]
 
         btc_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=1000.0,
             exit_plan="Test",
@@ -382,7 +382,7 @@ class TestDecisionValidator:
         """Test concentration risk validation."""
         # Create high concentration scenario
         high_concentration_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=7000.0,  # High concentration relative to balance
             exit_plan="Test",
@@ -404,7 +404,7 @@ class TestDecisionValidator:
     async def test_apply_risk_checks(self, validator, sample_trading_context):
         """Test comprehensive risk checks."""
         decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=1000.0,
             exit_plan="Test",
@@ -425,7 +425,7 @@ class TestDecisionValidator:
     async def test_create_fallback_decision(self, validator, sample_trading_context):
         """Test fallback decision creation."""
         original_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=10000.0,  # Invalid amount
             exit_plan="Test",
@@ -456,7 +456,7 @@ class TestDecisionValidator:
 
         # Create an invalid decision
         invalid_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=20000.0,  # Exceeds balance
             exit_plan="Test",
@@ -499,7 +499,7 @@ class TestDecisionValidator:
         # Add existing position
         sample_trading_context.account_state.open_positions = [
             PositionSummary(
-                symbol="BTC/USDT",
+                symbol="BTCUSDT",
                 side="long",
                 size=1000.0,
                 entry_price=47000.0,
@@ -510,7 +510,7 @@ class TestDecisionValidator:
         ]
 
         valid_order_adjustment = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="adjust_orders",
             allocation_usd=0.0,
             order_adjustment=OrderAdjustment(
@@ -532,7 +532,7 @@ class TestDecisionValidator:
         """Test strategy-specific validation rules."""
         # Test trade that exceeds strategy risk per trade
         excessive_risk_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=2000.0,  # 20% of 10k balance, exceeds 15% strategy limit
             exit_plan="Test",
@@ -550,7 +550,7 @@ class TestDecisionValidator:
     async def test_hold_action_validation(self, validator, sample_trading_context):
         """Test validation of hold action."""
         hold_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="hold",
             allocation_usd=0.0,  # Should be 0 for hold
             exit_plan="Wait for better entry",
@@ -565,7 +565,7 @@ class TestDecisionValidator:
 
         # Test invalid hold with non-zero allocation
         invalid_hold = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="hold",
             allocation_usd=1000.0,  # Should be 0 for hold
             exit_plan="Wait",
@@ -613,7 +613,7 @@ class TestDecisionValidator:
     async def test_risk_reward_ratio_warning(self, validator, sample_trading_context):
         """Test risk/reward ratio warning generation."""
         poor_ratio_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=1000.0,
             tp_price=48500.0,  # Small profit target
@@ -633,7 +633,7 @@ class TestDecisionValidator:
     async def test_large_allocation_warning(self, validator, sample_trading_context):
         """Test large allocation warning generation."""
         large_allocation_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=5000.0,  # More than 50% of available balance
             exit_plan="Test",

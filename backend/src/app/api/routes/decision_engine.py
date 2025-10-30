@@ -29,7 +29,7 @@ router = APIRouter(prefix="/api/v1/decisions", tags=["Decision Engine"])
 class DecisionRequest(BaseModel):
     """Request model for decision generation."""
 
-    symbol: str = Field(..., description="Trading pair symbol (e.g., BTC/USDT)")
+    symbol: str = Field(..., description="Trading pair symbol (e.g., BTCUSDT)")
     account_id: int = Field(..., description="Account identifier")
     strategy_override: Optional[str] = Field(None, description="Optional strategy override")
     force_refresh: bool = Field(False, description="Force refresh of cached data")

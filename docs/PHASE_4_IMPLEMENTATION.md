@@ -66,13 +66,13 @@ from src.app.services import get_market_data_service
 service = get_market_data_service()
 
 # Fetch market data
-data = await service.fetch_market_data("BTC/USDT", "1h", limit=100)
+data = await service.fetch_market_data("BTCUSDT", "1h", limit=100)
 
 # Store in database
-count = await service.store_market_data(db, "BTC/USDT", "1h", data)
+count = await service.store_market_data(db, "BTCUSDT", "1h", data)
 
 # Retrieve latest data
-latest = await service.get_latest_market_data(db, "BTC/USDT", "1h")
+latest = await service.get_latest_market_data(db, "BTCUSDT", "1h")
 ```
 
 ---
@@ -121,10 +121,10 @@ from src.app.services import get_llm_service
 service = get_llm_service()
 
 # Analyze market
-analysis = await service.analyze_market("BTC/USDT", market_data)
+analysis = await service.analyze_market("BTCUSDT", market_data)
 
 # Get trading signal
-signal = await service.get_trading_signal("BTC/USDT", market_data)
+signal = await service.get_trading_signal("BTCUSDT", market_data)
 
 # Summarize market
 summary = await service.summarize_market_conditions(market_data_list)

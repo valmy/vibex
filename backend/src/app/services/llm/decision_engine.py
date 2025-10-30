@@ -158,7 +158,7 @@ class DecisionEngine:
         Generate a trading decision for the given symbol and account.
 
         Args:
-            symbol: Trading pair symbol (e.g., "BTC/USDT")
+            symbol: Trading pair symbol (e.g., "BTCUSDT")
             account_id: Account identifier
             strategy_override: Optional strategy to override account strategy
             force_refresh: Force refresh of cached data

@@ -722,7 +722,7 @@ ATR: {indicators.atr or 'N/A'}
 
 Your response must be valid JSON with the following structure:
 {
-  "asset": "BTC/USDT",
+  "asset": "BTCUSDT",
   "action": "buy|sell|hold|adjust_position|close_position|adjust_orders",
   "allocation_usd": 100.0,
   "tp_price": 50000.0,

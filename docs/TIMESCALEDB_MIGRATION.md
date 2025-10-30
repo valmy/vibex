@@ -1,8 +1,8 @@
 # TimescaleDB Migration - Complete Guide
 
-**Date**: 2025-10-23  
-**Status**: ✅ Complete  
-**Compatibility**: ✅ Verified  
+**Date**: 2025-10-23
+**Status**: ✅ Complete
+**Compatibility**: ✅ Verified
 
 ---
 
@@ -135,8 +135,8 @@ SELECT * FROM timescaledb_information.chunks;
 ### Query Market Data
 ```sql
 -- All queries work the same as before
-SELECT * FROM trading.market_data 
-WHERE symbol = 'BTC/USDT' 
+SELECT * FROM trading.market_data
+WHERE symbol = 'BTCUSDT'
 AND time > NOW() - INTERVAL '7 days'
 ORDER BY time DESC;
 

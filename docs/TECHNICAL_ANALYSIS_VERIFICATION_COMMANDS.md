@@ -108,7 +108,7 @@ for i in range(100):
     candles.append(
         MarketData(
             time=datetime.utcnow(),
-            symbol="BTC/USDT",
+            symbol="BTCUSDT",
             interval="1h",
             open=base_price + i,
             high=base_price + i + 100,
@@ -155,7 +155,7 @@ for i in range(30):  # Less than 50 required
     candles.append(
         MarketData(
             time=datetime.utcnow(),
-            symbol="BTC/USDT",
+            symbol="BTCUSDT",
             interval="1h",
             open=45000.0 + i,
             high=45100.0 + i,

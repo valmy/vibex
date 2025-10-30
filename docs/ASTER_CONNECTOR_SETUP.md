@@ -1,9 +1,9 @@
 # Aster Connector Python - Installation Complete ✅
 
-**Date**: 2025-10-23  
-**Status**: ✅ **INSTALLED AND VERIFIED**  
-**Version**: 1.1.0  
-**Commit**: `0c7e948`  
+**Date**: 2025-10-23
+**Status**: ✅ **INSTALLED AND VERIFIED**
+**Version**: 1.1.0
+**Commit**: `0c7e948`
 
 ---
 
@@ -117,7 +117,7 @@ ws = AsterDEXWebSocket(
 
 # Connect and listen for updates
 ws.connect()
-ws.subscribe_to_market_data("BTC/USDT")
+ws.subscribe_to_market_data("BTCUSDT")
 ```
 
 ---
@@ -258,7 +258,7 @@ The Aster Connector Python library is now installed and ready for use. All modul
 
 ---
 
-**Commit Hash**: `0c7e948`  
-**Installation Date**: 2025-10-23  
+**Commit Hash**: `0c7e948`
+**Installation Date**: 2025-10-23
 **Status**: ✅ Ready for Phase 4 Integration
 

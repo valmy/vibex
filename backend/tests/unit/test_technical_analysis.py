@@ -34,7 +34,7 @@ def valid_candles():
         candles.append(
             MarketData(
                 time=datetime.now(timezone.utc),
-                symbol="BTC/USDT",
+                symbol="BTCUSDT",
                 interval="1h",
                 open=base_price + i,
                 high=base_price + i + 100,
@@ -55,7 +55,7 @@ def insufficient_candles():
         candles.append(
             MarketData(
                 time=datetime.now(timezone.utc),
-                symbol="BTC/USDT",
+                symbol="BTCUSDT",
                 interval="1h",
                 open=base_price + i,
                 high=base_price + i + 100,
@@ -170,7 +170,7 @@ class TestTechnicalAnalysisService:
             candles.append(
                 MarketData(
                     time=datetime.now(timezone.utc),
-                    symbol="BTC/USDT",
+                    symbol="BTCUSDT",
                     interval="1h",
                     open=base_price + i,
                     high=base_price + i + 100,

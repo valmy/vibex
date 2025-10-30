@@ -29,7 +29,7 @@ async def analyze_market(
     Analyze market data for a symbol using LLM.
 
     Args:
-        symbol: Trading pair symbol (e.g., BTC/USDT)
+        symbol: Trading pair symbol (e.g., BTCUSDT)
         context: Optional additional context for analysis
 
     Returns:

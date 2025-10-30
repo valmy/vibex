@@ -38,7 +38,7 @@ class TestTradingDecision:
     def test_valid_buy_decision(self):
         """Test creating a valid buy decision."""
         decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=1000.0,
             tp_price=50000.0,
@@ -49,7 +49,7 @@ class TestTradingDecision:
             risk_level="medium"
         )
 
-        assert decision.asset == "BTC/USDT"
+        assert decision.asset == "BTCUSDT"
         assert decision.action == "buy"
         assert decision.allocation_usd == 1000.0
         assert decision.confidence == 85.0
@@ -57,7 +57,7 @@ class TestTradingDecision:
     def test_adjust_position_requires_position_adjustment(self):
         """Test that adjust_position action requires position_adjustment."""
         decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="adjust_position",
             allocation_usd=500.0,
             exit_plan="Adjust position size",
@@ -72,7 +72,7 @@ class TestTradingDecision:
     def test_adjust_orders_requires_order_adjustment(self):
         """Test that adjust_orders action requires order_adjustment."""
         decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="adjust_orders",
             allocation_usd=0.0,
             exit_plan="Adjust stop loss",
@@ -87,7 +87,7 @@ class TestTradingDecision:
     def test_price_logic_validation_buy(self):
         """Test price logic validation for buy orders."""
         decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=1000.0,
             tp_price=45000.0,  # Invalid: TP should be higher than current
@@ -109,7 +109,7 @@ class TestTradingDecision:
         """Test that confidence must be between 0 and 100."""
         with pytest.raises(ValidationError):
             TradingDecision(
-                asset="BTC/USDT",
+                asset="BTCUSDT",
                 action="buy",
                 allocation_usd=1000.0,
                 exit_plan="Test",
@@ -464,7 +464,7 @@ class TestTradingContext:
         )
 
         trading_context = TradingContext(
-            symbol="BTC/USDT",
+            symbol="BTCUSDT",
             account_id=1,
             market_data=market_context,
             account_state=account_context,
@@ -473,7 +473,7 @@ class TestTradingContext:
 
         summary = trading_context.get_context_summary()
 
-        assert summary["symbol"] == "BTC/USDT"
+        assert summary["symbol"] == "BTCUSDT"
         assert summary["account_id"] == 1
         assert summary["current_price"] == 48000.0
         assert summary["strategy"] == "Test Strategy"

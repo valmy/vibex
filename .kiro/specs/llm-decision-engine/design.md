@@ -474,7 +474,7 @@ class InsufficientDataError(DecisionEngineError):
 ```
 POST /api/v1/decisions/generate
 {
-  "symbol": "BTC/USDT",
+  "symbol": "BTCUSDT",
   "account_id": 1,
   "force_refresh": false
 }
@@ -483,7 +483,7 @@ POST /api/v1/decisions/generate
 ### Decision History
 
 ```
-GET /api/v1/decisions/history?account_id=1&limit=50&symbol=BTC/USDT
+GET /api/v1/decisions/history?account_id=1&limit=50&symbol=BTCUSDT
 ```
 
 ### Decision Validation

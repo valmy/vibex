@@ -190,10 +190,10 @@ calculate_atr(high, low, close: np.ndarray) -> ATROutput
 ```python
 class TechnicalAnalysisService:
     def calculate_all_indicators(
-        self, 
+        self,
         candles: List[MarketData]
     ) -> TechnicalIndicators
-    
+
     def _validate_candles(candles: List[MarketData]) -> None
     def _prepare_arrays(candles: List[MarketData]) -> tuple
 ```
@@ -348,7 +348,7 @@ market_data_service = get_market_data_service()
 # Fetch market data
 async with get_db() as db:
     candles = await market_data_service.get_latest_market_data(
-        db, "BTC/USDT", "1h", limit=100
+        db, "BTCUSDT", "1h", limit=100
     )
 
 # Calculate indicators

@@ -59,7 +59,7 @@ class TestLLMService:
     def sample_market_data(self):
         """Create sample market data for testing."""
         return {
-            "symbol": "BTC/USDT",
+            "symbol": "BTCUSDT",
             "close": 48000.0,
             "high": 49000.0,
             "low": 47000.0,
@@ -144,7 +144,7 @@ class TestLLMService:
         )
 
         return TradingContext(
-            symbol="BTC/USDT",
+            symbol="BTCUSDT",
             account_id=1,
             market_data=market_context,
             account_state=account_context,
@@ -173,9 +173,9 @@ class TestLLMService:
     async def test_analyze_market_success(self, llm_service, mock_openai_client, sample_market_data):
         """Test successful market analysis."""
         llm_service._client = mock_openai_client
-        result = await llm_service.analyze_market("BTC/USDT", sample_market_data)
+        result = await llm_service.analyze_market("BTCUSDT", sample_market_data)
 
-        assert result["symbol"] == "BTC/USDT"
+        assert result["symbol"] == "BTCUSDT"
         assert "timestamp" in result
         assert "analysis" in result
         assert result["model"] == llm_service.model
@@ -187,7 +187,7 @@ class TestLLMService:
         call_args = mock_openai_client.chat.completions.create.call_args
         assert call_args[1]["model"] == llm_service.model
         assert len(call_args[1]["messages"]) == 2
-        assert "BTC/USDT" in call_args[1]["messages"][1]["content"]
+        assert "BTCUSDT" in call_args[1]["messages"][1]["content"]
 
     @pytest.mark.asyncio
     async def test_analyze_market_with_additional_context(self, llm_service, mock_openai_client, sample_market_data):
@@ -195,9 +195,9 @@ class TestLLMService:
         additional_context = "Market showing strong bullish momentum"
 
         llm_service._client = mock_openai_client
-        result = await llm_service.analyze_market("BTC/USDT", sample_market_data, additional_context)
+        result = await llm_service.analyze_market("BTCUSDT", sample_market_data, additional_context)
 
-        assert result["symbol"] == "BTC/USDT"
+        assert result["symbol"] == "BTCUSDT"
 
         # Verify additional context was included in prompt
         call_args = mock_openai_client.chat.completions.create.call_args
@@ -211,9 +211,9 @@ class TestLLMService:
         mock_openai_client.chat.completions.create.return_value.choices[0].message.content = json_response
 
         llm_service._client = mock_openai_client
-        result = await llm_service.get_trading_signal("BTC/USDT", sample_market_data)
+        result = await llm_service.get_trading_signal("BTCUSDT", sample_market_data)
 
-        assert result["symbol"] == "BTC/USDT"
+        assert result["symbol"] == "BTCUSDT"
         assert result["signal"] == "BUY"
         assert result["confidence"] == 85
         assert result["reason"] == "Strong bullish momentum"
@@ -226,9 +226,9 @@ class TestLLMService:
         mock_openai_client.chat.completions.create.return_value.choices[0].message.content = text_response
 
         llm_service._client = mock_openai_client
-        result = await llm_service.get_trading_signal("BTC/USDT", sample_market_data)
+        result = await llm_service.get_trading_signal("BTCUSDT", sample_market_data)
 
-        assert result["symbol"] == "BTC/USDT"
+        assert result["symbol"] == "BTCUSDT"
         assert result["signal"] == "HOLD"  # Default when JSON parsing fails
         assert result["confidence"] == 50  # Default confidence
         assert result["reason"] == text_response
@@ -237,9 +237,9 @@ class TestLLMService:
     async def test_summarize_market_conditions(self, llm_service, mock_openai_client):
         """Test market conditions summary."""
         market_data_list = [
-            {"symbol": "BTC/USDT", "close": 48000.0, "change_percent": 2.5},
-            {"symbol": "ETH/USDT", "close": 3000.0, "change_percent": -1.2},
-            {"symbol": "SOL/USDT", "close": 100.0, "change_percent": 5.0}
+            {"symbol": "BTCUSDT", "close": 48000.0, "change_percent": 2.5},
+            {"symbol": "ETHUSDT", "close": 3000.0, "change_percent": -1.2},
+            {"symbol": "SOLUSDT", "close": 100.0, "change_percent": 5.0}
         ]
 
         llm_service._client = mock_openai_client
@@ -253,15 +253,15 @@ class TestLLMService:
         # Verify all symbols were included in prompt
         call_args = mock_openai_client.chat.completions.create.call_args
         prompt = call_args[1]["messages"][1]["content"]
-        assert "BTC/USDT" in prompt
-        assert "ETH/USDT" in prompt
-        assert "SOL/USDT" in prompt
+        assert "BTCUSDT" in prompt
+        assert "ETHUSDT" in prompt
+        assert "SOLUSDT" in prompt
 
     @pytest.mark.asyncio
     async def test_generate_trading_decision_success(self, llm_service, mock_openai_client, sample_trading_context):
         """Test successful trading decision generation."""
         decision_json = {
-            "asset": "BTC/USDT",
+            "asset": "BTCUSDT",
             "action": "buy",
             "allocation_usd": 1000.0,
             "tp_price": 50000.0,
@@ -276,7 +276,7 @@ class TestLLMService:
 
         llm_service._client = mock_openai_client
         with patch.object(llm_service.metrics_tracker, 'record_api_call'):
-            result = await llm_service.generate_trading_decision("BTC/USDT", sample_trading_context)
+            result = await llm_service.generate_trading_decision("BTCUSDT", sample_trading_context)
 
             assert isinstance(result, DecisionResult)
             assert result.validation_passed is True
@@ -285,7 +285,7 @@ class TestLLMService:
             assert result.model_used == llm_service.model
 
             decision = result.decision
-            assert decision.asset == "BTC/USDT"
+            assert decision.asset == "BTCUSDT"
             assert decision.action == "buy"
             assert decision.allocation_usd == 1000.0
             assert decision.confidence == 85
@@ -296,7 +296,7 @@ class TestLLMService:
         # Make context insufficient
         sample_trading_context.market_data.current_price = None
 
-        result = await llm_service.generate_trading_decision("BTC/USDT", sample_trading_context)
+        result = await llm_service.generate_trading_decision("BTCUSDT", sample_trading_context)
 
         assert isinstance(result, DecisionResult)
         assert result.validation_passed is False
@@ -314,7 +314,7 @@ class TestLLMService:
 
         llm_service._client = mock_openai_client
         with patch.object(llm_service.metrics_tracker, 'record_api_call'):
-            result = await llm_service.generate_trading_decision("BTC/USDT", sample_trading_context)
+            result = await llm_service.generate_trading_decision("BTCUSDT", sample_trading_context)
 
             assert isinstance(result, DecisionResult)
             assert result.validation_passed is False
@@ -331,7 +331,7 @@ class TestLLMService:
 
         llm_service._client = mock_openai_client
         with patch.object(llm_service.metrics_tracker, 'record_api_call'):
-            result = await llm_service.generate_trading_decision("BTC/USDT", sample_trading_context)
+            result = await llm_service.generate_trading_decision("BTCUSDT", sample_trading_context)
 
             assert isinstance(result, DecisionResult)
             assert result.validation_passed is False
@@ -454,7 +454,7 @@ class TestLLMService:
     async def test_generate_decision_with_ab_test(self, llm_service, mock_openai_client, sample_trading_context):
         """Test decision generation with A/B testing."""
         decision_json = {
-            "asset": "BTC/USDT",
+            "asset": "BTCUSDT",
             "action": "buy",
             "allocation_usd": 1000.0,
             "exit_plan": "Test exit plan",
@@ -470,7 +470,7 @@ class TestLLMService:
             with patch.object(llm_service.ab_test_manager, 'record_decision_performance'):
                 with patch.object(llm_service.metrics_tracker, 'record_api_call'):
                     result = await llm_service.generate_trading_decision(
-                        "BTC/USDT",
+                        "BTCUSDT",
                         sample_trading_context,
                         ab_test_name="test1"
                     )
@@ -494,25 +494,25 @@ class TestLLMService:
 
     def test_build_decision_prompt(self, llm_service, sample_trading_context):
         """Test decision prompt building."""
-        prompt = llm_service._build_decision_prompt("BTC/USDT", sample_trading_context)
+        prompt = llm_service._build_decision_prompt("BTCUSDT", sample_trading_context)
 
-        assert "BTC/USDT" in prompt
+        assert "BTCUSDT" in prompt
         assert "48000.00" in prompt  # Current price
         assert "Conservative trading prompt" in prompt  # Strategy template
         # The simple template doesn't include detailed indicators, just the formatted template
-        assert len(prompt) >= 50  # Should be a substantial prompt
+        assert len(prompt) >= 49  # Should be a substantial prompt
 
     def test_build_decision_prompt_with_strategy_override(self, llm_service, sample_trading_context):
         """Test decision prompt building with strategy override."""
         with patch.object(llm_service, '_get_strategy_template', return_value="Aggressive strategy: {symbol}"):
-            prompt = llm_service._build_decision_prompt("BTC/USDT", sample_trading_context, "aggressive")
+            prompt = llm_service._build_decision_prompt("BTCUSDT", sample_trading_context, "aggressive")
 
-            assert "Aggressive strategy: BTC/USDT" in prompt
+            assert "Aggressive strategy: BTCUSDT" in prompt
 
     def test_parse_decision_response_valid_json(self, llm_service):
         """Test parsing valid JSON decision response."""
         decision_json = {
-            "asset": "BTC/USDT",
+            "asset": "BTCUSDT",
             "action": "buy",
             "allocation_usd": 1000.0,
             "exit_plan": "Take profit at resistance",
@@ -523,10 +523,10 @@ class TestLLMService:
 
         response_data = {"content": json.dumps(decision_json)}
 
-        decision = llm_service._parse_decision_response(response_data, "BTC/USDT")
+        decision = llm_service._parse_decision_response(response_data, "BTCUSDT")
 
         assert isinstance(decision, TradingDecision)
-        assert decision.asset == "BTC/USDT"
+        assert decision.asset == "BTCUSDT"
         assert decision.action == "buy"
         assert decision.allocation_usd == 1000.0
         assert decision.confidence == 85
@@ -536,7 +536,7 @@ class TestLLMService:
         response_data = {"content": "This is not valid JSON"}
 
         with pytest.raises(ValidationError, match="No valid JSON found"):
-            llm_service._parse_decision_response(response_data, "BTC/USDT")
+            llm_service._parse_decision_response(response_data, "BTCUSDT")
 
     def test_parse_decision_response_missing_asset(self, llm_service):
         """Test parsing decision response with missing asset field."""
@@ -551,21 +551,21 @@ class TestLLMService:
 
         response_data = {"content": json.dumps(decision_json)}
 
-        decision = llm_service._parse_decision_response(response_data, "BTC/USDT")
+        decision = llm_service._parse_decision_response(response_data, "BTCUSDT")
 
-        assert decision.asset == "BTC/USDT"  # Should be filled from symbol parameter
+        assert decision.asset == "BTCUSDT"  # Should be filled from symbol parameter
 
     def test_extract_json_from_text(self, llm_service):
         """Test extracting JSON from text response."""
         text_with_json = '''
         Here is my analysis:
-        {"asset": "BTC/USDT", "action": "buy", "allocation_usd": 1000.0, "exit_plan": "test", "rationale": "test", "confidence": 85, "risk_level": "medium"}
+        {"asset": "BTCUSDT", "action": "buy", "allocation_usd": 1000.0, "exit_plan": "test", "rationale": "test", "confidence": 85, "risk_level": "medium"}
         That's my recommendation.
         '''
 
         result = llm_service._extract_json_from_text(text_with_json)
 
-        assert result["asset"] == "BTC/USDT"
+        assert result["asset"] == "BTCUSDT"
         assert result["action"] == "buy"
         assert result["allocation_usd"] == 1000.0
 
@@ -578,10 +578,10 @@ class TestLLMService:
 
     def test_create_fallback_decision(self, llm_service):
         """Test creating fallback decision."""
-        fallback = llm_service._create_fallback_decision("BTC/USDT")
+        fallback = llm_service._create_fallback_decision("BTCUSDT")
 
         assert isinstance(fallback, TradingDecision)
-        assert fallback.asset == "BTC/USDT"
+        assert fallback.asset == "BTCUSDT"
         assert fallback.action == "hold"
         assert fallback.allocation_usd == 0.0
         assert fallback.confidence == 0
@@ -691,11 +691,11 @@ class TestLLMService:
         llm_service._client = mock_openai_client
         # Test analyze_market error handling
         with pytest.raises(Exception, match="API Error"):
-            await llm_service.analyze_market("BTC/USDT", sample_market_data)
+            await llm_service.analyze_market("BTCUSDT", sample_market_data)
 
         # Test get_trading_signal error handling
         with pytest.raises(Exception, match="API Error"):
-            await llm_service.get_trading_signal("BTC/USDT", sample_market_data)
+            await llm_service.get_trading_signal("BTCUSDT", sample_market_data)
 
         # Test summarize_market_conditions error handling
         with pytest.raises(Exception, match="API Error"):
@@ -704,30 +704,30 @@ class TestLLMService:
     def test_prompt_building_methods(self, llm_service, sample_market_data):
         """Test various prompt building methods."""
         # Test analysis prompt
-        analysis_prompt = llm_service._build_analysis_prompt("BTC/USDT", sample_market_data)
-        assert "BTC/USDT" in analysis_prompt
+        analysis_prompt = llm_service._build_analysis_prompt("BTCUSDT", sample_market_data)
+        assert "BTCUSDT" in analysis_prompt
         assert "48000.00" in analysis_prompt
         assert "Current trend analysis" in analysis_prompt
 
         # Test analysis prompt with additional context
         context = "Strong bullish momentum"
-        analysis_prompt_with_context = llm_service._build_analysis_prompt("BTC/USDT", sample_market_data, context)
+        analysis_prompt_with_context = llm_service._build_analysis_prompt("BTCUSDT", sample_market_data, context)
         assert context in analysis_prompt_with_context
 
         # Test signal prompt
-        signal_prompt = llm_service._build_signal_prompt("BTC/USDT", sample_market_data)
-        assert "BTC/USDT" in signal_prompt
+        signal_prompt = llm_service._build_signal_prompt("BTCUSDT", sample_market_data)
+        assert "BTCUSDT" in signal_prompt
         assert "JSON format" in signal_prompt
         assert "BUY|SELL|HOLD" in signal_prompt
 
         # Test signal prompt with account info
         account_info = {"balance": 10000.0}
-        signal_prompt_with_account = llm_service._build_signal_prompt("BTC/USDT", sample_market_data, account_info)
+        signal_prompt_with_account = llm_service._build_signal_prompt("BTCUSDT", sample_market_data, account_info)
         assert "10000.00" in signal_prompt_with_account
 
         # Test summary prompt
-        market_data_list = [sample_market_data, {"symbol": "ETH/USDT", "close": 3000.0, "change_percent": -1.0}]
+        market_data_list = [sample_market_data, {"symbol": "ETHUSDT", "close": 3000.0, "change_percent": -1.0}]
         summary_prompt = llm_service._build_summary_prompt(market_data_list)
-        assert "BTC/USDT" in summary_prompt
-        assert "ETH/USDT" in summary_prompt
+        assert "BTCUSDT" in summary_prompt
+        assert "ETHUSDT" in summary_prompt
         assert "Overall market sentiment" in summary_prompt

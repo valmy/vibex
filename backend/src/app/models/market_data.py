@@ -29,7 +29,7 @@ class MarketData(TimescaleBase):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
 
     # Market identification
-    symbol = Column(String(50), nullable=False, index=True)  # e.g., BTC/USDT
+    symbol = Column(String(50), nullable=False, index=True)  # e.g., BTCUSDT
     interval = Column(String(20), nullable=False)  # e.g., 1h, 4h, 1d
 
     # Candlestick data

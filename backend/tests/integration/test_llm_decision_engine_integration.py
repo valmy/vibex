@@ -45,7 +45,7 @@ class TestLLMDecisionEngineIntegration:
 
         # Mock successful decision generation
         mock_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=1000.0,
             tp_price=50000.0,
@@ -56,9 +56,85 @@ class TestLLMDecisionEngineIntegration:
             risk_level="medium"
         )
 
+        # Create a proper TradingContext for the mock result
+        from app.schemas.trading_decision import (
+            MarketContext, AccountContext, RiskMetrics, TradingContext,
+            TechnicalIndicators, PerformanceMetrics
+        )
+
+        market_context = MarketContext(
+            current_price=48000.0,
+            price_change_24h=1000.0,
+            volume_24h=1000000.0,
+            volatility=0.05,
+            technical_indicators=TechnicalIndicators(
+                rsi=65.0,
+                macd=100.0,
+                ema_20=47500.0,
+                ema_50=47000.0,
+                bollinger_upper=49000.0,
+                bollinger_lower=46000.0,
+                atr=500.0
+            ),
+            price_history=[]
+        )
+
+        account_context = AccountContext(
+            account_id=1,
+            balance_usd=10000.0,
+            available_balance=8000.0,
+            total_pnl=500.0,
+            open_positions=[],
+            recent_performance=PerformanceMetrics(
+                total_trades=10,
+                winning_trades=6,
+                total_pnl=500.0,
+                max_drawdown=200.0,
+                sharpe_ratio=1.5,
+                win_rate=60.0,
+                avg_win=100.0,
+                avg_loss=50.0
+            ),
+            risk_exposure=0.2,
+            max_position_size=2000.0,
+            active_strategy=TradingStrategy(
+                strategy_id="conservative",
+                strategy_name="Conservative Trading",
+                strategy_type="conservative",
+                prompt_template="Conservative trading prompt: {symbol} at ${current_price}",
+                risk_parameters=StrategyRiskParameters(
+                    max_risk_per_trade=5.0,
+                    max_daily_loss=10.0,
+                    stop_loss_percentage=2.0,
+                    take_profit_ratio=2.0,
+                    max_leverage=2.0,
+                    cooldown_period=300
+                ),
+                timeframe_preference=["1h", "4h"],
+                max_positions=3,
+                position_sizing="percentage",
+                is_active=True
+            )
+        )
+
+        risk_metrics = RiskMetrics(
+            var_95=500.0,
+            max_drawdown=1000.0,
+            correlation_risk=15.0,
+            concentration_risk=25.0
+        )
+
+        mock_context = TradingContext(
+            symbol="BTCUSDT",
+            account_id=1,
+            market_data=market_context,
+            account_state=account_context,
+            risk_metrics=risk_metrics
+        )
+
         mock_result = DecisionResult(
             decision=mock_decision,
-            context=Mock(),
+            context=mock_context,
             validation_passed=True,
             validation_errors=[],
             processing_time_ms=250.0,
@@ -145,7 +221,7 @@ class TestLLMDecisionEngineIntegration:
         )
 
         mock_context = TradingContext(
-            symbol="BTC/USDT",
+            symbol="BTCUSDT",
             account_id=1,
             market_data=market_context,
             account_state=account_context,
@@ -219,16 +295,16 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Execute decision generation
-        result = await decision_engine.make_trading_decision("BTC/USDT", 1)
+        result = await decision_engine.make_trading_decision("BTCUSDT", 1)
 
         # Verify the workflow was executed correctly
         assert isinstance(result, DecisionResult)
-        assert result.decision.asset == "BTC/USDT"
+        assert result.decision.asset == "BTCUSDT"
         assert result.decision.action == "buy"
         assert result.validation_passed is True
 
         # Verify all services were called
-        mock_context_builder.build_trading_context.assert_called_once_with("BTC/USDT", 1)
+        mock_context_builder.build_trading_context.assert_called_once_with(symbol="BTCUSDT", account_id=1, force_refresh=False)
         mock_llm_service.generate_trading_decision.assert_called_once()
         mock_decision_validator.validate_decision.assert_called_once()
 
@@ -254,7 +330,7 @@ class TestLLMDecisionEngineIntegration:
 
         # Mock fallback decision creation
         fallback_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="hold",
             allocation_usd=0.0,
             exit_plan="Hold due to validation failure",
@@ -271,7 +347,7 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Execute decision generation
-        result = await decision_engine.make_trading_decision("BTC/USDT", 1)
+        result = await decision_engine.make_trading_decision("BTCUSDT", 1)
 
         # Verify fallback was used
         assert result.decision.action == "hold"
@@ -307,7 +383,7 @@ class TestLLMDecisionEngineIntegration:
         mock_context_builder.build_trading_context.side_effect = mock_build_context
 
         # Execute batch decisions
-        symbols = ["BTC/USDT", "ETH/USDT"]
+        symbols = ["BTCUSDT", "ETHUSDT"]
         account_ids = [1, 2, 3]
 
         results = []
@@ -353,7 +429,7 @@ class TestLLMDecisionEngineIntegration:
         )
 
         # Test decision generation after strategy switch
-        decision_result = await decision_engine.make_trading_decision("BTC/USDT", 1)
+        decision_result = await decision_engine.make_trading_decision("BTCUSDT", 1)
 
         # Verify decision was generated
         assert isinstance(decision_result, DecisionResult)
@@ -379,7 +455,7 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Execute decision generation - should handle error gracefully
-        result = await decision_engine.make_trading_decision("BTC/USDT", 1)
+        result = await decision_engine.make_trading_decision("BTCUSDT", 1)
 
         # Verify error was handled and fallback decision was created
         assert isinstance(result, DecisionResult)
@@ -404,11 +480,11 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Make first decision
-        result1 = await decision_engine.make_trading_decision("BTC/USDT", 1)
+        result1 = await decision_engine.make_trading_decision("BTCUSDT", 1)
         assert isinstance(result1, DecisionResult)
 
         # Make second decision immediately (should be rate limited or cached)
-        result2 = await decision_engine.make_trading_decision("BTC/USDT", 1)
+        result2 = await decision_engine.make_trading_decision("BTCUSDT", 1)
         assert isinstance(result2, DecisionResult)
 
         # Verify caching behavior - exact behavior depends on implementation
@@ -432,7 +508,7 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Generate several decisions
-        symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
+        symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
         for symbol in symbols:
             await decision_engine.make_trading_decision(symbol, 1)
 
@@ -476,7 +552,7 @@ class TestLLMDecisionEngineIntegration:
 
         tasks = []
         for i in range(10):  # 10 concurrent decisions
-            task = decision_engine.make_trading_decision("BTC/USDT", i + 1)
+            task = decision_engine.make_trading_decision("BTCUSDT", i + 1)
             tasks.append(task)
 
         # Execute all tasks concurrently
@@ -513,14 +589,14 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Make initial decision
-        result1 = await decision_engine.make_trading_decision("BTC/USDT", 1)
+        result1 = await decision_engine.make_trading_decision("BTCUSDT", 1)
         assert isinstance(result1, DecisionResult)
 
         # Simulate context invalidation (e.g., new market data)
-        decision_engine.invalidate_cache_for_symbol("BTC/USDT")
+        decision_engine.invalidate_cache_for_symbol("BTCUSDT")
 
         # Make another decision - should rebuild context
-        result2 = await decision_engine.make_trading_decision("BTC/USDT", 1)
+        result2 = await decision_engine.make_trading_decision("BTCUSDT", 1)
         assert isinstance(result2, DecisionResult)
 
         # Verify context was rebuilt
@@ -576,7 +652,7 @@ class TestLLMDecisionEngineIntegration:
             # Mock fallback for invalid decisions
             if not validation_result.is_valid:
                 fallback_decision = TradingDecision(
-                    asset="BTC/USDT",
+                    asset="BTCUSDT",
                     action="hold",
                     allocation_usd=0.0,
                     exit_plan="Hold due to validation failure",
@@ -586,7 +662,7 @@ class TestLLMDecisionEngineIntegration:
                 )
                 mock_decision_validator.create_fallback_decision.return_value = fallback_decision
 
-            result = await decision_engine.make_trading_decision("BTC/USDT", 1)
+            result = await decision_engine.make_trading_decision("BTCUSDT", 1)
 
             # Verify result matches validation outcome
             assert isinstance(result, DecisionResult)
@@ -641,23 +717,23 @@ class TestLLMDecisionEngineIntegration:
 
         # Mock context builder to fail for one symbol
         def mock_build_context_with_failure(symbol, account_id):
-            if symbol == "ETH/USDT":
-                raise Exception("Market data unavailable for ETH/USDT")
+            if symbol == "ETHUSDT":
+                raise Exception("Market data unavailable for ETHUSDT")
             return mock_context_builder.build_trading_context.return_value
 
         mock_context_builder.build_trading_context.side_effect = mock_build_context_with_failure
 
         # Execute batch decisions
-        symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
+        symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
         results = await decision_engine.batch_decisions(symbols, 1)
 
         # Verify we got results for all symbols
         assert len(results) == 3
 
         # Verify BTC and SOL succeeded, ETH failed gracefully
-        btc_result = next(r for r in results if r.decision.asset == "BTC/USDT")
-        eth_result = next(r for r in results if r.decision.asset == "ETH/USDT")
-        sol_result = next(r for r in results if r.decision.asset == "SOL/USDT")
+        btc_result = next(r for r in results if r.decision.asset == "BTCUSDT")
+        eth_result = next(r for r in results if r.decision.asset == "ETHUSDT")
+        sol_result = next(r for r in results if r.decision.asset == "SOLUSDT")
 
         assert btc_result.validation_passed is True
         assert eth_result.validation_passed is False  # Should have error

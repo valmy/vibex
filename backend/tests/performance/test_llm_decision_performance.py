@@ -52,7 +52,7 @@ class TestLLMDecisionEnginePerformance:
         # Mock LLM Service
         mock_llm_service = AsyncMock(spec=LLMService)
         mock_decision = TradingDecision(
-            asset="BTC/USDT",
+            asset="BTCUSDT",
             action="buy",
             allocation_usd=1000.0,
             tp_price=50000.0,
@@ -168,7 +168,7 @@ class TestLLMDecisionEnginePerformance:
         )
 
         return TradingContext(
-            symbol="BTC/USDT",
+            symbol="BTCUSDT",
             account_id=1,
             market_data=market_context,
             account_state=account_context,
@@ -208,7 +208,7 @@ class TestLLMDecisionEnginePerformance:
         latencies = []
         for _ in range(10):
             start_time = time.time()
-            result = await decision_engine.make_trading_decision("BTC/USDT", 1)
+            result = await decision_engine.make_trading_decision("BTCUSDT", 1)
             end_time = time.time()
 
             latency_ms = (end_time - start_time) * 1000
@@ -247,7 +247,7 @@ class TestLLMDecisionEnginePerformance:
             # Create concurrent tasks
             tasks = []
             for i in range(concurrency):
-                task = decision_engine.make_trading_decision("BTC/USDT", i + 1)
+                task = decision_engine.make_trading_decision("BTCUSDT", i + 1)
                 tasks.append(task)
 
             # Measure throughput
@@ -286,7 +286,7 @@ class TestLLMDecisionEnginePerformance:
 
         # Test different batch sizes
         batch_sizes = [1, 5, 10, 25, 50]
-        symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "ADA/USDT", "DOT/USDT"]
+        symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "ADAUSDT", "DOTUSDT"]
 
         batch_results = {}
 
@@ -331,7 +331,7 @@ class TestLLMDecisionEnginePerformance:
 
         # Test with multiple accounts and symbols
         account_ids = list(range(1, 11))  # 10 accounts
-        symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
+        symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
 
         # Create tasks for all account/symbol combinations
         tasks = []
@@ -386,7 +386,7 @@ class TestLLMDecisionEnginePerformance:
             # Process batch of decisions
             tasks = []
             for i in range(batch_size):
-                task = decision_engine.make_trading_decision("BTC/USDT", (batch * batch_size) + i + 1)
+                task = decision_engine.make_trading_decision("BTCUSDT", (batch * batch_size) + i + 1)
                 tasks.append(task)
 
             results = await asyncio.gather(*tasks)
@@ -428,7 +428,7 @@ class TestLLMDecisionEnginePerformance:
         uncached_times = []
         for i in range(5):
             start_time = time.time()
-            result = await decision_engine.make_trading_decision(f"BTC/USDT", i + 1)
+            result = await decision_engine.make_trading_decision(f"BTCUSDT", i + 1)
             end_time = time.time()
 
             uncached_times.append((end_time - start_time) * 1000)
@@ -438,7 +438,7 @@ class TestLLMDecisionEnginePerformance:
         cached_times = []
         for i in range(5):
             start_time = time.time()
-            result = await decision_engine.make_trading_decision(f"BTC/USDT", i + 1)
+            result = await decision_engine.make_trading_decision(f"BTCUSDT", i + 1)
             end_time = time.time()
 
             cached_times.append((end_time - start_time) * 1000)
@@ -467,7 +467,7 @@ class TestLLMDecisionEnginePerformance:
         normal_times = []
         for _ in range(10):
             start_time = time.time()
-            result = await decision_engine.make_trading_decision("BTC/USDT", 1)
+            result = await decision_engine.make_trading_decision("BTCUSDT", 1)
             end_time = time.time()
 
             normal_times.append((end_time - start_time) * 1000)
@@ -486,7 +486,7 @@ class TestLLMDecisionEnginePerformance:
 
         for _ in range(10):
             start_time = time.time()
-            result = await decision_engine.make_trading_decision("BTC/USDT", 1)
+            result = await decision_engine.make_trading_decision("BTCUSDT", 1)
             end_time = time.time()
 
             error_times.append((end_time - start_time) * 1000)
@@ -530,7 +530,7 @@ class TestLLMDecisionEnginePerformance:
             nonlocal completed_decisions, errors
             while time.time() - start_time < duration_seconds:
                 try:
-                    result = await decision_engine.make_trading_decision("BTC/USDT", completed_decisions + 1)
+                    result = await decision_engine.make_trading_decision("BTCUSDT", completed_decisions + 1)
                     if isinstance(result, DecisionResult):
                         completed_decisions += 1
                     await asyncio.sleep(1.0 / decisions_per_second)  # Rate limiting
@@ -570,7 +570,7 @@ class TestLLMDecisionEnginePerformance:
         start_time = time.time()
 
         for i in range(num_decisions):
-            result = await decision_engine.make_trading_decision("BTC/USDT", i + 1)
+            result = await decision_engine.make_trading_decision("BTCUSDT", i + 1)
             assert isinstance(result, DecisionResult)
 
             # Periodically trigger cleanup operations
@@ -608,7 +608,7 @@ class TestLLMDecisionEnginePerformance:
             # Create high concurrency load
             tasks = []
             for i in range(concurrency):
-                task = decision_engine.make_trading_decision("BTC/USDT", i + 1)
+                task = decision_engine.make_trading_decision("BTCUSDT", i + 1)
                 tasks.append(task)
 
             # Measure performance

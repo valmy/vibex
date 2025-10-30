@@ -25,7 +25,7 @@ class Position(BaseModel):
     account_id = Column(Integer, ForeignKey("trading.accounts.id"), nullable=False, index=True)
 
     # Position identification
-    symbol = Column(String(50), nullable=False)  # e.g., BTC/USDT
+    symbol = Column(String(50), nullable=False)  # e.g., BTCUSDT
     side = Column(String(10), nullable=False)  # long or short
     status = Column(String(50), default="open", nullable=False)  # open, closed, liquidated
 
