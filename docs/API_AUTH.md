@@ -69,6 +69,65 @@ Include the JWT token in the `Authorization` header for authenticated requests:
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
+### Using Swagger UI (Bearer token)
+
+The API docs now use a simple HTTP Bearer token scheme (no username/password form). To authenticate in Swagger:
+
+1. Complete the challenge + login steps to obtain a JWT.
+2. Click "Authorize" in Swagger.
+3. Paste the JWT as the Bearer token and confirm.
+
+Swagger will then send the `Authorization: Bearer <token>` header for protected requests.
+
+### Signing From Terminal (no frontend)
+
+You can complete the challenge-response flow entirely from the terminal. Below is a Python-based option that uses `eth-account` to produce a personal_sign (EIP-191) signature.
+
+Prerequisites:
+
+- Python environment with `uv` available
+- `jq` for parsing JSON (optional but recommended)
+
+Steps:
+
+```bash
+# 1) Install dependency
+uv pip install eth-account
+
+# 2) Request challenge
+ADDR=0xYourAddressHere
+CHALLENGE=$(curl -s -X POST "http://localhost:3000/api/v1/auth/challenge?address=$ADDR" | jq -r .challenge)
+
+# 3) Sign challenge with your wallet's private key (personal_sign / EIP-191)
+# IMPORTANT: Use a dedicated dev wallet and keep your key secure
+SIG=$(python - <<'PY'
+import os
+from eth_account import Account
+from eth_account.messages import encode_defunct
+
+private_key = os.environ["PRIVATE_KEY"]  # set securely in your environment
+challenge = os.environ["CHALLENGE"]
+
+message = encode_defunct(text=challenge)
+signature = Account.sign_message(message, private_key=private_key).signature.hex()
+print(signature)
+PY
+)
+
+# 4) Login to receive JWT
+curl -s -X POST "http://localhost:3000/api/v1/auth/login" \
+  -H "Content-Type: application/json" \
+  -d "{\"challenge\":\"$CHALLENGE\",\"signature\":\"$SIG\",\"address\":\"$ADDR\"}"
+
+# Paste the returned access_token into Swagger's Authorize dialog as a Bearer token
+```
+
+Security tips:
+
+1. Prefer a dedicated development wallet and short-lived shells when handling keys.
+2. Avoid committing or storing raw private keys; use environment variables or a key manager.
+3. Consider hardware wallets or agent-based signing for production workflows.
+
 ## Authorization
 
 The system supports role-based access control:

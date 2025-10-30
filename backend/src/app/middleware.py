@@ -10,7 +10,7 @@ from .models.account import User
 
 class AdminOnlyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if request.method in ["POST", "PUT"]:
+        if request.method in ["POST", "PUT", "DELETE"]:
             # A list of routes that are exempt from the admin check
             exempt_routes = ["/api/v1/auth/login", "/api/v1/auth/challenge"]
             if request.url.path in exempt_routes:

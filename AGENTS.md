@@ -1,4 +1,4 @@
-# CRUSH Development Guidelines
+# Development Guidelines
 
 ## Build/Lint/Test Commands
 

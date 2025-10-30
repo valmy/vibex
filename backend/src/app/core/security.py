@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import Depends, HTTPException
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from .config import config
 from ..db.session import get_db
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+http_bearer = HTTPBearer(auto_error=True)
 
 credentials_exception = HTTPException(
     status_code=401,
@@ -48,7 +48,11 @@ def verify_token(token: str, credentials_exception):
 from ..models.account import User
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(http_bearer),
+    db: Session = Depends(get_db),
+) -> User:
+    token = credentials.credentials
     token_data = verify_token(token, credentials_exception)
     user = db.query(User).filter(User.address == token_data.username).first()
     if user is None:
