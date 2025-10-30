@@ -5,7 +5,8 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import config
 from ..db.session import get_db
@@ -48,19 +49,20 @@ def verify_token(token: str, credentials_exception):
 from ..models.account import User
 
 
-def get_current_user(
+async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(http_bearer),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> User:
     token = credentials.credentials
     token_data = verify_token(token, credentials_exception)
-    user = db.query(User).filter(User.address == token_data.username).first()
+    result = await db.execute(select(User).where(User.address == token_data.username))
+    user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception
     return user
 
 
-def get_current_admin_user(current_user: User = Depends(get_current_user)) -> User:
+async def get_current_admin_user(current_user: User = Depends(get_current_user)) -> User:
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="The user doesn't have enough privileges")
     return current_user
