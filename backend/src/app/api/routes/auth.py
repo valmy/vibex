@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.security import create_access_token
 from ...schemas.auth import Challenge, Token
 from ...services.auth_service import authenticate_user, get_challenge
@@ -10,20 +10,20 @@ router = APIRouter()
 
 
 @router.post("/challenge", response_model=Challenge)
-def request_challenge(address: str, db: Session = Depends(get_db)):
+async def request_challenge(address: str, db: AsyncSession = Depends(get_db)):
     """
     Requests a challenge message for a user to sign.
     """
-    challenge = get_challenge(db, address)
+    challenge = await get_challenge(db, address)
     return {"challenge": challenge}
 
 
 @router.post("/login", response_model=Token)
-def login(challenge: str, signature: str, address: str, db: Session = Depends(get_db)):
+async def login(challenge: str, signature: str, address: str, db: AsyncSession = Depends(get_db)):
     """
     Authenticates a user and returns a JWT token.
     """
-    user = authenticate_user(db, address, signature, challenge)
+    user = await authenticate_user(db, address, signature, challenge)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid signature")
 

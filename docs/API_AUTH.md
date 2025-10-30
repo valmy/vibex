@@ -37,20 +37,14 @@ The client needs to sign the challenge message with the private key correspondin
 Submit the signed challenge to authenticate and receive a JWT token.
 
 **Endpoint:** `POST /api/v1/auth/login`
-**Body Parameters:**
+**Query Parameters:**
 - `challenge` (string, required): The challenge message received in step 1
-- `signature` (string, required): The signature produced in step 2
+- `signature` (string, required): The signature produced in step 2 (0x-prefixed hex)
 - `address` (string, required): The Ethereum wallet address
 
 **Example Request:**
 ```bash
-curl -X POST "http://localhost:3000/api/v1/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "challenge": "37124602975658db84981bd4c9c88f1da3f7f6114e8085a2966989900277f456",
-    "signature": "0x...",
-    "address": "0xCfE0358A18a20790c49F35c09A120083f1882045"
-  }'
+curl -X POST "http://localhost:3000/api/v1/auth/login?challenge=37124602975658db84981bd4c9c88f1da3f7f6114e8085a2966989900277f456&signature=0x...&address=0xCfE0358A18a20790c49F35c09A120083f1882045"
 ```
 
 **Response:**
@@ -109,15 +103,15 @@ private_key = os.environ["PRIVATE_KEY"]  # set securely in your environment
 challenge = os.environ["CHALLENGE"]
 
 message = encode_defunct(text=challenge)
-signature = Account.sign_message(message, private_key=private_key).signature.hex()
-print(signature)
+sig = Account.sign_message(message, private_key=private_key).signature.hex()
+if not sig.startswith("0x"):
+    sig = "0x" + sig
+print(sig)
 PY
 )
 
-# 4) Login to receive JWT
-curl -s -X POST "http://localhost:3000/api/v1/auth/login" \
-  -H "Content-Type: application/json" \
-  -d "{\"challenge\":\"$CHALLENGE\",\"signature\":\"$SIG\",\"address\":\"$ADDR\"}"
+# 4) Login to receive JWT (query parameters)
+curl -s -X POST "http://localhost:3000/api/v1/auth/login?challenge=$CHALLENGE&signature=$SIG&address=$ADDR"
 
 # Paste the returned access_token into Swagger's Authorize dialog as a Bearer token
 ```
@@ -127,6 +121,29 @@ Security tips:
 1. Prefer a dedicated development wallet and short-lived shells when handling keys.
 2. Avoid committing or storing raw private keys; use environment variables or a key manager.
 3. Consider hardware wallets or agent-based signing for production workflows.
+
+### Automated CLI sign-and-login
+
+A helper script `backend/scripts/sign.py` automates the full flow (request challenge → sign → login). It prints the JWT and a ready-to-use curl header export. The script ensures the signature is 0x-prefixed and sends parameters as query items.
+
+Usage:
+
+```bash
+cd backend
+
+# Configure environment (use a dev wallet only)
+export API_BASE=http://localhost:3000   # optional; defaults to http://localhost:3000
+export ADDR=0xYourAddressHere
+export PRIVATE_KEY=0xYourPrivateKeyHex
+
+# Run the script
+uv run python scripts/sign.py
+
+# Output includes the token and a helper export like:
+# export AUTH='Authorization: Bearer <token>'
+# Then you can call protected endpoints, e.g.:
+# curl -H "$AUTH" "$API_BASE/api/v1/auth/me"
+```
 
 ## Authorization
 

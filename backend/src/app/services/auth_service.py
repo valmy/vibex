@@ -1,6 +1,7 @@
 import secrets
-from sqlalchemy.orm import Session
-from web3 import Web3
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from eth_account import Account
 from eth_account.messages import encode_defunct
 
 from ..models.account import User
@@ -8,53 +9,48 @@ from ..models.challenge import Challenge
 from ..schemas.account import UserCreate
 
 
-def get_challenge(db: Session, address: str) -> str:
-    """
-    Generates a new challenge for a user to sign and stores it in the database.
-    """
+async def get_challenge(db: AsyncSession, address: str) -> str:
+    """Generate and store a challenge for the given address."""
     challenge_text = secrets.token_hex(32)
     challenge = Challenge(address=address, challenge=challenge_text)
     db.add(challenge)
-    db.commit()
-    db.refresh(challenge)
+    await db.commit()
     return challenge_text
 
 
-def get_or_create_user(db: Session, address: str) -> User:
-    """
-    Retrieves a user by address, creating a new one if it doesn't exist.
-    """
-    user = db.query(User).filter(User.address == address).first()
+async def get_or_create_user(db: AsyncSession, address: str) -> User:
+    """Retrieve a user by address, creating one if it doesn't exist."""
+    result = await db.execute(select(User).where(User.address == address))
+    user = result.scalar_one_or_none()
     if user:
         return user
 
-    # For now, the first user to sign in is an admin.
-    # In a real application, you would have a more secure way to assign admins.
-    is_admin = db.query(User).count() == 0
+    count_result = await db.execute(select(func.count()).select_from(User))
+    is_admin = (count_result.scalar() or 0) == 0
 
     user = User(address=address, is_admin=is_admin)
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
     return user
 
 
-def authenticate_user(db: Session, address: str, signature: str, challenge: str) -> User:
-    """
-    Authenticates a user by verifying their signature and returns the user.
-    """
-    db_challenge = db.query(Challenge).filter(Challenge.challenge == challenge).first()
+async def authenticate_user(db: AsyncSession, address: str, signature: str, challenge: str) -> User | None:
+    """Verify signature for the challenge and return the user if valid."""
+    result = await db.execute(select(Challenge).where(Challenge.challenge == challenge))
+    db_challenge = result.scalar_one_or_none()
 
     if not db_challenge or db_challenge.address.lower() != address.lower():
         return None
 
     try:
         message = encode_defunct(text=challenge)
-        recovered_address = Web3.eth.account.recover_message(message, signature=signature)
+        sig = signature if signature.startswith("0x") else f"0x{signature}"
+        recovered_address = Account.recover_message(message, signature=sig)
         if recovered_address.lower() == address.lower():
-            db.delete(db_challenge)
-            db.commit()
-            return get_or_create_user(db, address)
+            await db.delete(db_challenge)
+            await db.commit()
+            return await get_or_create_user(db, address)
     except Exception:
         return None
 
