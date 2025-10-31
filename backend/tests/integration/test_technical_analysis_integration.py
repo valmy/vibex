@@ -5,6 +5,7 @@ Tests integration with other services and components.
 """
 
 from datetime import datetime, timezone
+import json
 
 import pytest
 
@@ -236,6 +237,7 @@ class TestTechnicalAnalysisIntegration:
 
         # Should be able to convert to JSON
         result_json = result.model_dump_json()
+        # print(json.dumps(json.loads(result_json), indent=2))
         assert isinstance(result_json, str)
         assert "ema" in result_json
 

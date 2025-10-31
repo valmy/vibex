@@ -132,8 +132,13 @@ addopts = "-ra -q --strict-markers"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 asyncio_mode = "auto"
+env_override_existing_values = true
 env = [
     "ENVIRONMENT=testing",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::pytest.PytestConfigWarning",
 ]
 
 [tool.coverage.run]

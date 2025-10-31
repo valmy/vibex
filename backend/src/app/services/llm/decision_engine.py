@@ -504,20 +504,19 @@ class DecisionEngine:
                 )
 
                 # Create minimal context for error result
-                from ...schemas.context import (
+                from ...schemas.trading_decision import (
                     AccountContext,
                     MarketContext,
                     PerformanceMetrics,
                     RiskMetrics,
+                    TechnicalIndicators,
                     TradingContext,
                 )
-                from ...schemas.trading_decision import TechnicalIndicators
 
                 error_context = TradingContext(
                     symbol=symbols[i],
                     account_id=account_id,
                     market_data=MarketContext(
-                        symbol=symbols[i],
                         current_price=1.0,  # Must be > 0
                         price_change_24h=0.0,
                         volume_24h=0.0,
@@ -543,26 +542,37 @@ class DecisionEngine:
                         total_pnl=0.0,
                         recent_performance=PerformanceMetrics(
                             total_pnl=0.0,
-                            total_pnl_percent=0.0,
                             win_rate=0.0,
                             avg_win=0.0,
                             avg_loss=0.0,
-                            profit_factor=1.0,
                             max_drawdown=0.0,
-                            trades_count=0,
-                            winning_trades=0,
-                            losing_trades=0,
                         ),
                         risk_exposure=0.0,
                         max_position_size=1000.0,
-                        active_strategy=None,
-                        risk_metrics=RiskMetrics(
-                            current_exposure=0.0,
-                            available_capital=0.0,
-                            max_position_size=1000.0,
-                            daily_pnl=0.0,
-                            daily_loss_limit=100.0,
-                        ),
+                        active_strategy={
+                            "strategy_id": "error_fallback",
+                            "strategy_name": "Error Fallback Strategy",
+                            "strategy_type": "conservative",
+                            "prompt_template": "Error fallback prompt",
+                            "risk_parameters": {
+                                "max_risk_per_trade": 1.0,
+                                "max_daily_loss": 5.0,
+                                "stop_loss_percentage": 1.0,
+                                "take_profit_ratio": 1.0,
+                                "max_leverage": 1.0,
+                                "cooldown_period": 60,
+                            },
+                            "timeframe_preference": ["1h"],
+                            "max_positions": 1,
+                            "position_sizing": "fixed",
+                            "is_active": True,
+                        },
+                    ),
+                    risk_metrics=RiskMetrics(
+                        var_95=0.0,
+                        max_drawdown=0.0,
+                        correlation_risk=0.0,
+                        concentration_risk=0.0,
                     ),
                 )
 
