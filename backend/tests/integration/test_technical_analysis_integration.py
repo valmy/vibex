@@ -9,9 +9,7 @@ from datetime import datetime, timezone
 import pytest
 
 from app.models.market_data import MarketData
-from app.services import (
-    get_technical_analysis_service,
-)
+from app.services import get_technical_analysis_service
 
 
 @pytest.fixture

@@ -6,7 +6,7 @@ Provides capabilities to compare different models and track performance.
 
 import random
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from ...core.logging import get_logger
@@ -17,6 +17,7 @@ logger = get_logger(__name__)
 @dataclass
 class ABTestResult:
     """Result of an A/B test comparison."""
+
     model_a: str
     model_b: str
     model_a_performance: Dict
@@ -30,6 +31,7 @@ class ABTestResult:
 @dataclass
 class ModelPerformance:
     """Performance metrics for a model in A/B testing."""
+
     model_name: str
     total_decisions: int = 0
     successful_decisions: int = 0
@@ -78,8 +80,8 @@ class ABTestManager:
             "model_a": model_a,
             "model_b": model_b,
             "traffic_split": traffic_split,
-            "start_time": datetime.utcnow(),
-            "end_time": datetime.utcnow() + timedelta(hours=duration_hours),
+            "start_time": datetime.now(timezone.utc),
+            "end_time": datetime.now(timezone.utc) + timedelta(hours=duration_hours),
             "decisions_a": 0,
             "decisions_b": 0,
         }
@@ -110,7 +112,7 @@ class ABTestManager:
         test = self.active_tests[test_name]
 
         # Check if test is still active
-        if datetime.utcnow() > test["end_time"]:
+        if datetime.now(timezone.utc) > test["end_time"]:
             logger.info(f"A/B test '{test_name}' has ended")
             return None
 
@@ -155,12 +157,14 @@ class ABTestManager:
         # Update running averages
         total = perf.total_decisions
         perf.avg_confidence = ((perf.avg_confidence * (total - 1)) + confidence) / total
-        perf.avg_response_time_ms = ((perf.avg_response_time_ms * (total - 1)) + response_time_ms) / total
+        perf.avg_response_time_ms = (
+            (perf.avg_response_time_ms * (total - 1)) + response_time_ms
+        ) / total
 
         if cost:
             perf.total_cost += cost
 
-        perf.last_updated = datetime.utcnow()
+        perf.last_updated = datetime.now(timezone.utc)
 
     def record_decision_outcome(
         self,
@@ -215,13 +219,17 @@ class ABTestManager:
             return None
 
         # Calculate test duration
-        duration = datetime.utcnow() - test["start_time"]
+        duration = datetime.now(timezone.utc) - test["start_time"]
         duration_hours = duration.total_seconds() / 3600
 
         # Create performance dictionaries
         model_a_performance = {
             "total_decisions": perf_a.total_decisions,
-            "success_rate": (perf_a.successful_decisions / perf_a.total_decisions) * 100 if perf_a.total_decisions > 0 else 0,
+            "success_rate": (
+                (perf_a.successful_decisions / perf_a.total_decisions) * 100
+                if perf_a.total_decisions > 0
+                else 0
+            ),
             "avg_confidence": perf_a.avg_confidence,
             "avg_response_time_ms": perf_a.avg_response_time_ms,
             "total_cost": perf_a.total_cost,
@@ -230,7 +238,11 @@ class ABTestManager:
 
         model_b_performance = {
             "total_decisions": perf_b.total_decisions,
-            "success_rate": (perf_b.successful_decisions / perf_b.total_decisions) * 100 if perf_b.total_decisions > 0 else 0,
+            "success_rate": (
+                (perf_b.successful_decisions / perf_b.total_decisions) * 100
+                if perf_b.total_decisions > 0
+                else 0
+            ),
             "avg_confidence": perf_b.avg_confidence,
             "avg_response_time_ms": perf_b.avg_response_time_ms,
             "total_cost": perf_b.total_cost,
@@ -256,7 +268,9 @@ class ABTestManager:
         self.test_results.append(result)
         del self.active_tests[test_name]
 
-        logger.info(f"A/B test '{test_name}' completed. Winner: {winner} (confidence: {confidence_level:.2f}%)")
+        logger.info(
+            f"A/B test '{test_name}' completed. Winner: {winner} (confidence: {confidence_level:.2f}%)"
+        )
         return result
 
     def get_active_tests(self) -> Dict[str, Dict]:
@@ -267,10 +281,9 @@ class ABTestManager:
             Dictionary of active tests
         """
         # Clean up expired tests
-        current_time = datetime.utcnow()
+        current_time = datetime.now(timezone.utc)
         expired_tests = [
-            name for name, test in self.active_tests.items()
-            if current_time > test["end_time"]
+            name for name, test in self.active_tests.items() if current_time > test["end_time"]
         ]
 
         for test_name in expired_tests:
@@ -327,17 +340,17 @@ class ABTestManager:
 
         # Normalize metrics to 0-100 scale
         score_a = (
-            perf_a["decision_accuracy"] * weights["decision_accuracy"] +
-            perf_a["success_rate"] * weights["success_rate"] +
-            perf_a["avg_confidence"] * weights["avg_confidence"] +
-            (cost_eff_a / max(cost_eff_a, cost_eff_b)) * 100 * weights["cost_efficiency"]
+            perf_a["decision_accuracy"] * weights["decision_accuracy"]
+            + perf_a["success_rate"] * weights["success_rate"]
+            + perf_a["avg_confidence"] * weights["avg_confidence"]
+            + (cost_eff_a / max(cost_eff_a, cost_eff_b)) * 100 * weights["cost_efficiency"]
         )
 
         score_b = (
-            perf_b["decision_accuracy"] * weights["decision_accuracy"] +
-            perf_b["success_rate"] * weights["success_rate"] +
-            perf_b["avg_confidence"] * weights["avg_confidence"] +
-            (cost_eff_b / max(cost_eff_a, cost_eff_b)) * 100 * weights["cost_efficiency"]
+            perf_b["decision_accuracy"] * weights["decision_accuracy"]
+            + perf_b["success_rate"] * weights["success_rate"]
+            + perf_b["avg_confidence"] * weights["avg_confidence"]
+            + (cost_eff_b / max(cost_eff_a, cost_eff_b)) * 100 * weights["cost_efficiency"]
         )
 
         # Require at least 5% difference to declare winner

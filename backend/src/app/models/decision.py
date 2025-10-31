@@ -4,10 +4,11 @@ Decision model for storing LLM-generated trading decisions.
 Stores trading decisions with their context and validation results.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     Column,
     DateTime,
@@ -17,7 +18,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    JSON,
 )
 from sqlalchemy.orm import relationship
 
@@ -42,7 +42,9 @@ class Decision(BaseModel):
 
     # Decision core fields
     symbol = Column(String(20), nullable=False, index=True)
-    action = Column(String(20), nullable=False)  # buy, sell, hold, adjust_position, close_position, adjust_orders
+    action = Column(
+        String(20), nullable=False
+    )  # buy, sell, hold, adjust_position, close_position, adjust_orders
     allocation_usd = Column(Float, nullable=False, default=0.0)
 
     # Price levels
@@ -83,7 +85,9 @@ class Decision(BaseModel):
 
     # Relationships
     account = relationship("Account", back_populates="decisions")
-    decision_results = relationship("DecisionResult", back_populates="decision", cascade="all, delete-orphan")
+    decision_results = relationship(
+        "DecisionResult", back_populates="decision", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         """String representation."""
@@ -135,7 +139,7 @@ class Decision(BaseModel):
     def mark_executed(self, execution_price: float, execution_errors: Optional[list] = None):
         """Mark decision as executed."""
         self.executed = True
-        self.executed_at = datetime.utcnow()
+        self.executed_at = datetime.now(timezone.utc)
         self.execution_price = execution_price
         if execution_errors:
             self.execution_errors = execution_errors
@@ -173,7 +177,7 @@ class DecisionResult(BaseModel):
 
     # Performance metrics
     max_favorable_excursion = Column(Float, nullable=True)  # Best unrealized profit
-    max_adverse_excursion = Column(Float, nullable=True)   # Worst unrealized loss
+    max_adverse_excursion = Column(Float, nullable=True)  # Worst unrealized loss
 
     # Execution details
     slippage = Column(Float, nullable=True)
@@ -230,16 +234,22 @@ class DecisionResult(BaseModel):
 
         # Update max favorable/adverse excursion
         if self.unrealized_pnl > 0:
-            if self.max_favorable_excursion is None or self.unrealized_pnl > self.max_favorable_excursion:
+            if (
+                self.max_favorable_excursion is None
+                or self.unrealized_pnl > self.max_favorable_excursion
+            ):
                 self.max_favorable_excursion = self.unrealized_pnl
         else:
-            if self.max_adverse_excursion is None or self.unrealized_pnl < self.max_adverse_excursion:
+            if (
+                self.max_adverse_excursion is None
+                or self.unrealized_pnl < self.max_adverse_excursion
+            ):
                 self.max_adverse_excursion = self.unrealized_pnl
 
     def close_position(self, exit_price: float, fees: float = 0.0, manual: bool = False):
         """Close the position and calculate final results."""
         self.exit_price = exit_price
-        self.closed_at = datetime.utcnow()
+        self.closed_at = datetime.now(timezone.utc)
         self.fees_paid = fees
         self.manual_close = manual
 
@@ -252,7 +262,9 @@ class DecisionResult(BaseModel):
                 gross_pnl = 0
 
             self.realized_pnl = gross_pnl - fees
-            self.percentage_return = (self.realized_pnl / (self.entry_price * self.position_size)) * 100
+            self.percentage_return = (
+                self.realized_pnl / (self.entry_price * self.position_size)
+            ) * 100
 
             # Determine outcome
             if self.realized_pnl > 0:

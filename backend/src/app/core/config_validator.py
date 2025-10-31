@@ -237,12 +237,12 @@ class ConfigValidator:
         """
         errors = []
         url_fields = {
-            "ASTERDEX_BASE_URL": config.ASTERDEX_BASE_URL
-            if hasattr(config, "ASTERDEX_BASE_URL")
-            else None,
-            "OPENROUTER_BASE_URL": config.OPENROUTER_BASE_URL
-            if hasattr(config, "OPENROUTER_BASE_URL")
-            else None,
+            "ASTERDEX_BASE_URL": (
+                config.ASTERDEX_BASE_URL if hasattr(config, "ASTERDEX_BASE_URL") else None
+            ),
+            "OPENROUTER_BASE_URL": (
+                config.OPENROUTER_BASE_URL if hasattr(config, "OPENROUTER_BASE_URL") else None
+            ),
             "DATABASE_URL": config.DATABASE_URL if hasattr(config, "DATABASE_URL") else None,
         }
 

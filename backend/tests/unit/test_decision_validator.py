@@ -5,29 +5,29 @@ Tests comprehensive validation including schema validation, business rules,
 risk management checks, and fallback mechanisms.
 """
 
+from datetime import datetime, timezone
+
 import pytest
-from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, patch
 from pydantic import ValidationError
 
-from app.services.llm.decision_validator import DecisionValidator, get_decision_validator
 from app.schemas.trading_decision import (
-    TradingDecision,
-    TradingContext,
-    MarketContext,
     AccountContext,
-    TechnicalIndicators,
-    PerformanceMetrics,
-    TradingStrategy,
-    StrategyRiskParameters,
-    RiskMetrics,
-    PositionSummary,
-    PositionAdjustment,
+    MarketContext,
     OrderAdjustment,
+    PerformanceMetrics,
+    PositionAdjustment,
+    PositionSummary,
     PricePoint,
+    RiskMetrics,
+    RiskValidationResult,
+    StrategyRiskParameters,
+    TechnicalIndicators,
+    TradingContext,
+    TradingDecision,
+    TradingStrategy,
     ValidationResult,
-    RiskValidationResult
 )
+from app.services.llm.decision_validator import DecisionValidator, get_decision_validator
 
 
 class TestDecisionValidator:
@@ -49,7 +49,7 @@ class TestDecisionValidator:
             bb_upper=49000.0,
             bb_lower=46000.0,
             bb_middle=47500.0,
-            atr=500.0
+            atr=500.0,
         )
 
         market_context = MarketContext(
@@ -61,10 +61,10 @@ class TestDecisionValidator:
             volatility=0.02,
             technical_indicators=indicators,
             price_history=[
-                PricePoint(timestamp=datetime.utcnow(), price=47000.0),
-                PricePoint(timestamp=datetime.utcnow(), price=47500.0),
-                PricePoint(timestamp=datetime.utcnow(), price=48000.0)
-            ]
+                PricePoint(timestamp=datetime.now(timezone.utc), price=47000.0),
+                PricePoint(timestamp=datetime.now(timezone.utc), price=47500.0),
+                PricePoint(timestamp=datetime.now(timezone.utc), price=48000.0),
+            ],
         )
 
         risk_params = StrategyRiskParameters(
@@ -73,7 +73,7 @@ class TestDecisionValidator:
             stop_loss_percentage=1.5,
             take_profit_ratio=2.0,
             max_leverage=3.0,
-            cooldown_period=300
+            cooldown_period=300,
         )
 
         strategy = TradingStrategy(
@@ -84,7 +84,7 @@ class TestDecisionValidator:
             risk_parameters=risk_params,
             timeframe_preference=["4h", "1d"],
             max_positions=3,
-            is_active=True
+            is_active=True,
         )
 
         performance = PerformanceMetrics(
@@ -93,7 +93,7 @@ class TestDecisionValidator:
             avg_win=150.0,
             avg_loss=-75.0,
             max_drawdown=-200.0,
-            sharpe_ratio=1.5
+            sharpe_ratio=1.5,
         )
 
         account_context = AccountContext(
@@ -105,14 +105,11 @@ class TestDecisionValidator:
             risk_exposure=20.0,
             max_position_size=2000.0,
             active_strategy=strategy,
-            open_positions=[]
+            open_positions=[],
         )
 
         risk_metrics = RiskMetrics(
-            var_95=500.0,
-            max_drawdown=1000.0,
-            correlation_risk=15.0,
-            concentration_risk=25.0
+            var_95=500.0, max_drawdown=1000.0, correlation_risk=15.0, concentration_risk=25.0
         )
 
         return TradingContext(
@@ -120,7 +117,7 @@ class TestDecisionValidator:
             account_id=1,
             market_data=market_context,
             account_state=account_context,
-            risk_metrics=risk_metrics
+            risk_metrics=risk_metrics,
         )
 
     @pytest.fixture
@@ -135,11 +132,13 @@ class TestDecisionValidator:
             exit_plan="Take profit at resistance, stop loss at support",
             rationale="Strong bullish momentum with RSI oversold",
             confidence=85.0,
-            risk_level="medium"
+            risk_level="medium",
         )
 
     @pytest.mark.asyncio
-    async def test_valid_decision_passes_validation(self, validator, valid_buy_decision, sample_trading_context):
+    async def test_valid_decision_passes_validation(
+        self, validator, valid_buy_decision, sample_trading_context
+    ):
         """Test that a valid decision passes all validation checks."""
         result = await validator.validate_decision(valid_buy_decision, sample_trading_context)
 
@@ -149,7 +148,9 @@ class TestDecisionValidator:
         assert "schema_validation" in result.rules_checked
 
     @pytest.mark.asyncio
-    async def test_schema_validation_catches_invalid_confidence(self, validator, sample_trading_context):
+    async def test_schema_validation_catches_invalid_confidence(
+        self, validator, sample_trading_context
+    ):
         """Test schema validation catches invalid confidence values."""
         # Test with Pydantic validation error handling
         try:
@@ -160,7 +161,7 @@ class TestDecisionValidator:
                 exit_plan="Test",
                 rationale="Test",
                 confidence=150.0,  # Invalid: > 100
-                risk_level="medium"
+                risk_level="medium",
             )
             # If we get here, Pydantic didn't catch it, so test our validation
             result = await validator.validate_decision(invalid_decision, sample_trading_context)
@@ -170,7 +171,9 @@ class TestDecisionValidator:
             assert True
 
     @pytest.mark.asyncio
-    async def test_schema_validation_requires_position_adjustment(self, validator, sample_trading_context):
+    async def test_schema_validation_requires_position_adjustment(
+        self, validator, sample_trading_context
+    ):
         """Test schema validation requires position_adjustment for adjust_position action."""
         invalid_decision = TradingDecision(
             asset="BTCUSDT",
@@ -179,7 +182,7 @@ class TestDecisionValidator:
             exit_plan="Adjust position",
             rationale="Market changed",
             confidence=70.0,
-            risk_level="low"
+            risk_level="low",
         )
 
         result = await validator.validate_decision(invalid_decision, sample_trading_context)
@@ -188,7 +191,9 @@ class TestDecisionValidator:
         assert any("position_adjustment is required" in error for error in result.errors)
 
     @pytest.mark.asyncio
-    async def test_allocation_validation_against_available_balance(self, validator, sample_trading_context):
+    async def test_allocation_validation_against_available_balance(
+        self, validator, sample_trading_context
+    ):
         """Test allocation validation against available balance."""
         excessive_decision = TradingDecision(
             asset="BTCUSDT",
@@ -197,7 +202,7 @@ class TestDecisionValidator:
             exit_plan="Test",
             rationale="Test",
             confidence=70.0,
-            risk_level="medium"
+            risk_level="medium",
         )
 
         result = await validator.validate_decision(excessive_decision, sample_trading_context)
@@ -217,7 +222,7 @@ class TestDecisionValidator:
             exit_plan="Test",
             rationale="Test",
             confidence=70.0,
-            risk_level="medium"
+            risk_level="medium",
         )
 
         result = await validator.validate_decision(invalid_price_decision, sample_trading_context)
@@ -236,7 +241,7 @@ class TestDecisionValidator:
             exit_plan="Test",
             rationale="Test",
             confidence=70.0,
-            risk_level="medium"
+            risk_level="medium",
         )
 
         result = await validator.validate_decision(oversized_decision, sample_trading_context)
@@ -256,7 +261,7 @@ class TestDecisionValidator:
                 entry_price=3000.0,
                 current_price=3100.0,
                 unrealized_pnl=100.0,
-                percentage_pnl=3.33
+                percentage_pnl=3.33,
             ),
             PositionSummary(
                 symbol="SOLUSDT",
@@ -265,7 +270,7 @@ class TestDecisionValidator:
                 entry_price=100.0,
                 current_price=105.0,
                 unrealized_pnl=25.0,
-                percentage_pnl=5.0
+                percentage_pnl=5.0,
             ),
             PositionSummary(
                 symbol="ADAUSDT",
@@ -274,8 +279,8 @@ class TestDecisionValidator:
                 entry_price=0.5,
                 current_price=0.48,
                 unrealized_pnl=40.0,
-                percentage_pnl=4.0
-            )
+                percentage_pnl=4.0,
+            ),
         ]
 
         new_position_decision = TradingDecision(
@@ -285,7 +290,7 @@ class TestDecisionValidator:
             exit_plan="Test",
             rationale="Test",
             confidence=70.0,
-            risk_level="medium"
+            risk_level="medium",
         )
 
         result = await validator.validate_decision(new_position_decision, sample_trading_context)
@@ -294,20 +299,21 @@ class TestDecisionValidator:
         assert any("maximum positions" in error for error in result.errors)
 
     @pytest.mark.asyncio
-    async def test_adjust_position_without_existing_position(self, validator, sample_trading_context):
+    async def test_adjust_position_without_existing_position(
+        self, validator, sample_trading_context
+    ):
         """Test that adjust_position fails when no existing position exists."""
         adjust_decision = TradingDecision(
             asset="BTCUSDT",
             action="adjust_position",
             allocation_usd=0.0,
             position_adjustment=PositionAdjustment(
-                adjustment_type="increase",
-                adjustment_amount_usd=500.0
+                adjustment_type="increase", adjustment_amount_usd=500.0
             ),
             exit_plan="Increase position",
             rationale="Market favorable",
             confidence=70.0,
-            risk_level="low"
+            risk_level="low",
         )
 
         result = await validator.validate_decision(adjust_decision, sample_trading_context)
@@ -328,13 +334,15 @@ class TestDecisionValidator:
             exit_plan="Test",
             rationale="Test",
             confidence=70.0,
-            risk_level="high"
+            risk_level="high",
         )
 
         result = await validator.validate_decision(high_risk_decision, sample_trading_context)
 
         # Should have warnings or errors about high risk
-        has_risk_issue = len(result.warnings) > 0 or any("risk" in error.lower() for error in result.errors)
+        has_risk_issue = len(result.warnings) > 0 or any(
+            "risk" in error.lower() for error in result.errors
+        )
         assert has_risk_issue
 
     @pytest.mark.asyncio
@@ -349,7 +357,7 @@ class TestDecisionValidator:
                 entry_price=40000.0,
                 current_price=41000.0,
                 unrealized_pnl=100.0,
-                percentage_pnl=2.5
+                percentage_pnl=2.5,
             ),
             PositionSummary(
                 symbol="BTCGBP",
@@ -358,8 +366,8 @@ class TestDecisionValidator:
                 entry_price=35000.0,
                 current_price=36000.0,
                 unrealized_pnl=50.0,
-                percentage_pnl=2.86
-            )
+                percentage_pnl=2.86,
+            ),
         ]
 
         btc_decision = TradingDecision(
@@ -369,7 +377,7 @@ class TestDecisionValidator:
             exit_plan="Test",
             rationale="Test",
             confidence=70.0,
-            risk_level="medium"
+            risk_level="medium",
         )
 
         result = await validator.validate_decision(btc_decision, sample_trading_context)
@@ -388,10 +396,12 @@ class TestDecisionValidator:
             exit_plan="Test",
             rationale="Test",
             confidence=70.0,
-            risk_level="medium"
+            risk_level="medium",
         )
 
-        result = await validator.validate_decision(high_concentration_decision, sample_trading_context)
+        result = await validator.validate_decision(
+            high_concentration_decision, sample_trading_context
+        )
 
         # Should have concentration risk warning or error
         has_concentration_issue = any(
@@ -410,10 +420,12 @@ class TestDecisionValidator:
             exit_plan="Test",
             rationale="Test",
             confidence=30.0,  # Low confidence
-            risk_level="high"  # High risk
+            risk_level="high",  # High risk
         )
 
-        risk_result = await validator.apply_risk_checks(decision, sample_trading_context.account_state)
+        risk_result = await validator.apply_risk_checks(
+            decision, sample_trading_context.account_state
+        )
 
         assert isinstance(risk_result, RiskValidationResult)
         assert risk_result.risk_score > 0
@@ -431,15 +443,13 @@ class TestDecisionValidator:
             exit_plan="Test",
             rationale="Test",
             confidence=70.0,
-            risk_level="medium"
+            risk_level="medium",
         )
 
         validation_errors = ["Allocation exceeds available balance"]
 
         fallback = await validator.create_fallback_decision(
-            original_decision,
-            sample_trading_context,
-            validation_errors
+            original_decision, sample_trading_context, validation_errors
         )
 
         assert fallback.action == "hold"
@@ -449,7 +459,9 @@ class TestDecisionValidator:
         assert "Fallback decision" in fallback.rationale
 
     @pytest.mark.asyncio
-    async def test_validation_metrics_tracking(self, validator, valid_buy_decision, sample_trading_context):
+    async def test_validation_metrics_tracking(
+        self, validator, valid_buy_decision, sample_trading_context
+    ):
         """Test validation metrics tracking."""
         # Perform several validations
         await validator.validate_decision(valid_buy_decision, sample_trading_context)
@@ -462,7 +474,7 @@ class TestDecisionValidator:
             exit_plan="Test",
             rationale="Test",
             confidence=70.0,
-            risk_level="medium"
+            risk_level="medium",
         )
 
         await validator.validate_decision(invalid_decision, sample_trading_context)
@@ -505,7 +517,7 @@ class TestDecisionValidator:
                 entry_price=47000.0,
                 current_price=48000.0,
                 unrealized_pnl=100.0,
-                percentage_pnl=2.13
+                percentage_pnl=2.13,
             )
         ]
 
@@ -513,14 +525,11 @@ class TestDecisionValidator:
             asset="BTCUSDT",
             action="adjust_orders",
             allocation_usd=0.0,
-            order_adjustment=OrderAdjustment(
-                adjust_tp=True,
-                new_tp_price=50000.0
-            ),
+            order_adjustment=OrderAdjustment(adjust_tp=True, new_tp_price=50000.0),
             exit_plan="Adjust take profit",
             rationale="Price moved favorably",
             confidence=80.0,
-            risk_level="low"
+            risk_level="low",
         )
 
         result = await validator.validate_decision(valid_order_adjustment, sample_trading_context)
@@ -538,7 +547,7 @@ class TestDecisionValidator:
             exit_plan="Test",
             rationale="Test",
             confidence=70.0,
-            risk_level="medium"
+            risk_level="medium",
         )
 
         result = await validator.validate_decision(excessive_risk_decision, sample_trading_context)
@@ -556,7 +565,7 @@ class TestDecisionValidator:
             exit_plan="Wait for better entry",
             rationale="Market conditions unclear",
             confidence=60.0,
-            risk_level="low"
+            risk_level="low",
         )
 
         result = await validator.validate_decision(hold_decision, sample_trading_context)
@@ -571,7 +580,7 @@ class TestDecisionValidator:
             exit_plan="Wait",
             rationale="Test",
             confidence=60.0,
-            risk_level="low"
+            risk_level="low",
         )
 
         result = await validator.validate_decision(invalid_hold, sample_trading_context)
@@ -598,7 +607,7 @@ class TestDecisionValidator:
             exit_plan="Test",
             rationale="Test",
             confidence=70.0,
-            risk_level="medium"
+            risk_level="medium",
         )
 
         result = await validator.validate_decision(problematic_decision, sample_trading_context)
@@ -621,7 +630,7 @@ class TestDecisionValidator:
             exit_plan="Test",
             rationale="Test",
             confidence=70.0,
-            risk_level="medium"
+            risk_level="medium",
         )
 
         result = await validator.validate_decision(poor_ratio_decision, sample_trading_context)
@@ -639,10 +648,12 @@ class TestDecisionValidator:
             exit_plan="Test",
             rationale="Test",
             confidence=70.0,
-            risk_level="medium"
+            risk_level="medium",
         )
 
-        result = await validator.validate_decision(large_allocation_decision, sample_trading_context)
+        result = await validator.validate_decision(
+            large_allocation_decision, sample_trading_context
+        )
 
         # Should have warning about large allocation
         assert any("large allocation" in warning.lower() for warning in result.warnings)

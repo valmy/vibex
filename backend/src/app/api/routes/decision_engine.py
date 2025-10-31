@@ -6,19 +6,18 @@ decision generation, batch processing, history, and management.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from ...schemas.trading_decision import (
-    DecisionResult,
-    TradingDecision,
-    UsageMetrics,
-    HealthStatus,
+from ...schemas.trading_decision import DecisionResult, HealthStatus, TradingDecision, UsageMetrics
+from ...services.llm.decision_engine import (
+    DecisionEngineError,
+    RateLimitExceededError,
+    get_decision_engine,
 )
-from ...services.llm.decision_engine import get_decision_engine, RateLimitExceededError, DecisionEngineError
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +98,7 @@ async def generate_decision(request: DecisionRequest):
             account_id=request.account_id,
             strategy_override=request.strategy_override,
             force_refresh=request.force_refresh,
-            ab_test_name=request.ab_test_name
+            ab_test_name=request.ab_test_name,
         )
 
         return result
@@ -128,8 +127,7 @@ async def generate_batch_decisions(request: BatchDecisionRequest):
     try:
         if len(request.symbols) > 20:
             raise HTTPException(
-                status_code=400,
-                detail="Maximum 20 symbols allowed per batch request"
+                status_code=400, detail="Maximum 20 symbols allowed per batch request"
             )
 
         decision_engine = get_decision_engine()
@@ -138,7 +136,7 @@ async def generate_batch_decisions(request: BatchDecisionRequest):
             symbols=request.symbols,
             account_id=request.account_id,
             strategy_override=request.strategy_override,
-            force_refresh=request.force_refresh
+            force_refresh=request.force_refresh,
         )
 
         return results
@@ -159,7 +157,7 @@ async def get_decision_history(
     limit: int = Query(100, ge=1, le=1000, description="Number of decisions to return"),
     page: int = Query(1, ge=1, description="Page number"),
     start_date: Optional[datetime] = Query(None, description="Start date filter"),
-    end_date: Optional[datetime] = Query(None, description="End date filter")
+    end_date: Optional[datetime] = Query(None, description="End date filter"),
 ):
     """
     Get decision history for an account with optional filtering.
@@ -178,17 +176,14 @@ async def get_decision_history(
             symbol=symbol,
             limit=limit,
             start_date=start_date,
-            end_date=end_date
+            end_date=end_date,
         )
 
         # Apply pagination (simplified - in real implementation, this would be done in the database)
-        paginated_decisions = decisions[offset:offset + limit]
+        paginated_decisions = decisions[offset : offset + limit]
 
         return DecisionHistoryResponse(
-            decisions=paginated_decisions,
-            total_count=len(decisions),
-            page=page,
-            page_size=limit
+            decisions=paginated_decisions, total_count=len(decisions), page=page, page_size=limit
         )
 
     except Exception as e:
@@ -205,9 +200,9 @@ async def validate_decision(decision: TradingDecision):
     without generating a full decision through the LLM.
     """
     try:
+        from ...schemas.context import AccountContext, MarketContext, TradingContext
+        from ...schemas.trading_decision import PerformanceMetrics, RiskMetrics, TechnicalIndicators
         from ...services.llm.decision_validator import get_decision_validator
-        from ...schemas.context import TradingContext, MarketContext, AccountContext
-        from ...schemas.trading_decision import TechnicalIndicators, PerformanceMetrics, RiskMetrics
 
         # Create minimal context for validation
         # In a real implementation, this would use actual account/market data
@@ -220,7 +215,7 @@ async def validate_decision(decision: TradingDecision):
                 price_change_24h=0.0,
                 volume_24h=1000000.0,
                 volatility=2.5,
-                technical_indicators=TechnicalIndicators()
+                technical_indicators=TechnicalIndicators(),
             ),
             account_state=AccountContext(
                 account_id=1,
@@ -228,18 +223,27 @@ async def validate_decision(decision: TradingDecision):
                 available_balance=8000.0,
                 total_pnl=0.0,
                 recent_performance=PerformanceMetrics(
-                    total_pnl=0.0, total_pnl_percent=0.0, win_rate=50.0,
-                    avg_win=100.0, avg_loss=-80.0, profit_factor=1.25,
-                    max_drawdown=500.0, trades_count=10, winning_trades=5, losing_trades=5
+                    total_pnl=0.0,
+                    total_pnl_percent=0.0,
+                    win_rate=50.0,
+                    avg_win=100.0,
+                    avg_loss=-80.0,
+                    profit_factor=1.25,
+                    max_drawdown=500.0,
+                    trades_count=10,
+                    winning_trades=5,
+                    losing_trades=5,
                 ),
                 risk_exposure=20.0,
                 max_position_size=2000.0,
                 risk_metrics=RiskMetrics(
-                    current_exposure=20.0, available_capital=8000.0,
-                    max_position_size=2000.0, daily_pnl=0.0,
-                    daily_loss_limit=500.0
-                )
-            )
+                    current_exposure=20.0,
+                    available_capital=8000.0,
+                    max_position_size=2000.0,
+                    daily_pnl=0.0,
+                    daily_loss_limit=500.0,
+                ),
+            ),
         )
 
         validator = get_decision_validator()
@@ -250,7 +254,7 @@ async def validate_decision(decision: TradingDecision):
             "errors": result.errors,
             "warnings": result.warnings,
             "validation_time_ms": result.validation_time_ms,
-            "rules_checked": result.rules_checked
+            "rules_checked": result.rules_checked,
         }
 
     except Exception as e:
@@ -273,7 +277,7 @@ async def switch_strategy(account_id: int, request: StrategySwitch):
             account_id=account_id,
             strategy_id=request.strategy_id,
             switch_reason=request.switch_reason,
-            switched_by=request.switched_by
+            switched_by=request.switched_by,
         )
 
         return {
@@ -281,7 +285,7 @@ async def switch_strategy(account_id: int, request: StrategySwitch):
             "message": f"Strategy switched to {request.strategy_id}",
             "account_id": account_id,
             "new_strategy": request.strategy_id,
-            "switch_reason": request.switch_reason
+            "switch_reason": request.switch_reason,
         }
 
     except DecisionEngineError as e:
@@ -313,13 +317,13 @@ async def get_engine_health():
             is_healthy=False,
             consecutive_failures=999,
             circuit_breaker_open=True,
-            error_message=f"Health check failed: {str(e)}"
+            error_message=f"Health check failed: {str(e)}",
         )
 
 
 @router.get("/metrics", response_model=UsageMetrics)
 async def get_usage_metrics(
-    timeframe_hours: int = Query(24, ge=1, le=168, description="Hours to look back for metrics")
+    timeframe_hours: int = Query(24, ge=1, le=168, description="Hours to look back for metrics"),
 ):
     """
     Get usage metrics for the decision engine.
@@ -363,7 +367,7 @@ async def get_cache_stats():
 async def clear_cache(
     background_tasks: BackgroundTasks,
     account_id: Optional[int] = Query(None, description="Clear cache for specific account"),
-    symbol: Optional[str] = Query(None, description="Clear cache for specific symbol")
+    symbol: Optional[str] = Query(None, description="Clear cache for specific symbol"),
 ):
     """
     Clear decision engine caches.
@@ -391,7 +395,7 @@ async def clear_cache(
             "message": "Cache clearing initiated",
             "account_id": account_id,
             "symbol": symbol,
-            "scope": "account" if account_id else "symbol" if symbol else "all"
+            "scope": "account" if account_id else "symbol" if symbol else "all",
         }
 
     except Exception as e:
@@ -413,7 +417,7 @@ async def reset_metrics():
 
         return {
             "message": "Metrics reset successfully",
-            "reset_time": datetime.utcnow().isoformat()
+            "reset_time": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -437,12 +441,14 @@ async def decision_stream(websocket, account_id: int):
 
     try:
         # Send initial connection confirmation
-        await websocket.send_json({
-            "type": "connection",
-            "message": f"Connected to decision stream for account {account_id}",
-            "account_id": account_id,
-            "timestamp": datetime.utcnow().isoformat()
-        })
+        await websocket.send_json(
+            {
+                "type": "connection",
+                "message": f"Connected to decision stream for account {account_id}",
+                "account_id": account_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
 
         # Keep connection alive and handle incoming messages
         while True:
@@ -453,18 +459,19 @@ async def decision_stream(websocket, account_id: int):
                 # Handle different message types
                 if data.get("type") == "subscribe":
                     symbols = data.get("symbols", [])
-                    await websocket.send_json({
-                        "type": "subscription",
-                        "message": f"Subscribed to {len(symbols)} symbols",
-                        "symbols": symbols,
-                        "timestamp": datetime.utcnow().isoformat()
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "subscription",
+                            "message": f"Subscribed to {len(symbols)} symbols",
+                            "symbols": symbols,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                    )
 
                 elif data.get("type") == "ping":
-                    await websocket.send_json({
-                        "type": "pong",
-                        "timestamp": datetime.utcnow().isoformat()
-                    })
+                    await websocket.send_json(
+                        {"type": "pong", "timestamp": datetime.now(timezone.utc).isoformat()}
+                    )
 
                 # TODO: Implement actual decision streaming logic
                 # This would involve:
@@ -475,11 +482,13 @@ async def decision_stream(websocket, account_id: int):
 
             except Exception as e:
                 logger.error(f"WebSocket error for account {account_id}: {e}")
-                await websocket.send_json({
-                    "type": "error",
-                    "message": str(e),
-                    "timestamp": datetime.utcnow().isoformat()
-                })
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": str(e),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
                 break
 
     except Exception as e:

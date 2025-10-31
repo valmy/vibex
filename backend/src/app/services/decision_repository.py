@@ -4,17 +4,16 @@ Decision repository for database operations.
 Handles persistence and retrieval of trading decisions and results.
 """
 
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime, timedelta, timezone
+from typing import Dict, List, Optional
 
-from sqlalchemy import and_, desc, func, or_
+from sqlalchemy import and_, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 
 from ..models.decision import Decision, DecisionResult
-from ..models.strategy import Strategy, StrategyPerformance
-from ..schemas.trading_decision import TradingDecision, DecisionResult as DecisionResultSchema
+from ..schemas.trading_decision import TradingDecision
 
 
 class DecisionRepository:
@@ -125,22 +124,14 @@ class DecisionRepository:
         return result.scalars().all()
 
     async def get_recent_decisions(
-        self,
-        account_id: int,
-        hours: int = 24,
-        limit: int = 50
+        self, account_id: int, hours: int = 24, limit: int = 50
     ) -> List[Decision]:
         """Get recent decisions for an account."""
-        cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
 
         result = await self.db.execute(
             select(Decision)
-            .where(
-                and_(
-                    Decision.account_id == account_id,
-                    Decision.timestamp >= cutoff_time
-                )
-            )
+            .where(and_(Decision.account_id == account_id, Decision.timestamp >= cutoff_time))
             .order_by(desc(Decision.timestamp))
             .limit(limit)
         )
@@ -152,7 +143,9 @@ class DecisionRepository:
             and_(
                 Decision.validation_passed == True,
                 Decision.executed == False,
-                Decision.action.in_(["buy", "sell", "adjust_position", "close_position", "adjust_orders"])
+                Decision.action.in_(
+                    ["buy", "sell", "adjust_position", "close_position", "adjust_orders"]
+                ),
             )
         )
 
@@ -163,15 +156,10 @@ class DecisionRepository:
         return result.scalars().all()
 
     async def mark_decision_executed(
-        self,
-        decision_id: int,
-        execution_price: float,
-        execution_errors: Optional[List[str]] = None
+        self, decision_id: int, execution_price: float, execution_errors: Optional[List[str]] = None
     ) -> bool:
         """Mark a decision as executed."""
-        result = await self.db.execute(
-            select(Decision).where(Decision.id == decision_id)
-        )
+        result = await self.db.execute(select(Decision).where(Decision.id == decision_id))
         decision = result.scalar_one_or_none()
 
         if not decision:
@@ -194,8 +182,8 @@ class DecisionRepository:
             decision_id=decision_id,
             entry_price=entry_price,
             position_size=position_size,
-            opened_at=opened_at or datetime.utcnow(),
-            outcome="pending"
+            opened_at=opened_at or datetime.now(timezone.utc),
+            outcome="pending",
         )
 
         self.db.add(decision_result)
@@ -218,9 +206,7 @@ class DecisionRepository:
     ) -> Optional[DecisionResult]:
         """Update a decision result with new information."""
 
-        result = await self.db.execute(
-            select(DecisionResult).where(DecisionResult.id == result_id)
-        )
+        result = await self.db.execute(select(DecisionResult).where(DecisionResult.id == result_id))
         decision_result = result.scalar_one_or_none()
 
         if not decision_result:
@@ -300,7 +286,9 @@ class DecisionRepository:
         return {
             "total_decisions": total_decisions,
             "validation_rate": (validated_decisions / total_decisions) * 100,
-            "execution_rate": (executed_decisions / total_decisions) * 100 if total_decisions > 0 else 0,
+            "execution_rate": (
+                (executed_decisions / total_decisions) * 100 if total_decisions > 0 else 0
+            ),
             "action_breakdown": action_counts,
             "avg_confidence": avg_confidence,
             "avg_processing_time": avg_processing_time,
@@ -371,19 +359,19 @@ class DecisionRepository:
             del perf["confidences"]  # Remove raw data
 
             total_trades = perf["winning_trades"] + perf["losing_trades"]
-            perf["win_rate"] = (perf["winning_trades"] / total_trades * 100) if total_trades > 0 else 0
+            perf["win_rate"] = (
+                (perf["winning_trades"] / total_trades * 100) if total_trades > 0 else 0
+            )
 
         return strategy_performance
 
     async def cleanup_old_decisions(self, days_to_keep: int = 90) -> int:
         """Clean up old decisions beyond retention period."""
-        cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
 
         # First, delete associated decision results
         result = await self.db.execute(
-            select(DecisionResult)
-            .join(Decision)
-            .where(Decision.timestamp < cutoff_date)
+            select(DecisionResult).join(Decision).where(Decision.timestamp < cutoff_date)
         )
         old_results = result.scalars().all()
 
@@ -391,9 +379,7 @@ class DecisionRepository:
             await self.db.delete(result)
 
         # Then delete old decisions
-        result = await self.db.execute(
-            select(Decision).where(Decision.timestamp < cutoff_date)
-        )
+        result = await self.db.execute(select(Decision).where(Decision.timestamp < cutoff_date))
         old_decisions = result.scalars().all()
 
         deleted_count = len(old_decisions)
@@ -404,21 +390,13 @@ class DecisionRepository:
         await self.db.commit()
         return deleted_count
 
-    async def get_decision_count_by_period(
-        self,
-        account_id: int,
-        period_hours: int = 24
-    ) -> int:
+    async def get_decision_count_by_period(self, account_id: int, period_hours: int = 24) -> int:
         """Get count of decisions in the last N hours."""
-        cutoff_time = datetime.utcnow() - timedelta(hours=period_hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=period_hours)
 
         result = await self.db.execute(
-            select(func.count(Decision.id))
-            .where(
-                and_(
-                    Decision.account_id == account_id,
-                    Decision.timestamp >= cutoff_time
-                )
+            select(func.count(Decision.id)).where(
+                and_(Decision.account_id == account_id, Decision.timestamp >= cutoff_time)
             )
         )
         return result.scalar() or 0
@@ -435,7 +413,7 @@ class DecisionRepository:
             and_(
                 Decision.account_id == account_id,
                 Decision.validation_passed == False,
-                Decision.validation_errors.isnot(None)
+                Decision.validation_errors.isnot(None),
             )
         )
 

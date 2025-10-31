@@ -4,11 +4,10 @@ Usage metrics tracking for LLM service.
 Tracks API usage, costs, performance, and decision accuracy.
 """
 
-import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Dict, Optional
 
 from ...core.logging import get_logger
 
@@ -18,6 +17,7 @@ logger = get_logger(__name__)
 @dataclass
 class APICall:
     """Individual API call record."""
+
     timestamp: datetime
     model: str
     prompt_tokens: int
@@ -32,6 +32,7 @@ class APICall:
 @dataclass
 class UsageMetrics:
     """Usage metrics summary."""
+
     total_calls: int = 0
     successful_calls: int = 0
     failed_calls: int = 0
@@ -45,6 +46,7 @@ class UsageMetrics:
 @dataclass
 class HealthStatus:
     """Health status of LLM service."""
+
     is_healthy: bool
     last_successful_call: Optional[datetime] = None
     consecutive_failures: int = 0
@@ -100,7 +102,7 @@ class LLMMetricsTracker:
         cost = self._calculate_cost(model, prompt_tokens, completion_tokens)
 
         call = APICall(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             model=model,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
@@ -114,7 +116,9 @@ class LLMMetricsTracker:
         self.api_calls.append(call)
 
         if success:
-            logger.debug(f"API call recorded: {model}, {total_tokens} tokens, {response_time_ms:.2f}ms")
+            logger.debug(
+                f"API call recorded: {model}, {total_tokens} tokens, {response_time_ms:.2f}ms"
+            )
         else:
             logger.warning(f"Failed API call recorded: {model}, error: {error}")
 
@@ -130,7 +134,7 @@ class LLMMetricsTracker:
         Returns:
             UsageMetrics summary
         """
-        cutoff_time = datetime.utcnow() - timedelta(hours=timeframe_hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=timeframe_hours)
         recent_calls = [call for call in self.api_calls if call.timestamp >= cutoff_time]
 
         if not recent_calls:
@@ -185,7 +189,7 @@ class LLMMetricsTracker:
             consecutive_failures += 1
 
         # Calculate error rate for last hour
-        one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+        one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
         recent_hour_calls = [call for call in recent_calls if call.timestamp >= one_hour_ago]
         error_rate_1h = 0.0
         if recent_hour_calls:
@@ -194,12 +198,14 @@ class LLMMetricsTracker:
 
         avg_response_time = 0.0
         if recent_calls:
-            avg_response_time = sum(call.response_time_ms for call in recent_calls) / len(recent_calls)
+            avg_response_time = sum(call.response_time_ms for call in recent_calls) / len(
+                recent_calls
+            )
 
         is_healthy = (
-            consecutive_failures < 5 and
-            error_rate_1h < 50 and
-            avg_response_time < 30000  # 30 seconds
+            consecutive_failures < 5
+            and error_rate_1h < 50
+            and avg_response_time < 30000  # 30 seconds
         )
 
         return HealthStatus(
@@ -211,7 +217,9 @@ class LLMMetricsTracker:
             error_rate_1h=error_rate_1h,
         )
 
-    def _calculate_cost(self, model: str, prompt_tokens: int, completion_tokens: int) -> Optional[float]:
+    def _calculate_cost(
+        self, model: str, prompt_tokens: int, completion_tokens: int
+    ) -> Optional[float]:
         """
         Calculate cost for API call.
 
@@ -243,10 +251,9 @@ class LLMMetricsTracker:
         Returns:
             Performance metrics dictionary
         """
-        cutoff_time = datetime.utcnow() - timedelta(hours=timeframe_hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=timeframe_hours)
         model_calls = [
-            call for call in self.api_calls
-            if call.model == model and call.timestamp >= cutoff_time
+            call for call in self.api_calls if call.model == model and call.timestamp >= cutoff_time
         ]
 
         if not model_calls:
@@ -258,7 +265,8 @@ class LLMMetricsTracker:
             "total_calls": len(model_calls),
             "successful_calls": len(successful_calls),
             "success_rate": (len(successful_calls) / len(model_calls)) * 100,
-            "avg_response_time_ms": sum(call.response_time_ms for call in model_calls) / len(model_calls),
+            "avg_response_time_ms": sum(call.response_time_ms for call in model_calls)
+            / len(model_calls),
             "total_tokens": sum(call.total_tokens for call in model_calls),
             "total_cost": sum(call.cost or 0 for call in model_calls),
         }
@@ -270,7 +278,7 @@ class LLMMetricsTracker:
         Args:
             days: Number of days to keep
         """
-        cutoff_time = datetime.utcnow() - timedelta(days=days)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
         original_count = len(self.api_calls)
 
         # Convert to list, filter, and convert back to deque

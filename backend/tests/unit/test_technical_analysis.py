@@ -9,14 +9,8 @@ from datetime import datetime, timezone
 import pytest
 
 from app.models.market_data import MarketData
-from app.services.technical_analysis import (
-    TechnicalAnalysisService,
-    get_technical_analysis_service,
-)
-from app.services.technical_analysis.exceptions import (
-    InsufficientDataError,
-    InvalidCandleDataError,
-)
+from app.services.technical_analysis import TechnicalAnalysisService, get_technical_analysis_service
+from app.services.technical_analysis.exceptions import InsufficientDataError, InvalidCandleDataError
 
 
 @pytest.fixture

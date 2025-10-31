@@ -85,9 +85,7 @@ async def get_market_data_by_symbol(
 
 @router.post("/sync/{symbol}")
 async def sync_market_data(
-    symbol: str,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    symbol: str, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
 ):
     """Sync market data from Aster DEX for a specific symbol."""
     try:
@@ -106,8 +104,7 @@ async def sync_market_data(
 
 @router.post("/sync-all")
 async def sync_all_market_data(
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
 ):
     """Sync market data from Aster DEX for all configured assets."""
     try:

@@ -5,10 +5,9 @@ Provides comprehensive validation including schema validation, business rules,
 risk management checks, and fallback mechanisms.
 """
 
-import json
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 from pydantic import ValidationError
@@ -16,7 +15,6 @@ from pydantic import ValidationError
 from ...core.exceptions import ValidationError as CustomValidationError
 from ...schemas.trading_decision import (
     AccountContext,
-    DecisionResult,
     RiskValidationResult,
     TradingContext,
     TradingDecision,
@@ -28,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 class DecisionValidationError(CustomValidationError):
     """Exception raised when decision validation fails."""
+
     pass
 
 
@@ -47,7 +46,7 @@ class DecisionValidator:
             "failed_validations": 0,
             "avg_validation_time_ms": 0.0,
             "validation_errors": {},
-            "last_reset": datetime.utcnow()
+            "last_reset": datetime.now(timezone.utc),
         }
 
         # Define validation rules
@@ -62,7 +61,7 @@ class DecisionValidator:
             "position_size_validation": self._validate_position_size,
             "leverage_validation": self._validate_leverage_constraints,
             "action_requirements_validation": self._validate_action_requirements,
-            "strategy_specific_validation": self._validate_strategy_specific_rules
+            "strategy_specific_validation": self._validate_strategy_specific_rules,
         }
 
     def _initialize_risk_rules(self) -> Dict[str, callable]:
@@ -72,7 +71,7 @@ class DecisionValidator:
             "position_limit_validation": self._validate_position_limits,
             "daily_loss_validation": self._validate_daily_loss_limits,
             "correlation_validation": self._validate_correlation_risk,
-            "concentration_validation": self._validate_concentration_risk
+            "concentration_validation": self._validate_concentration_risk,
         }
 
     def _extract_base_currency(self, symbol: str) -> str:
@@ -89,14 +88,14 @@ class DecisionValidator:
             Base currency (e.g., 'BTC', 'ETH')
         """
         # Common quote currencies to remove from the end
-        quote_currencies = ['USDT', 'USDC', 'USD', 'BTC', 'ETH', 'EUR', 'GBP']
+        quote_currencies = ["USDT", "USDC", "USD", "BTC", "ETH", "EUR", "GBP"]
 
         symbol_upper = symbol.upper()
 
         # Try to find a matching quote currency at the end
         for quote in quote_currencies:
             if symbol_upper.endswith(quote):
-                base = symbol_upper[:-len(quote)]
+                base = symbol_upper[: -len(quote)]
                 if base:  # Make sure we have something left
                     return base
 
@@ -108,9 +107,7 @@ class DecisionValidator:
             return symbol  # Return as-is if too short
 
     async def validate_decision(
-        self,
-        decision: TradingDecision,
-        context: TradingContext
+        self, decision: TradingDecision, context: TradingContext
     ) -> ValidationResult:
         """
         Validate a trading decision against all validation rules.
@@ -138,7 +135,9 @@ class DecisionValidator:
             rules_checked.append("schema_validation")
 
             # 2. Business rule validation
-            business_errors, business_warnings = await self._validate_business_rules(decision, context)
+            business_errors, business_warnings = await self._validate_business_rules(
+                decision, context
+            )
             errors.extend(business_errors)
             warnings.extend(business_warnings)
             rules_checked.extend(self.business_rules.keys())
@@ -167,27 +166,27 @@ class DecisionValidator:
             total_validations = self.validation_metrics["total_validations"]
             current_avg = self.validation_metrics["avg_validation_time_ms"]
             self.validation_metrics["avg_validation_time_ms"] = (
-                (current_avg * (total_validations - 1) + validation_time_ms) / total_validations
-            )
+                current_avg * (total_validations - 1) + validation_time_ms
+            ) / total_validations
 
             result = ValidationResult(
                 is_valid=len(errors) == 0,
                 errors=errors,
                 warnings=warnings,
                 validation_time_ms=validation_time_ms,
-                rules_checked=rules_checked
+                rules_checked=rules_checked,
             )
 
             logger.info(
-                f"Decision validation completed",
+                "Decision validation completed",
                 extra={
                     "symbol": decision.asset,
                     "action": decision.action,
                     "is_valid": result.is_valid,
                     "error_count": len(errors),
                     "warning_count": len(warnings),
-                    "validation_time_ms": validation_time_ms
-                }
+                    "validation_time_ms": validation_time_ms,
+                },
             )
 
             return result
@@ -201,7 +200,7 @@ class DecisionValidator:
                 errors=[f"validation_error: Unexpected validation error: {str(e)}"],
                 warnings=[],
                 validation_time_ms=(time.time() - start_time) * 1000,
-                rules_checked=rules_checked
+                rules_checked=rules_checked,
             )
 
     async def _validate_schema(self, decision: TradingDecision) -> List[str]:
@@ -245,8 +244,12 @@ class DecisionValidator:
 
             # Validate order adjustment details
             if decision.order_adjustment:
-                if not (decision.order_adjustment.adjust_tp or decision.order_adjustment.adjust_sl or
-                       decision.order_adjustment.cancel_tp or decision.order_adjustment.cancel_sl):
+                if not (
+                    decision.order_adjustment.adjust_tp
+                    or decision.order_adjustment.adjust_sl
+                    or decision.order_adjustment.cancel_tp
+                    or decision.order_adjustment.cancel_sl
+                ):
                     errors.append("schema_error: Order adjustment must specify at least one action")
 
         except ValidationError as e:
@@ -257,9 +260,7 @@ class DecisionValidator:
         return errors
 
     async def _validate_business_rules(
-        self,
-        decision: TradingDecision,
-        context: TradingContext
+        self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """
         Validate decision against business rules.
@@ -286,9 +287,7 @@ class DecisionValidator:
         return errors, warnings
 
     async def _validate_risk_rules(
-        self,
-        decision: TradingDecision,
-        context: TradingContext
+        self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """
         Validate decision against risk management rules.
@@ -316,9 +315,7 @@ class DecisionValidator:
 
     # Business Rule Validation Methods
     async def _validate_allocation_amount(
-        self,
-        decision: TradingDecision,
-        context: TradingContext
+        self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """Validate allocation amount against available capital."""
         errors = []
@@ -328,18 +325,20 @@ class DecisionValidator:
             available_balance = context.account_state.available_balance
 
             if decision.allocation_usd > available_balance:
-                errors.append(f"Allocation amount ${decision.allocation_usd:.2f} exceeds available balance ${available_balance:.2f}")
+                errors.append(
+                    f"Allocation amount ${decision.allocation_usd:.2f} exceeds available balance ${available_balance:.2f}"
+                )
 
             # Warning for large allocations
             if decision.allocation_usd > available_balance * 0.5:
-                warnings.append(f"Large allocation: ${decision.allocation_usd:.2f} is more than 50% of available balance")
+                warnings.append(
+                    f"Large allocation: ${decision.allocation_usd:.2f} is more than 50% of available balance"
+                )
 
         return errors, warnings
 
     async def _validate_price_logic(
-        self,
-        decision: TradingDecision,
-        context: TradingContext
+        self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """Validate take-profit and stop-loss price logic."""
         errors = []
@@ -352,9 +351,13 @@ class DecisionValidator:
         # Additional price logic checks
         if decision.tp_price and decision.sl_price:
             if decision.action == "buy":
-                risk_reward_ratio = (decision.tp_price - current_price) / (current_price - decision.sl_price)
+                risk_reward_ratio = (decision.tp_price - current_price) / (
+                    current_price - decision.sl_price
+                )
             elif decision.action == "sell":
-                risk_reward_ratio = (current_price - decision.tp_price) / (decision.sl_price - current_price)
+                risk_reward_ratio = (current_price - decision.tp_price) / (
+                    decision.sl_price - current_price
+                )
             else:
                 risk_reward_ratio = None
 
@@ -364,9 +367,7 @@ class DecisionValidator:
         return errors, warnings
 
     async def _validate_position_size(
-        self,
-        decision: TradingDecision,
-        context: TradingContext
+        self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """Validate position size constraints."""
         errors = []
@@ -375,14 +376,14 @@ class DecisionValidator:
         max_position_size = context.account_state.max_position_size
 
         if decision.action in ["buy", "sell"] and decision.allocation_usd > max_position_size:
-            errors.append(f"Position size ${decision.allocation_usd:.2f} exceeds maximum allowed ${max_position_size:.2f}")
+            errors.append(
+                f"Position size ${decision.allocation_usd:.2f} exceeds maximum allowed ${max_position_size:.2f}"
+            )
 
         return errors, warnings
 
     async def _validate_leverage_constraints(
-        self,
-        decision: TradingDecision,
-        context: TradingContext
+        self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """Validate leverage constraints."""
         errors = []
@@ -397,9 +398,7 @@ class DecisionValidator:
         return errors, warnings
 
     async def _validate_action_requirements(
-        self,
-        decision: TradingDecision,
-        context: TradingContext
+        self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """Validate action-specific requirements."""
         errors = []
@@ -408,7 +407,10 @@ class DecisionValidator:
         # Check if trying to adjust/close non-existent position
         existing_position = context.account_state.get_position_for_symbol(decision.asset)
 
-        if decision.action in ["adjust_position", "close_position", "adjust_orders"] and not existing_position:
+        if (
+            decision.action in ["adjust_position", "close_position", "adjust_orders"]
+            and not existing_position
+        ):
             errors.append(f"Cannot {decision.action} - no existing position for {decision.asset}")
 
         # Check position count limits for new positions
@@ -417,14 +419,14 @@ class DecisionValidator:
             current_positions = len(context.account_state.open_positions)
 
             if current_positions >= max_positions:
-                errors.append(f"Cannot open new position - maximum positions ({max_positions}) reached")
+                errors.append(
+                    f"Cannot open new position - maximum positions ({max_positions}) reached"
+                )
 
         return errors, warnings
 
     async def _validate_strategy_specific_rules(
-        self,
-        decision: TradingDecision,
-        context: TradingContext
+        self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """Validate strategy-specific rules."""
         errors = []
@@ -439,22 +441,24 @@ class DecisionValidator:
             max_risk_amount = balance * (max_risk_per_trade / 100)
 
             if decision.allocation_usd > max_risk_amount:
-                errors.append(f"Trade risk ${decision.allocation_usd:.2f} exceeds strategy limit ${max_risk_amount:.2f}")
+                errors.append(
+                    f"Trade risk ${decision.allocation_usd:.2f} exceeds strategy limit ${max_risk_amount:.2f}"
+                )
 
         return errors, warnings
 
     # Risk Management Validation Methods
     async def _validate_risk_exposure(
-        self,
-        decision: TradingDecision,
-        context: TradingContext
+        self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """Validate risk exposure limits."""
         errors = []
         warnings = []
 
         if decision.action in ["buy", "sell"]:
-            additional_allocation = decision.allocation_usd if decision.action in ["buy", "sell"] else 0
+            additional_allocation = (
+                decision.allocation_usd if decision.action in ["buy", "sell"] else 0
+            )
             current_exposure = context.account_state.risk_exposure
 
             if not context.account_state.is_within_risk_limits(additional_allocation):
@@ -473,9 +477,7 @@ class DecisionValidator:
         return errors, warnings
 
     async def _validate_position_limits(
-        self,
-        decision: TradingDecision,
-        context: TradingContext
+        self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """Validate position limits."""
         errors = []
@@ -488,9 +490,7 @@ class DecisionValidator:
         return errors, warnings
 
     async def _validate_daily_loss_limits(
-        self,
-        decision: TradingDecision,
-        context: TradingContext
+        self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """Validate daily loss limits."""
         errors = []
@@ -503,17 +503,19 @@ class DecisionValidator:
 
         # Check current daily PnL (this would need to be calculated from recent trades)
         # For now, we'll use a simplified check
-        current_unrealized_pnl = sum(pos.unrealized_pnl for pos in context.account_state.open_positions)
+        current_unrealized_pnl = sum(
+            pos.unrealized_pnl for pos in context.account_state.open_positions
+        )
 
         if current_unrealized_pnl < -max_daily_loss:
-            warnings.append(f"Current unrealized loss ${abs(current_unrealized_pnl):.2f} approaches daily limit ${max_daily_loss:.2f}")
+            warnings.append(
+                f"Current unrealized loss ${abs(current_unrealized_pnl):.2f} approaches daily limit ${max_daily_loss:.2f}"
+            )
 
         return errors, warnings
 
     async def _validate_correlation_risk(
-        self,
-        decision: TradingDecision,
-        context: TradingContext
+        self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """Validate correlation risk."""
         errors = []
@@ -523,19 +525,20 @@ class DecisionValidator:
         if decision.action in ["buy", "sell"]:
             decision_base = self._extract_base_currency(decision.asset)
             similar_positions = [
-                pos for pos in context.account_state.open_positions
+                pos
+                for pos in context.account_state.open_positions
                 if self._extract_base_currency(pos.symbol) == decision_base
             ]
 
             if len(similar_positions) >= 2:
-                warnings.append(f"High correlation risk: multiple positions in {decision_base} assets")
+                warnings.append(
+                    f"High correlation risk: multiple positions in {decision_base} assets"
+                )
 
         return errors, warnings
 
     async def _validate_concentration_risk(
-        self,
-        decision: TradingDecision,
-        context: TradingContext
+        self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """Validate concentration risk."""
         errors = []
@@ -556,9 +559,7 @@ class DecisionValidator:
         return errors, warnings
 
     async def apply_risk_checks(
-        self,
-        decision: TradingDecision,
-        account_context: AccountContext
+        self, decision: TradingDecision, account_context: AccountContext
     ) -> RiskValidationResult:
         """
         Apply comprehensive risk checks to a trading decision.
@@ -597,7 +598,8 @@ class DecisionValidator:
         if decision.action in ["buy", "sell"]:
             decision_base = self._extract_base_currency(decision.asset)
             similar_positions = [
-                pos for pos in account_context.open_positions
+                pos
+                for pos in account_context.open_positions
                 if self._extract_base_currency(pos.symbol) == decision_base
             ]
             correlation_risk_high = len(similar_positions) >= 2
@@ -629,14 +631,14 @@ class DecisionValidator:
             max_position_exceeded=max_position_exceeded,
             daily_loss_limit_exceeded=daily_loss_limit_exceeded,
             correlation_risk_high=correlation_risk_high,
-            leverage_exceeded=leverage_exceeded
+            leverage_exceeded=leverage_exceeded,
         )
 
     async def create_fallback_decision(
         self,
         original_decision: TradingDecision,
         context: TradingContext,
-        validation_errors: List[str]
+        validation_errors: List[str],
     ) -> TradingDecision:
         """
         Create a conservative fallback decision when validation fails.
@@ -653,8 +655,8 @@ class DecisionValidator:
             f"Creating fallback decision for {original_decision.asset}",
             extra={
                 "original_action": original_decision.action,
-                "validation_errors": validation_errors
-            }
+                "validation_errors": validation_errors,
+            },
         )
 
         # Create conservative fallback decision
@@ -668,7 +670,9 @@ class DecisionValidator:
             rationale=f"Fallback decision created due to validation errors: {'; '.join(validation_errors[:3])}",
             confidence=25.0,  # Low confidence for fallback
             risk_level="low",  # Conservative risk level
-            timestamp=datetime.utcnow()
+            position_adjustment=None,
+            order_adjustment=None,
+            timestamp=datetime.now(timezone.utc),
         )
 
         return fallback_decision
@@ -684,7 +688,9 @@ class DecisionValidator:
         success_rate = 0.0
 
         if total_validations > 0:
-            success_rate = (self.validation_metrics["successful_validations"] / total_validations) * 100
+            success_rate = (
+                self.validation_metrics["successful_validations"] / total_validations
+            ) * 100
 
         return {
             "total_validations": total_validations,
@@ -694,7 +700,10 @@ class DecisionValidator:
             "avg_validation_time_ms": self.validation_metrics["avg_validation_time_ms"],
             "validation_errors": dict(self.validation_metrics["validation_errors"]),
             "last_reset": self.validation_metrics["last_reset"],
-            "uptime_hours": (datetime.utcnow() - self.validation_metrics["last_reset"]).total_seconds() / 3600
+            "uptime_hours": (
+                datetime.now(timezone.utc) - self.validation_metrics["last_reset"]
+            ).total_seconds()
+            / 3600,
         }
 
     async def reset_metrics(self):
@@ -705,7 +714,7 @@ class DecisionValidator:
             "failed_validations": 0,
             "avg_validation_time_ms": 0.0,
             "validation_errors": {},
-            "last_reset": datetime.utcnow()
+            "last_reset": datetime.now(timezone.utc),
         }
 
         logger.info("Validation metrics reset")

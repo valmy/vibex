@@ -17,16 +17,15 @@ from pydantic import ValidationError as PydanticValidationError
 from ...core.config import config
 from ...core.logging import get_logger
 from ...schemas.trading_decision import DecisionResult, TradingContext, TradingDecision
+from .ab_testing import get_ab_test_manager
 from .circuit_breaker import CircuitBreaker
 from .llm_exceptions import (
-    ContextBuildingError,
     InsufficientDataError,
     LLMAPIError,
     ModelSwitchError,
     ValidationError,
 )
-from .llm_metrics import HealthStatus, LLMMetricsTracker, UsageMetrics, get_metrics_tracker
-from .ab_testing import ABTestManager, get_ab_test_manager
+from .llm_metrics import HealthStatus, UsageMetrics, get_metrics_tracker
 
 logger = get_logger(__name__)
 
@@ -49,9 +48,7 @@ class LLMService:
         self.metrics_tracker = get_metrics_tracker()
         self.ab_test_manager = get_ab_test_manager()
         self.circuit_breaker = CircuitBreaker(
-            failure_threshold=5,
-            recovery_timeout=60,
-            expected_exception=LLMAPIError
+            failure_threshold=5, recovery_timeout=60, expected_exception=LLMAPIError
         )
 
         # Supported models
@@ -357,9 +354,7 @@ Provide:
             prompt = self._build_decision_prompt(symbol, context, strategy_override)
 
             # Generate decision with circuit breaker protection
-            decision_data = await self.circuit_breaker.call(
-                self._call_llm_for_decision, prompt
-            )
+            decision_data = await self.circuit_breaker.call(self._call_llm_for_decision, prompt)
 
             # Parse and validate decision
             decision = self._parse_decision_response(decision_data, symbol)
@@ -609,7 +604,9 @@ Provide:
 
             except Exception as e:
                 last_exception = e
-                response_time_ms = (time.time() - start_time) * 1000 if 'start_time' in locals() else 0
+                response_time_ms = (
+                    (time.time() - start_time) * 1000 if "start_time" in locals() else 0
+                )
 
                 # Record failed API call
                 self.metrics_tracker.record_api_call(
@@ -623,8 +620,10 @@ Provide:
 
                 if attempt < self.max_retries - 1:
                     # Exponential backoff
-                    delay = self.base_delay * (2 ** attempt)
-                    logger.warning(f"API call failed (attempt {attempt + 1}), retrying in {delay}s: {e}")
+                    delay = self.base_delay * (2**attempt)
+                    logger.warning(
+                        f"API call failed (attempt {attempt + 1}), retrying in {delay}s: {e}"
+                    )
                     await asyncio.sleep(delay)
                 else:
                     logger.error(f"API call failed after {self.max_retries} attempts: {e}")
@@ -690,10 +689,12 @@ ATR: {indicators.atr or 'N/A'}
         # Format positions
         positions_text = ""
         if account_state.open_positions:
-            positions_text = "\n".join([
-                f"- {pos.symbol}: {pos.side} {pos.size} @ ${pos.entry_price:.2f} (PnL: {pos.percentage_pnl:.2f}%)"
-                for pos in account_state.open_positions
-            ])
+            positions_text = "\n".join(
+                [
+                    f"- {pos.symbol}: {pos.side} {pos.size} @ ${pos.entry_price:.2f} (PnL: {pos.percentage_pnl:.2f}%)"
+                    for pos in account_state.open_positions
+                ]
+            )
         else:
             positions_text = "No open positions"
 
@@ -741,7 +742,9 @@ Rules:
 - Consider risk management and position sizing
 - Only recommend actions you can justify with the provided data"""
 
-    def _parse_decision_response(self, response_data: Dict[str, Any], symbol: str) -> TradingDecision:
+    def _parse_decision_response(
+        self, response_data: Dict[str, Any], symbol: str
+    ) -> TradingDecision:
         """
         Parse and validate LLM response into TradingDecision.
 
@@ -796,7 +799,7 @@ Rules:
         # Try to find JSON in the text
         import re
 
-        json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+        json_pattern = r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}"
         matches = re.findall(json_pattern, text, re.DOTALL)
 
         for match in matches:
@@ -910,9 +913,7 @@ Generate an aggressive trading decision.
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
-                messages=[
-                    {"role": "user", "content": "Test connection. Respond with 'OK'."}
-                ],
+                messages=[{"role": "user", "content": "Test connection. Respond with 'OK'."}],
                 max_tokens=10,
                 temperature=0,
             )

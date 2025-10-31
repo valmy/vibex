@@ -4,31 +4,31 @@ Unit tests for trading decision schemas.
 Tests validation rules, constraints, and serialization for all trading decision models.
 """
 
-import pytest
 from datetime import datetime
+from datetime import timezone
+
+import pytest
 from pydantic import ValidationError
 
 from app.schemas.trading_decision import (
-    TradingDecision,
-    PositionAdjustment,
-    OrderAdjustment,
-    TradingStrategy,
-    StrategyRiskParameters,
-    MarketContext,
-    TechnicalIndicators,
     AccountContext,
-    PerformanceMetrics,
-    TradingContext,
-    RiskMetrics,
-    ValidationResult,
-    StrategyPerformance,
-    UsageMetrics,
     HealthStatus,
+    MarketContext,
+    PerformanceMetrics,
+    PositionAdjustment,
     PricePoint,
-    PositionSummary,
+    RiskMetrics,
+    StrategyAlert,
     StrategyAssignment,
     StrategyMetrics,
-    StrategyAlert
+    StrategyPerformance,
+    StrategyRiskParameters,
+    TechnicalIndicators,
+    TradingContext,
+    TradingDecision,
+    TradingStrategy,
+    UsageMetrics,
+    ValidationResult,
 )
 
 
@@ -46,7 +46,7 @@ class TestTradingDecision:
             exit_plan="Take profit at resistance, stop loss at support",
             rationale="Strong bullish momentum with RSI oversold",
             confidence=85.0,
-            risk_level="medium"
+            risk_level="medium",
         )
 
         assert decision.asset == "BTCUSDT"
@@ -63,7 +63,7 @@ class TestTradingDecision:
             exit_plan="Adjust position size",
             rationale="Market conditions changed",
             confidence=70.0,
-            risk_level="low"
+            risk_level="low",
         )
 
         errors = decision.validate_action_requirements()
@@ -78,7 +78,7 @@ class TestTradingDecision:
             exit_plan="Adjust stop loss",
             rationale="Price moved favorably",
             confidence=80.0,
-            risk_level="low"
+            risk_level="low",
         )
 
         errors = decision.validate_action_requirements()
@@ -95,7 +95,7 @@ class TestTradingDecision:
             exit_plan="Test",
             rationale="Test",
             confidence=50.0,
-            risk_level="low"
+            risk_level="low",
         )
 
         current_price = 48000.0
@@ -115,7 +115,7 @@ class TestTradingDecision:
                 exit_plan="Test",
                 rationale="Test",
                 confidence=150.0,  # Invalid: > 100
-                risk_level="low"
+                risk_level="low",
             )
 
 
@@ -129,7 +129,7 @@ class TestPositionAdjustment:
             adjustment_amount_usd=500.0,
             adjustment_percentage=25.0,
             new_tp_price=52000.0,
-            new_sl_price=46000.0
+            new_sl_price=46000.0,
         )
 
         assert adjustment.adjustment_type == "increase"
@@ -141,7 +141,7 @@ class TestPositionAdjustment:
         with pytest.raises(ValidationError):
             PositionAdjustment(
                 adjustment_type="increase",
-                adjustment_amount_usd=-100.0  # Invalid: negative
+                adjustment_amount_usd=-100.0,  # Invalid: negative
             )
 
 
@@ -156,7 +156,7 @@ class TestTradingStrategy:
             stop_loss_percentage=1.5,
             take_profit_ratio=2.0,
             max_leverage=3.0,
-            cooldown_period=300
+            cooldown_period=300,
         )
 
         strategy = TradingStrategy(
@@ -166,7 +166,7 @@ class TestTradingStrategy:
             prompt_template="Focus on low-risk entries",
             risk_parameters=risk_params,
             timeframe_preference=["4h", "1d"],
-            max_positions=2
+            max_positions=2,
         )
 
         assert strategy.strategy_id == "conservative_swing"
@@ -178,7 +178,7 @@ class TestTradingStrategy:
         risk_params = StrategyRiskParameters(
             max_risk_per_trade=10.0,  # Higher than daily loss
             max_daily_loss=5.0,
-            stop_loss_percentage=1.5
+            stop_loss_percentage=1.5,
         )
 
         strategy = TradingStrategy(
@@ -187,7 +187,7 @@ class TestTradingStrategy:
             strategy_type="scalping",
             prompt_template="Test",
             risk_parameters=risk_params,
-            timeframe_preference=["4h", "1d"]  # Wrong timeframes for scalping
+            timeframe_preference=["4h", "1d"],  # Wrong timeframes for scalping
         )
 
         errors = strategy.validate_strategy_constraints()
@@ -198,9 +198,7 @@ class TestTradingStrategy:
     def test_default_prompt_templates(self):
         """Test default prompt template generation."""
         risk_params = StrategyRiskParameters(
-            max_risk_per_trade=2.0,
-            max_daily_loss=5.0,
-            stop_loss_percentage=1.5
+            max_risk_per_trade=2.0, max_daily_loss=5.0, stop_loss_percentage=1.5
         )
 
         strategy = TradingStrategy(
@@ -208,7 +206,7 @@ class TestTradingStrategy:
             strategy_name="Test",
             strategy_type="conservative",
             prompt_template="",
-            risk_parameters=risk_params
+            risk_parameters=risk_params,
         )
 
         template = strategy.get_default_prompt_template()
@@ -225,7 +223,7 @@ class TestValidationResult:
             errors=["Invalid allocation amount"],
             warnings=["High risk level"],
             validation_time_ms=15.5,
-            rules_checked=["allocation_check", "risk_check"]
+            rules_checked=["allocation_check", "risk_check"],
         )
 
         assert not result.is_valid
@@ -239,8 +237,8 @@ class TestUsageMetrics:
 
     def test_usage_metrics_creation(self):
         """Test creating usage metrics."""
-        start_time = datetime.utcnow()
-        end_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
+        end_time = datetime.now(timezone.utc)
 
         metrics = UsageMetrics(
             total_requests=100,
@@ -253,7 +251,7 @@ class TestUsageMetrics:
             error_rate=5.0,
             uptime_percentage=99.5,
             period_start=start_time,
-            period_end=end_time
+            period_end=end_time,
         )
 
         assert metrics.total_requests == 100
@@ -269,11 +267,11 @@ class TestHealthStatus:
         status = HealthStatus(
             is_healthy=True,
             response_time_ms=150.0,
-            last_successful_request=datetime.utcnow(),
+            last_successful_request=datetime.now(timezone.utc),
             consecutive_failures=0,
             circuit_breaker_open=False,
             available_models=["gpt-4", "grok-4"],
-            current_model="gpt-4"
+            current_model="gpt-4",
         )
 
         assert status.is_healthy
@@ -286,19 +284,14 @@ class TestMarketContext:
 
     def test_price_trend_detection(self):
         """Test price trend detection."""
-        indicators = TechnicalIndicators(
-            ema_20=48000.0,
-            ema_50=47000.0,
-            rsi=65.0,
-            macd=100.0
-        )
+        indicators = TechnicalIndicators(ema_20=48000.0, ema_50=47000.0, rsi=65.0, macd=100.0)
 
         # Create price history with upward trend
         price_points = [
-            PricePoint(timestamp=datetime.utcnow(), price=47000.0),
-            PricePoint(timestamp=datetime.utcnow(), price=47500.0),
-            PricePoint(timestamp=datetime.utcnow(), price=48000.0),
-            PricePoint(timestamp=datetime.utcnow(), price=48500.0),
+            PricePoint(timestamp=datetime.now(timezone.utc), price=47000.0),
+            PricePoint(timestamp=datetime.now(timezone.utc), price=47500.0),
+            PricePoint(timestamp=datetime.now(timezone.utc), price=48000.0),
+            PricePoint(timestamp=datetime.now(timezone.utc), price=48500.0),
         ]
 
         market_context = MarketContext(
@@ -307,7 +300,7 @@ class TestMarketContext:
             volume_24h=1000000.0,
             volatility=0.02,
             technical_indicators=indicators,
-            price_history=price_points
+            price_history=price_points,
         )
 
         trend = market_context.get_price_trend()
@@ -317,10 +310,7 @@ class TestMarketContext:
         """Test sufficient indicators validation."""
         # Indicators with enough data
         indicators_sufficient = TechnicalIndicators(
-            ema_20=48000.0,
-            ema_50=47000.0,
-            rsi=65.0,
-            macd=100.0
+            ema_20=48000.0, ema_50=47000.0, rsi=65.0, macd=100.0
         )
 
         market_context = MarketContext(
@@ -328,23 +318,20 @@ class TestMarketContext:
             price_change_24h=1000.0,
             volume_24h=1000000.0,
             volatility=0.02,
-            technical_indicators=indicators_sufficient
+            technical_indicators=indicators_sufficient,
         )
 
         assert market_context.has_sufficient_indicators()
 
         # Indicators with insufficient data
-        indicators_insufficient = TechnicalIndicators(
-            ema_20=48000.0,
-            rsi=65.0
-        )
+        indicators_insufficient = TechnicalIndicators(ema_20=48000.0, rsi=65.0)
 
         market_context_insufficient = MarketContext(
             current_price=48000.0,
             price_change_24h=1000.0,
             volume_24h=1000000.0,
             volatility=0.02,
-            technical_indicators=indicators_insufficient
+            technical_indicators=indicators_insufficient,
         )
 
         assert not market_context_insufficient.has_sufficient_indicators()
@@ -356,9 +343,7 @@ class TestAccountContext:
     def test_can_open_new_position(self):
         """Test position opening validation."""
         risk_params = StrategyRiskParameters(
-            max_risk_per_trade=2.0,
-            max_daily_loss=5.0,
-            stop_loss_percentage=1.5
+            max_risk_per_trade=2.0, max_daily_loss=5.0, stop_loss_percentage=1.5
         )
 
         strategy = TradingStrategy(
@@ -367,15 +352,11 @@ class TestAccountContext:
             strategy_type="conservative",
             prompt_template="Test",
             risk_parameters=risk_params,
-            max_positions=2
+            max_positions=2,
         )
 
         performance = PerformanceMetrics(
-            total_pnl=1000.0,
-            win_rate=60.0,
-            avg_win=150.0,
-            avg_loss=-75.0,
-            max_drawdown=-200.0
+            total_pnl=1000.0, win_rate=60.0, avg_win=150.0, avg_loss=-75.0, max_drawdown=-200.0
         )
 
         account_context = AccountContext(
@@ -387,7 +368,7 @@ class TestAccountContext:
             risk_exposure=20.0,
             max_position_size=2000.0,
             active_strategy=strategy,
-            open_positions=[]
+            open_positions=[],
         )
 
         # Should be able to open position within limits
@@ -406,12 +387,7 @@ class TestTradingContext:
     def test_context_summary_generation(self):
         """Test trading context summary generation."""
         # Create minimal valid context components
-        indicators = TechnicalIndicators(
-            ema_20=48000.0,
-            ema_50=47000.0,
-            rsi=65.0,
-            macd=100.0
-        )
+        indicators = TechnicalIndicators(ema_20=48000.0, ema_50=47000.0, rsi=65.0, macd=100.0)
 
         market_context = MarketContext(
             current_price=48000.0,
@@ -419,13 +395,11 @@ class TestTradingContext:
             volume_24h=1000000.0,
             volatility=0.02,
             technical_indicators=indicators,
-            price_history=[PricePoint(timestamp=datetime.utcnow(), price=48000.0)]
+            price_history=[PricePoint(timestamp=datetime.now(timezone.utc), price=48000.0)],
         )
 
         risk_params = StrategyRiskParameters(
-            max_risk_per_trade=2.0,
-            max_daily_loss=5.0,
-            stop_loss_percentage=1.5
+            max_risk_per_trade=2.0, max_daily_loss=5.0, stop_loss_percentage=1.5
         )
 
         strategy = TradingStrategy(
@@ -434,15 +408,11 @@ class TestTradingContext:
             strategy_type="conservative",
             prompt_template="Test",
             risk_parameters=risk_params,
-            is_active=True
+            is_active=True,
         )
 
         performance = PerformanceMetrics(
-            total_pnl=1000.0,
-            win_rate=60.0,
-            avg_win=150.0,
-            avg_loss=-75.0,
-            max_drawdown=-200.0
+            total_pnl=1000.0, win_rate=60.0, avg_win=150.0, avg_loss=-75.0, max_drawdown=-200.0
         )
 
         account_context = AccountContext(
@@ -453,14 +423,11 @@ class TestTradingContext:
             recent_performance=performance,
             risk_exposure=20.0,
             max_position_size=2000.0,
-            active_strategy=strategy
+            active_strategy=strategy,
         )
 
         risk_metrics = RiskMetrics(
-            var_95=500.0,
-            max_drawdown=1000.0,
-            correlation_risk=15.0,
-            concentration_risk=25.0
+            var_95=500.0, max_drawdown=1000.0, correlation_risk=15.0, concentration_risk=25.0
         )
 
         trading_context = TradingContext(
@@ -468,7 +435,7 @@ class TestTradingContext:
             account_id=1,
             market_data=market_context,
             account_state=account_context,
-            risk_metrics=risk_metrics
+            risk_metrics=risk_metrics,
         )
 
         summary = trading_context.get_context_summary()
@@ -502,9 +469,9 @@ class TestStrategyPerformance:
             profit_factor=2.0,
             avg_trade_duration_hours=4.0,
             total_volume_traded=100000.0,
-            start_date=datetime.utcnow(),
-            end_date=datetime.utcnow(),
-            period_days=30
+            start_date=datetime.now(timezone.utc),
+            end_date=datetime.now(timezone.utc),
+            period_days=30,
         )
 
         grade = high_performance.get_performance_grade()
@@ -528,9 +495,9 @@ class TestStrategyPerformance:
             profit_factor=1.5,
             avg_trade_duration_hours=2.0,
             total_volume_traded=50000.0,
-            start_date=datetime.utcnow(),
-            end_date=datetime.utcnow(),
-            period_days=30
+            start_date=datetime.now(timezone.utc),
+            end_date=datetime.now(timezone.utc),
+            period_days=30,
         )
 
         roi = performance.calculate_roi(10000.0)
@@ -554,9 +521,9 @@ class TestStrategyPerformance:
             profit_factor=0.5,  # Low profit factor
             avg_trade_duration_hours=1.0,
             total_volume_traded=25000.0,
-            start_date=datetime.utcnow(),
-            end_date=datetime.utcnow(),
-            period_days=30
+            start_date=datetime.now(timezone.utc),
+            end_date=datetime.now(timezone.utc),
+            period_days=30,
         )
 
         assert poor_performance.needs_attention()
@@ -574,7 +541,7 @@ class TestStrategyAssignment:
             strategy_id="conservative_swing",
             assigned_by="admin",
             previous_strategy_id="aggressive_scalp",
-            switch_reason="Risk reduction requested"
+            switch_reason="Risk reduction requested",
         )
 
         assert assignment.account_id == 1
@@ -596,9 +563,9 @@ class TestStrategyMetrics:
             unrealized_pnl=250.0,
             realized_pnl_today=100.0,
             trades_today=3,
-            last_trade_time=datetime.utcnow(),
+            last_trade_time=datetime.now(timezone.utc),
             risk_utilization=45.0,
-            cooldown_remaining=120
+            cooldown_remaining=120,
         )
 
         assert metrics.strategy_id == "test_strategy"
@@ -619,7 +586,7 @@ class TestStrategyAlert:
             severity="high",
             message="Daily loss limit exceeded",
             threshold_value=500.0,
-            current_value=750.0
+            current_value=750.0,
         )
 
         assert alert.alert_type == "risk_limit_exceeded"

@@ -10,22 +10,20 @@ import hashlib
 import json
 import logging
 import time
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple, Any
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional
 
-from ...core.exceptions import ValidationError
 from ...schemas.trading_decision import (
     DecisionResult,
+    HealthStatus,
     TradingContext,
     TradingDecision,
     UsageMetrics,
-    HealthStatus,
 )
-from ...schemas.context import ContextValidationResult
-from .llm_service import get_llm_service
 from .context_builder import get_context_builder_service
 from .decision_validator import get_decision_validator
+from .llm_service import get_llm_service
 from .strategy_manager import StrategyManager
 
 logger = logging.getLogger(__name__)
@@ -33,11 +31,13 @@ logger = logging.getLogger(__name__)
 
 class DecisionEngineError(Exception):
     """Base exception for decision engine errors."""
+
     pass
 
 
 class RateLimitExceededError(DecisionEngineError):
     """Raised when rate limit is exceeded."""
+
     pass
 
 
@@ -126,7 +126,9 @@ class DecisionEngine:
         self.cache_ttl_seconds = 300  # 5 minutes default
 
         # Rate limiting
-        self.rate_limiter = RateLimiter(max_requests=60, window_seconds=60)  # 60 requests per minute
+        self.rate_limiter = RateLimiter(
+            max_requests=60, window_seconds=60
+        )  # 60 requests per minute
 
         # Performance metrics
         self.metrics = {
@@ -137,7 +139,7 @@ class DecisionEngine:
             "cache_misses": 0,
             "avg_processing_time_ms": 0.0,
             "rate_limit_rejections": 0,
-            "last_reset": datetime.now(timezone.utc)
+            "last_reset": datetime.now(timezone.utc),
         }
 
         # Concurrent processing limits
@@ -152,7 +154,7 @@ class DecisionEngine:
         account_id: int,
         strategy_override: Optional[str] = None,
         force_refresh: bool = False,
-        ab_test_name: Optional[str] = None
+        ab_test_name: Optional[str] = None,
     ) -> DecisionResult:
         """
         Generate a trading decision for the given symbol and account.
@@ -201,11 +203,15 @@ class DecisionEngine:
 
             # Check concurrent processing limits
             if len(self._active_decisions) >= self.max_concurrent_decisions:
-                raise DecisionEngineError("Maximum concurrent decisions reached. Please try again later.")
+                raise DecisionEngineError(
+                    "Maximum concurrent decisions reached. Please try again later."
+                )
 
             # Create processing task
             task = asyncio.create_task(
-                self._process_decision(symbol, account_id, strategy_override, force_refresh, ab_test_name)
+                self._process_decision(
+                    symbol, account_id, strategy_override, force_refresh, ab_test_name
+                )
             )
             self._active_decisions[decision_key] = task
 
@@ -223,14 +229,14 @@ class DecisionEngine:
                 self._update_avg_processing_time(processing_time_ms)
 
                 logger.info(
-                    f"Decision generated successfully",
+                    "Decision generated successfully",
                     extra={
                         "symbol": symbol,
                         "account_id": account_id,
                         "action": result.decision.action,
                         "processing_time_ms": processing_time_ms,
-                        "cached": False
-                    }
+                        "cached": False,
+                    },
                 )
 
                 return result
@@ -244,14 +250,14 @@ class DecisionEngine:
             self.metrics["failed_decisions"] += 1
 
             logger.error(
-                f"Decision generation failed",
+                "Decision generation failed",
                 extra={
                     "symbol": symbol,
                     "account_id": account_id,
                     "error": str(e),
-                    "processing_time_ms": (time.time() - start_time) * 1000
+                    "processing_time_ms": (time.time() - start_time) * 1000,
                 },
-                exc_info=True
+                exc_info=True,
             )
 
             raise DecisionEngineError(f"Decision generation failed: {str(e)}") from e
@@ -262,7 +268,7 @@ class DecisionEngine:
         account_id: int,
         strategy_override: Optional[str],
         force_refresh: bool,
-        ab_test_name: Optional[str]
+        ab_test_name: Optional[str],
     ) -> DecisionResult:
         """
         Internal method to process a trading decision.
@@ -290,14 +296,13 @@ class DecisionEngine:
             symbol=symbol,
             context=context,
             strategy_override=strategy_override,
-            ab_test_name=ab_test_name
+            ab_test_name=ab_test_name,
         )
 
         # Step 4: Validate decision
         if decision_result.validation_passed:
             validation_result = await self.decision_validator.validate_decision(
-                decision_result.decision,
-                context
+                decision_result.decision, context
             )
 
             # Update validation status
@@ -307,18 +312,16 @@ class DecisionEngine:
         # Step 5: Handle validation failures with fallback
         if not decision_result.validation_passed:
             logger.warning(
-                f"Decision validation failed, creating fallback",
+                "Decision validation failed, creating fallback",
                 extra={
                     "symbol": symbol,
                     "account_id": account_id,
-                    "errors": decision_result.validation_errors
-                }
+                    "errors": decision_result.validation_errors,
+                },
             )
 
             fallback_decision = await self.decision_validator.create_fallback_decision(
-                decision_result.decision,
-                context,
-                decision_result.validation_errors
+                decision_result.decision, context, decision_result.validation_errors
             )
 
             decision_result.decision = fallback_decision
@@ -327,10 +330,7 @@ class DecisionEngine:
         return decision_result
 
     async def _build_context_with_recovery(
-        self,
-        symbol: str,
-        account_id: int,
-        force_refresh: bool
+        self, symbol: str, account_id: int, force_refresh: bool
     ) -> TradingContext:
         """
         Build trading context with error recovery mechanisms.
@@ -358,9 +358,7 @@ class DecisionEngine:
         try:
             # Build fresh context
             context = await self.context_builder.build_trading_context(
-                symbol=symbol,
-                account_id=account_id,
-                force_refresh=force_refresh
+                symbol=symbol, account_id=account_id, force_refresh=force_refresh
             )
 
             # Cache the context
@@ -375,13 +373,15 @@ class DecisionEngine:
             try:
                 conflicts = await self.strategy_manager.resolve_strategy_conflicts(account_id)
                 if conflicts:
-                    logger.info(f"Resolved strategy conflicts for account {account_id}: {conflicts}")
+                    logger.info(
+                        f"Resolved strategy conflicts for account {account_id}: {conflicts}"
+                    )
 
                     # Retry context building
                     context = await self.context_builder.build_trading_context(
                         symbol=symbol,
                         account_id=account_id,
-                        force_refresh=True  # Force refresh after conflict resolution
+                        force_refresh=True,  # Force refresh after conflict resolution
                     )
 
                     self._cache_context(context_key, context)
@@ -439,16 +439,12 @@ class DecisionEngine:
         else:
             # Calculate running average
             self.metrics["avg_processing_time_ms"] = (
-                (current_avg * (total_decisions - 1) + processing_time_ms) / total_decisions
-            )
+                current_avg * (total_decisions - 1) + processing_time_ms
+            ) / total_decisions
 
     def _generate_cache_key(self, symbol: str, account_id: int, **kwargs) -> str:
         """Generate a cache key for the given parameters."""
-        key_data = {
-            "symbol": symbol,
-            "account_id": account_id,
-            **kwargs
-        }
+        key_data = {"symbol": symbol, "account_id": account_id, **kwargs}
         key_string = json.dumps(key_data, sort_keys=True)
         return hashlib.md5(key_string.encode()).hexdigest()
 
@@ -457,7 +453,7 @@ class DecisionEngine:
         symbols: List[str],
         account_id: int,
         strategy_override: Optional[str] = None,
-        force_refresh: bool = False
+        force_refresh: bool = False,
     ) -> List[DecisionResult]:
         """
         Generate trading decisions for multiple symbols concurrently.
@@ -480,7 +476,7 @@ class DecisionEngine:
                 symbol=symbol,
                 account_id=account_id,
                 strategy_override=strategy_override,
-                force_refresh=force_refresh
+                force_refresh=force_refresh,
             )
             tasks.append(task)
 
@@ -500,23 +496,45 @@ class DecisionEngine:
                     exit_plan="Error occurred during decision generation",
                     rationale=f"Decision generation failed: {str(result)}",
                     confidence=0.0,
-                    risk_level="low"
+                    risk_level="low",
+                    position_adjustment=None,
+                    order_adjustment=None,
+                    tp_price=None,
+                    sl_price=None,
                 )
 
                 # Create minimal context for error result
-                from ...schemas.context import TradingContext, MarketContext, AccountContext
-                from ...schemas.trading_decision import TechnicalIndicators, PerformanceMetrics, RiskMetrics
+                from ...schemas.context import (
+                    AccountContext,
+                    MarketContext,
+                    PerformanceMetrics,
+                    RiskMetrics,
+                    TradingContext,
+                )
+                from ...schemas.trading_decision import TechnicalIndicators
 
                 error_context = TradingContext(
                     symbol=symbols[i],
                     account_id=account_id,
                     market_data=MarketContext(
                         symbol=symbols[i],
-                        current_price=0.0,
+                        current_price=1.0,  # Must be > 0
                         price_change_24h=0.0,
                         volume_24h=0.0,
+                        funding_rate=0.0,
+                        open_interest=0.0,
                         volatility=0.0,
-                        technical_indicators=TechnicalIndicators()
+                        technical_indicators=TechnicalIndicators(
+                            ema_20=1.0,  # Provide at least some indicators
+                            ema_50=1.0,
+                            rsi=50.0,
+                            macd=0.0,
+                            macd_signal=0.0,
+                            bb_upper=1.0,
+                            bb_lower=1.0,
+                            bb_middle=1.0,
+                            atr=0.0,
+                        ),
                     ),
                     account_state=AccountContext(
                         account_id=account_id,
@@ -524,18 +542,28 @@ class DecisionEngine:
                         available_balance=0.0,
                         total_pnl=0.0,
                         recent_performance=PerformanceMetrics(
-                            total_pnl=0.0, total_pnl_percent=0.0, win_rate=0.0,
-                            avg_win=0.0, avg_loss=0.0, profit_factor=1.0,
-                            max_drawdown=0.0, trades_count=0, winning_trades=0, losing_trades=0
+                            total_pnl=0.0,
+                            total_pnl_percent=0.0,
+                            win_rate=0.0,
+                            avg_win=0.0,
+                            avg_loss=0.0,
+                            profit_factor=1.0,
+                            max_drawdown=0.0,
+                            trades_count=0,
+                            winning_trades=0,
+                            losing_trades=0,
                         ),
                         risk_exposure=0.0,
                         max_position_size=1000.0,
+                        active_strategy=None,
                         risk_metrics=RiskMetrics(
-                            current_exposure=0.0, available_capital=0.0,
-                            max_position_size=1000.0, daily_pnl=0.0,
-                            daily_loss_limit=100.0
-                        )
-                    )
+                            current_exposure=0.0,
+                            available_capital=0.0,
+                            max_position_size=1000.0,
+                            daily_pnl=0.0,
+                            daily_loss_limit=100.0,
+                        ),
+                    ),
                 )
 
                 error_result = DecisionResult(
@@ -544,7 +572,7 @@ class DecisionEngine:
                     validation_passed=False,
                     validation_errors=[str(result)],
                     processing_time_ms=0.0,
-                    model_used="error"
+                    model_used="error",
                 )
                 decision_results.append(error_result)
             else:
@@ -561,7 +589,7 @@ class DecisionEngine:
         symbol: Optional[str] = None,
         limit: int = 100,
         start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
+        end_date: Optional[datetime] = None,
     ) -> List[DecisionResult]:
         """
         Get decision history for an account.
@@ -591,7 +619,7 @@ class DecisionEngine:
         account_id: int,
         strategy_id: str,
         switch_reason: str = "Manual switch",
-        switched_by: Optional[str] = None
+        switched_by: Optional[str] = None,
     ) -> bool:
         """
         Switch the trading strategy for an account.
@@ -613,7 +641,7 @@ class DecisionEngine:
                 account_id=account_id,
                 new_strategy_id=strategy_id,
                 switch_reason=switch_reason,
-                switched_by=switched_by
+                switched_by=switched_by,
             )
 
             # Invalidate caches for this account
@@ -629,18 +657,12 @@ class DecisionEngine:
     def _invalidate_account_caches(self, account_id: int) -> None:
         """Invalidate all caches for a specific account."""
         # Invalidate decision caches
-        keys_to_remove = [
-            key for key in self._decision_cache.keys()
-            if f"_{account_id}_" in key
-        ]
+        keys_to_remove = [key for key in self._decision_cache.keys() if f"_{account_id}_" in key]
         for key in keys_to_remove:
             del self._decision_cache[key]
 
         # Invalidate context caches
-        keys_to_remove = [
-            key for key in self._context_cache.keys()
-            if f"_{account_id}" in key
-        ]
+        keys_to_remove = [key for key in self._context_cache.keys() if f"_{account_id}" in key]
         for key in keys_to_remove:
             del self._context_cache[key]
 
@@ -653,17 +675,13 @@ class DecisionEngine:
         """Invalidate all caches for a specific symbol."""
         # Invalidate decision caches
         keys_to_remove = [
-            key for key in self._decision_cache.keys()
-            if key.startswith(f"{symbol}_")
+            key for key in self._decision_cache.keys() if key.startswith(f"{symbol}_")
         ]
         for key in keys_to_remove:
             del self._decision_cache[key]
 
         # Invalidate context caches
-        keys_to_remove = [
-            key for key in self._context_cache.keys()
-            if f"_{symbol}_" in key
-        ]
+        keys_to_remove = [key for key in self._context_cache.keys() if f"_{symbol}_" in key]
         for key in keys_to_remove:
             del self._context_cache[key]
 
@@ -688,9 +706,9 @@ class DecisionEngine:
 
             # Determine overall health
             is_healthy = (
-                llm_health.is_healthy and
-                len(self._active_decisions) < self.max_concurrent_decisions and
-                cache_stats["memory_usage_mb"] < 500  # Arbitrary threshold
+                llm_health.is_healthy
+                and len(self._active_decisions) < self.max_concurrent_decisions
+                and cache_stats["memory_usage_mb"] < 500  # Arbitrary threshold
             )
 
             return HealthStatus(
@@ -699,9 +717,11 @@ class DecisionEngine:
                 last_successful_request=None,  # TODO: Track this
                 consecutive_failures=self.metrics["failed_decisions"],
                 circuit_breaker_open=llm_health.circuit_breaker_open,
-                available_models=getattr(llm_health, 'available_models', []),
-                current_model=getattr(llm_health, 'current_model', None),
-                error_message=getattr(llm_health, 'error_message', None) if not is_healthy else None
+                available_models=getattr(llm_health, "available_models", []),
+                current_model=getattr(llm_health, "current_model", None),
+                error_message=(
+                    getattr(llm_health, "error_message", None) if not is_healthy else None
+                ),
             )
 
         except Exception as e:
@@ -710,7 +730,7 @@ class DecisionEngine:
                 is_healthy=False,
                 consecutive_failures=999,
                 circuit_breaker_open=True,
-                error_message=f"Health check failed: {str(e)}"
+                error_message=f"Health check failed: {str(e)}",
             )
 
     def get_usage_metrics(self, timeframe_hours: int = 24) -> UsageMetrics:
@@ -730,8 +750,12 @@ class DecisionEngine:
         error_rate = (failed_requests / total_requests * 100) if total_requests > 0 else 0.0
 
         # Calculate uptime (simplified)
-        uptime_hours = (datetime.now(timezone.utc) - self.metrics["last_reset"]).total_seconds() / 3600
-        uptime_percentage = min(100.0, (uptime_hours / timeframe_hours) * 100) if timeframe_hours > 0 else 100.0
+        uptime_hours = (
+            datetime.now(timezone.utc) - self.metrics["last_reset"]
+        ).total_seconds() / 3600
+        uptime_percentage = (
+            min(100.0, (uptime_hours / timeframe_hours) * 100) if timeframe_hours > 0 else 100.0
+        )
 
         # Calculate requests per hour
         requests_per_hour = total_requests / max(1, uptime_hours)
@@ -747,7 +771,7 @@ class DecisionEngine:
             error_rate=error_rate,
             uptime_percentage=uptime_percentage,
             period_start=self.metrics["last_reset"],
-            period_end=datetime.now(timezone.utc)
+            period_end=datetime.now(timezone.utc),
         )
 
     def get_cache_stats(self) -> Dict[str, Any]:
@@ -766,7 +790,11 @@ class DecisionEngine:
 
         # Calculate cache hit rate
         total_cache_requests = self.metrics["cache_hits"] + self.metrics["cache_misses"]
-        cache_hit_rate = (self.metrics["cache_hits"] / total_cache_requests * 100) if total_cache_requests > 0 else 0.0
+        cache_hit_rate = (
+            (self.metrics["cache_hits"] / total_cache_requests * 100)
+            if total_cache_requests > 0
+            else 0.0
+        )
 
         # Estimate memory usage (rough calculation)
         memory_usage_mb = total_cache_size * 0.1  # Rough estimate: 100KB per entry
@@ -780,29 +808,29 @@ class DecisionEngine:
             "cache_hit_rate": cache_hit_rate,
             "memory_usage_mb": memory_usage_mb,
             "active_decisions": len(self._active_decisions),
-            "max_concurrent_decisions": self.max_concurrent_decisions
+            "max_concurrent_decisions": self.max_concurrent_decisions,
         }
 
     def _cleanup_expired_cache(self) -> None:
         """Clean up expired cache entries."""
         # Clean decision cache
         expired_decision_keys = [
-            key for key, entry in self._decision_cache.items()
-            if entry.is_expired()
+            key for key, entry in self._decision_cache.items() if entry.is_expired()
         ]
         for key in expired_decision_keys:
             del self._decision_cache[key]
 
         # Clean context cache
         expired_context_keys = [
-            key for key, entry in self._context_cache.items()
-            if entry.is_expired()
+            key for key, entry in self._context_cache.items() if entry.is_expired()
         ]
         for key in expired_context_keys:
             del self._context_cache[key]
 
         if expired_decision_keys or expired_context_keys:
-            logger.debug(f"Cleaned up {len(expired_decision_keys)} decision cache entries and {len(expired_context_keys)} context cache entries")
+            logger.debug(
+                f"Cleaned up {len(expired_decision_keys)} decision cache entries and {len(expired_context_keys)} context cache entries"
+            )
 
     def clear_all_caches(self) -> None:
         """Clear all caches."""
@@ -821,7 +849,7 @@ class DecisionEngine:
             "cache_misses": 0,
             "avg_processing_time_ms": 0.0,
             "rate_limit_rejections": 0,
-            "last_reset": datetime.now(timezone.utc)
+            "last_reset": datetime.now(timezone.utc),
         }
         logger.info("Decision engine metrics reset")
 
@@ -840,7 +868,7 @@ class DecisionEngine:
             try:
                 await asyncio.wait_for(
                     asyncio.gather(*self._active_decisions.values(), return_exceptions=True),
-                    timeout=5.0
+                    timeout=5.0,
                 )
             except asyncio.TimeoutError:
                 logger.warning("Some decisions did not complete within shutdown timeout")

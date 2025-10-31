@@ -4,22 +4,18 @@ Unit tests for Strategy Manager Service.
 Tests strategy configuration, assignment, switching, and performance tracking.
 """
 
-import json
-import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from src.app.core.exceptions import ConfigurationError, ValidationError
 from src.app.schemas.trading_decision import (
+    StrategyAlert,
+    StrategyPerformance,
     StrategyRiskParameters,
     TradingStrategy,
-    StrategyPerformance,
-    StrategyMetrics,
-    StrategyAlert,
-    StrategyAssignment,
-    StrategyComparison
 )
 from src.app.services.llm.strategy_manager import StrategyManager
 
@@ -45,7 +41,7 @@ class TestStrategyManager:
             stop_loss_percentage=3.0,
             take_profit_ratio=2.0,
             max_leverage=2.0,
-            cooldown_period=300
+            cooldown_period=300,
         )
 
     @pytest.fixture
@@ -60,7 +56,7 @@ class TestStrategyManager:
             timeframe_preference=["1h", "4h"],
             max_positions=3,
             position_sizing="percentage",
-            is_active=True
+            is_active=True,
         )
 
     async def test_initialization(self, strategy_manager):
@@ -95,7 +91,7 @@ class TestStrategyManager:
             risk_parameters=sample_risk_parameters,
             timeframe_preference=["1h", "4h"],
             max_positions=3,
-            position_sizing="percentage"
+            position_sizing="percentage",
         )
 
         assert custom_strategy.strategy_id == "test_custom"
@@ -116,7 +112,7 @@ class TestStrategyManager:
                 strategy_id="conservative",
                 strategy_name="Duplicate Conservative",
                 prompt_template="Duplicate prompt",
-                risk_parameters=sample_risk_parameters
+                risk_parameters=sample_risk_parameters,
             )
 
     async def test_validate_strategy(self, strategy_manager, sample_custom_strategy):
@@ -142,7 +138,7 @@ class TestStrategyManager:
             account_id=account_id,
             strategy_id=strategy_id,
             assigned_by="test_user",
-            switch_reason="Initial assignment"
+            switch_reason="Initial assignment",
         )
 
         assert assignment.account_id == account_id
@@ -160,8 +156,7 @@ class TestStrategyManager:
         """Test assigning a non-existent strategy."""
         with pytest.raises(ValidationError, match="Strategy 'nonexistent' not found"):
             await strategy_manager.assign_strategy_to_account(
-                account_id=123,
-                strategy_id="nonexistent"
+                account_id=123, strategy_id="nonexistent"
             )
 
     async def test_switch_account_strategy(self, strategy_manager):
@@ -170,8 +165,7 @@ class TestStrategyManager:
 
         # First assign a strategy
         await strategy_manager.assign_strategy_to_account(
-            account_id=account_id,
-            strategy_id="conservative"
+            account_id=account_id, strategy_id="conservative"
         )
 
         # Switch to aggressive
@@ -179,7 +173,7 @@ class TestStrategyManager:
             account_id=account_id,
             new_strategy_id="aggressive",
             switch_reason="Better performance needed",
-            switched_by="test_user"
+            switched_by="test_user",
         )
 
         assert assignment.strategy_id == "aggressive"
@@ -196,16 +190,13 @@ class TestStrategyManager:
 
         # Assign a strategy
         await strategy_manager.assign_strategy_to_account(
-            account_id=account_id,
-            strategy_id="conservative"
+            account_id=account_id, strategy_id="conservative"
         )
 
         # Try to switch to the same strategy
         with pytest.raises(ValidationError, match="already using strategy 'conservative'"):
             await strategy_manager.switch_account_strategy(
-                account_id=account_id,
-                new_strategy_id="conservative",
-                switch_reason="Same strategy"
+                account_id=account_id, new_strategy_id="conservative", switch_reason="Same strategy"
             )
 
     async def test_deactivate_activate_strategy(self, strategy_manager):
@@ -220,8 +211,7 @@ class TestStrategyManager:
         # Try to assign deactivated strategy (should fail)
         with pytest.raises(ValidationError, match="Strategy 'conservative' is not active"):
             await strategy_manager.assign_strategy_to_account(
-                account_id=123,
-                strategy_id="conservative"
+                account_id=123, strategy_id="conservative"
             )
 
         # Reactivate the strategy
@@ -233,8 +223,7 @@ class TestStrategyManager:
 
         # Now assignment should work
         assignment = await strategy_manager.assign_strategy_to_account(
-            account_id=123,
-            strategy_id="conservative"
+            account_id=123, strategy_id="conservative"
         )
         assert assignment.strategy_id == "conservative"
 
@@ -284,7 +273,7 @@ class TestStrategyManager:
             unrealized_pnl=50.0,
             realized_pnl_today=-20.0,
             trades_today=3,
-            last_trade_time=datetime.utcnow() - timedelta(minutes=5)
+            last_trade_time=datetime.now(timezone.utc) - timedelta(minutes=5),
         )
 
         assert metrics.strategy_id == strategy_id
@@ -305,23 +294,48 @@ class TestStrategyManager:
     async def test_calculate_strategy_performance(self, strategy_manager):
         """Test calculating strategy performance."""
         strategy_id = "conservative"
-        start_date = datetime.utcnow() - timedelta(days=30)
-        end_date = datetime.utcnow()
+        start_date = datetime.now(timezone.utc) - timedelta(days=30)
+        end_date = datetime.now(timezone.utc)
 
         # Sample trade data
         trades_data = [
-            {"pnl": 100.0, "volume": 1000.0, "entry_time": start_date, "exit_time": start_date + timedelta(hours=2)},
-            {"pnl": -50.0, "volume": 500.0, "entry_time": start_date + timedelta(days=1), "exit_time": start_date + timedelta(days=1, hours=4)},
-            {"pnl": 75.0, "volume": 750.0, "entry_time": start_date + timedelta(days=2), "exit_time": start_date + timedelta(days=2, hours=1)},
-            {"pnl": -25.0, "volume": 250.0, "entry_time": start_date + timedelta(days=3), "exit_time": start_date + timedelta(days=3, hours=3)},
-            {"pnl": 150.0, "volume": 1500.0, "entry_time": start_date + timedelta(days=4), "exit_time": start_date + timedelta(days=4, hours=6)}
+            {
+                "pnl": 100.0,
+                "volume": 1000.0,
+                "entry_time": start_date,
+                "exit_time": start_date + timedelta(hours=2),
+            },
+            {
+                "pnl": -50.0,
+                "volume": 500.0,
+                "entry_time": start_date + timedelta(days=1),
+                "exit_time": start_date + timedelta(days=1, hours=4),
+            },
+            {
+                "pnl": 75.0,
+                "volume": 750.0,
+                "entry_time": start_date + timedelta(days=2),
+                "exit_time": start_date + timedelta(days=2, hours=1),
+            },
+            {
+                "pnl": -25.0,
+                "volume": 250.0,
+                "entry_time": start_date + timedelta(days=3),
+                "exit_time": start_date + timedelta(days=3, hours=3),
+            },
+            {
+                "pnl": 150.0,
+                "volume": 1500.0,
+                "entry_time": start_date + timedelta(days=4),
+                "exit_time": start_date + timedelta(days=4, hours=6),
+            },
         ]
 
         performance = await strategy_manager.calculate_strategy_performance(
             strategy_id=strategy_id,
             start_date=start_date,
             end_date=end_date,
-            trades_data=trades_data
+            trades_data=trades_data,
         )
 
         assert performance.strategy_id == strategy_id
@@ -344,14 +358,11 @@ class TestStrategyManager:
     async def test_calculate_performance_no_trades(self, strategy_manager):
         """Test calculating performance with no trades."""
         strategy_id = "conservative"
-        start_date = datetime.utcnow() - timedelta(days=7)
-        end_date = datetime.utcnow()
+        start_date = datetime.now(timezone.utc) - timedelta(days=7)
+        end_date = datetime.now(timezone.utc)
 
         performance = await strategy_manager.calculate_strategy_performance(
-            strategy_id=strategy_id,
-            start_date=start_date,
-            end_date=end_date,
-            trades_data=[]
+            strategy_id=strategy_id, start_date=start_date, end_date=end_date, trades_data=[]
         )
 
         assert performance.total_trades == 0
@@ -380,9 +391,9 @@ class TestStrategyManager:
             profit_factor=2.0,
             avg_trade_duration_hours=4.0,
             total_volume_traded=10000.0,
-            start_date=datetime.utcnow() - timedelta(days=30),
-            end_date=datetime.utcnow(),
-            period_days=30
+            start_date=datetime.now(timezone.utc) - timedelta(days=30),
+            end_date=datetime.now(timezone.utc),
+            period_days=30,
         )
 
         perf2 = StrategyPerformance(
@@ -401,9 +412,9 @@ class TestStrategyManager:
             profit_factor=1.6,
             avg_trade_duration_hours=2.0,
             total_volume_traded=15000.0,
-            start_date=datetime.utcnow() - timedelta(days=30),
-            end_date=datetime.utcnow(),
-            period_days=30
+            start_date=datetime.now(timezone.utc) - timedelta(days=30),
+            end_date=datetime.now(timezone.utc),
+            period_days=30,
         )
 
         # Cache the performance data
@@ -414,7 +425,7 @@ class TestStrategyManager:
         comparison = await strategy_manager.compare_strategies(
             strategy_ids=["conservative", "aggressive"],
             comparison_period_days=30,
-            ranking_criteria="sharpe_ratio"
+            ranking_criteria="sharpe_ratio",
         )
 
         assert len(comparison.strategies) == 2
@@ -436,7 +447,7 @@ class TestStrategyManager:
             unrealized_pnl=50.0,
             realized_pnl_today=-600.0,  # Exceeds daily loss limit (5% of assumed capital)
             trades_today=5,
-            last_trade_time=datetime.utcnow()
+            last_trade_time=datetime.now(timezone.utc),
         )
 
         # Check for alerts
@@ -485,9 +496,9 @@ class TestStrategyManager:
             profit_factor=0.3,
             avg_trade_duration_hours=2.0,
             total_volume_traded=5000.0,
-            start_date=datetime.utcnow() - timedelta(days=30),
-            end_date=datetime.utcnow(),
-            period_days=30
+            start_date=datetime.now(timezone.utc) - timedelta(days=30),
+            end_date=datetime.now(timezone.utc),
+            period_days=30,
         )
 
         strategy_manager._performance_cache["conservative"] = poor_performance
@@ -505,7 +516,7 @@ class TestStrategyManager:
             alert_type="performance_degradation",
             severity="medium",
             message="Old alert",
-            created_at=datetime.utcnow() - timedelta(hours=25)  # Older than 24 hours
+            created_at=datetime.now(timezone.utc) - timedelta(hours=25),  # Older than 24 hours
         )
         old_alert.acknowledged = True
 
@@ -515,7 +526,7 @@ class TestStrategyManager:
             alert_type="risk_limit_exceeded",
             severity="high",
             message="Recent alert",
-            created_at=datetime.utcnow() - timedelta(hours=1)
+            created_at=datetime.now(timezone.utc) - timedelta(hours=1),
         )
 
         strategy_manager._alerts = [old_alert, recent_alert]
@@ -550,7 +561,7 @@ class TestStrategyManager:
         """Test loading invalid strategy file."""
         # Create invalid JSON file
         invalid_file = strategy_manager.config_path / "invalid.json"
-        with open(invalid_file, 'w') as f:
+        with open(invalid_file, "w") as f:
             f.write("invalid json content")
 
         with pytest.raises(ConfigurationError, match="Invalid JSON"):

@@ -6,18 +6,17 @@ performance analytics, and operational metrics.
 """
 
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from ...services.llm.llm_service import get_llm_service
-from ...services.llm.decision_engine import get_decision_engine
-from ...services.llm.strategy_manager import StrategyManager
 from ...services.llm.context_builder import get_context_builder_service
+from ...services.llm.decision_engine import get_decision_engine
 from ...services.llm.decision_validator import get_decision_validator
-from ...schemas.trading_decision import HealthStatus, UsageMetrics
+from ...services.llm.llm_service import get_llm_service
+from ...services.llm.strategy_manager import StrategyManager
 
 logger = logging.getLogger(__name__)
 
@@ -91,16 +90,13 @@ async def get_system_health():
                 "response_time_ms": engine_health.response_time_ms,
                 "consecutive_failures": engine_health.consecutive_failures,
                 "circuit_breaker_open": engine_health.circuit_breaker_open,
-                "error_message": engine_health.error_message
+                "error_message": engine_health.error_message,
             }
             if not engine_health.is_healthy:
                 overall_healthy = False
                 issues.append(f"Decision Engine: {engine_health.error_message}")
         except Exception as e:
-            components["decision_engine"] = {
-                "status": "error",
-                "error": str(e)
-            }
+            components["decision_engine"] = {"status": "error", "error": str(e)}
             overall_healthy = False
             issues.append(f"Decision Engine: {str(e)}")
 
@@ -115,16 +111,13 @@ async def get_system_health():
                 "response_time_ms": llm_health.response_time_ms,
                 "consecutive_failures": llm_health.consecutive_failures,
                 "circuit_breaker_open": llm_health.circuit_breaker_open,
-                "error_message": llm_health.error_message
+                "error_message": llm_health.error_message,
             }
             if not llm_health.is_healthy:
                 overall_healthy = False
                 issues.append(f"LLM Service: {llm_health.error_message}")
         except Exception as e:
-            components["llm_service"] = {
-                "status": "error",
-                "error": str(e)
-            }
+            components["llm_service"] = {"status": "error", "error": str(e)}
             overall_healthy = False
             issues.append(f"LLM Service: {str(e)}")
 
@@ -134,13 +127,10 @@ async def get_system_health():
             # Context builder doesn't have a health check method, so we'll do a basic check
             components["context_builder"] = {
                 "status": "healthy",
-                "cache_size": getattr(context_builder, '_cache_size', 0)
+                "cache_size": getattr(context_builder, "_cache_size", 0),
             }
         except Exception as e:
-            components["context_builder"] = {
-                "status": "error",
-                "error": str(e)
-            }
+            components["context_builder"] = {"status": "error", "error": str(e)}
             overall_healthy = False
             issues.append(f"Context Builder: {str(e)}")
 
@@ -148,14 +138,9 @@ async def get_system_health():
         try:
             decision_validator = get_decision_validator()
             # Decision validator doesn't have a health check method, so we'll do a basic check
-            components["decision_validator"] = {
-                "status": "healthy"
-            }
+            components["decision_validator"] = {"status": "healthy"}
         except Exception as e:
-            components["decision_validator"] = {
-                "status": "error",
-                "error": str(e)
-            }
+            components["decision_validator"] = {"status": "error", "error": str(e)}
             overall_healthy = False
             issues.append(f"Decision Validator: {str(e)}")
 
@@ -167,13 +152,10 @@ async def get_system_health():
             components["strategy_manager"] = {
                 "status": "healthy",
                 "total_strategies": len(available_strategies),
-                "active_strategies": len(active_strategies)
+                "active_strategies": len(active_strategies),
             }
         except Exception as e:
-            components["strategy_manager"] = {
-                "status": "error",
-                "error": str(e)
-            }
+            components["strategy_manager"] = {"status": "error", "error": str(e)}
             overall_healthy = False
             issues.append(f"Strategy Manager: {str(e)}")
 
@@ -184,8 +166,8 @@ async def get_system_health():
             overall_status="healthy" if overall_healthy else "unhealthy",
             components=components,
             uptime_seconds=uptime_seconds,
-            last_check=datetime.utcnow(),
-            issues=issues
+            last_check=datetime.now(timezone.utc),
+            issues=issues,
         )
 
     except Exception as e:
@@ -195,7 +177,7 @@ async def get_system_health():
 
 @router.get("/performance", response_model=PerformanceMetrics)
 async def get_performance_metrics(
-    timeframe_hours: int = Query(24, ge=1, le=168, description="Hours to look back for metrics")
+    timeframe_hours: int = Query(24, ge=1, le=168, description="Hours to look back for metrics"),
 ):
     """
     Get comprehensive performance metrics for all system components.
@@ -218,7 +200,7 @@ async def get_performance_metrics(
             "error_rate": engine_metrics.error_rate,
             "uptime_percentage": engine_metrics.uptime_percentage,
             "cache_hit_rate": cache_stats["cache_hit_rate"],
-            "active_decisions": cache_stats["active_decisions"]
+            "active_decisions": cache_stats["active_decisions"],
         }
 
         # LLM Service metrics
@@ -233,7 +215,7 @@ async def get_performance_metrics(
             "total_cost_usd": llm_metrics.total_cost_usd,
             "cost_per_request": llm_metrics.cost_per_request,
             "requests_per_hour": llm_metrics.requests_per_hour,
-            "error_rate": llm_metrics.error_rate
+            "error_rate": llm_metrics.error_rate,
         }
 
         # Context Builder metrics (placeholder - would implement actual metrics)
@@ -241,7 +223,7 @@ async def get_performance_metrics(
             "contexts_built": 0,  # Would track actual metrics
             "avg_build_time_ms": 0.0,
             "cache_hit_rate": 0.0,
-            "data_freshness_score": 95.0
+            "data_freshness_score": 95.0,
         }
 
         # Decision Validator metrics (placeholder - would implement actual metrics)
@@ -249,7 +231,7 @@ async def get_performance_metrics(
             "validations_performed": 0,  # Would track actual metrics
             "validation_success_rate": 98.5,
             "avg_validation_time_ms": 15.0,
-            "fallback_decisions_created": 0
+            "fallback_decisions_created": 0,
         }
 
         # Strategy Manager metrics (placeholder - would implement actual metrics)
@@ -257,7 +239,7 @@ async def get_performance_metrics(
             "strategy_switches": 0,  # Would track actual metrics
             "active_assignments": 0,
             "performance_calculations": 0,
-            "alerts_generated": 0
+            "alerts_generated": 0,
         }
 
         return PerformanceMetrics(
@@ -265,7 +247,7 @@ async def get_performance_metrics(
             llm_service=llm_service_metrics,
             context_builder=context_builder_metrics,
             decision_validator=decision_validator_metrics,
-            strategy_manager=strategy_manager_metrics
+            strategy_manager=strategy_manager_metrics,
         )
 
     except Exception as e:
@@ -285,8 +267,8 @@ async def get_model_management_info():
         llm_service = get_llm_service()
 
         # Get current model and available models
-        current_model = getattr(llm_service, 'current_model', 'unknown')
-        available_models = list(getattr(llm_service, 'supported_models', {}).keys())
+        current_model = getattr(llm_service, "current_model", "unknown")
+        available_models = list(getattr(llm_service, "supported_models", {}).keys())
 
         # Get model performance (placeholder - would implement actual tracking)
         model_performance = {}
@@ -296,7 +278,7 @@ async def get_model_management_info():
                 "avg_response_time_ms": 0.0,
                 "success_rate": 0.0,
                 "cost_per_request": 0.0,
-                "last_used": None
+                "last_used": None,
             }
 
         # Get switch history (placeholder - would implement actual tracking)
@@ -306,7 +288,7 @@ async def get_model_management_info():
             current_model=current_model,
             available_models=available_models,
             model_performance=model_performance,
-            switch_history=switch_history
+            switch_history=switch_history,
         )
 
     except Exception as e:
@@ -330,9 +312,9 @@ async def switch_llm_model(model_name: str):
 
         return {
             "message": f"Successfully switched to model '{model_name}'",
-            "previous_model": getattr(llm_service, '_previous_model', 'unknown'),
+            "previous_model": getattr(llm_service, "_previous_model", "unknown"),
             "current_model": model_name,
-            "switch_time": datetime.utcnow().isoformat()
+            "switch_time": datetime.now(timezone.utc).isoformat(),
         }
 
     except HTTPException:
@@ -345,7 +327,7 @@ async def switch_llm_model(model_name: str):
 @router.get("/models/{model_name}/performance")
 async def get_model_performance(
     model_name: str,
-    timeframe_hours: int = Query(24, ge=1, le=168, description="Hours to look back for metrics")
+    timeframe_hours: int = Query(24, ge=1, le=168, description="Hours to look back for metrics"),
 ):
     """
     Get performance metrics for a specific LLM model.
@@ -357,7 +339,7 @@ async def get_model_performance(
         llm_service = get_llm_service()
 
         # Check if model exists
-        available_models = list(getattr(llm_service, 'supported_models', {}).keys())
+        available_models = list(getattr(llm_service, "supported_models", {}).keys())
         if model_name not in available_models:
             raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found")
 
@@ -377,7 +359,7 @@ async def get_model_performance(
             "avg_cost_per_request": 0.0,
             "requests_per_hour": 0.0,
             "last_used": None,
-            "decision_quality_score": 0.0  # Would calculate based on validation success
+            "decision_quality_score": 0.0,  # Would calculate based on validation success
         }
 
         return performance
@@ -391,9 +373,11 @@ async def get_model_performance(
 
 @router.get("/alerts", response_model=AlertsResponse)
 async def get_system_alerts(
-    severity: Optional[str] = Query(None, description="Filter by severity (low, medium, high, critical)"),
+    severity: Optional[str] = Query(
+        None, description="Filter by severity (low, medium, high, critical)"
+    ),
     component: Optional[str] = Query(None, description="Filter by component"),
-    limit: int = Query(50, ge=1, le=200, description="Maximum number of alerts to return")
+    limit: int = Query(50, ge=1, le=200, description="Maximum number of alerts to return"),
 ):
     """
     Get system alerts and notifications.
@@ -419,7 +403,7 @@ async def get_system_alerts(
                 "created_at": alert.created_at.isoformat(),
                 "acknowledged": alert.acknowledged,
                 "strategy_id": alert.strategy_id,
-                "account_id": alert.account_id
+                "account_id": alert.account_id,
             }
             active_alerts.append(alert_dict)
             alert_counts[alert.severity] += 1
@@ -435,16 +419,13 @@ async def get_system_alerts(
         active_alerts = active_alerts[:limit]
 
         # Get recent alerts (last 24 hours)
-        recent_cutoff = datetime.utcnow() - timedelta(hours=24)
+        recent_cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
         recent_alerts = [
-            a for a in active_alerts
-            if datetime.fromisoformat(a["created_at"]) > recent_cutoff
+            a for a in active_alerts if datetime.fromisoformat(a["created_at"]) > recent_cutoff
         ]
 
         return AlertsResponse(
-            active_alerts=active_alerts,
-            alert_counts=alert_counts,
-            recent_alerts=recent_alerts
+            active_alerts=active_alerts, alert_counts=alert_counts, recent_alerts=recent_alerts
         )
 
     except Exception as e:
@@ -454,7 +435,7 @@ async def get_system_alerts(
 
 @router.get("/analytics/summary")
 async def get_analytics_summary(
-    timeframe_hours: int = Query(24, ge=1, le=168, description="Hours to look back for analytics")
+    timeframe_hours: int = Query(24, ge=1, le=168, description="Hours to look back for analytics"),
 ):
     """
     Get analytics summary for the specified timeframe.
@@ -474,32 +455,37 @@ async def get_analytics_summary(
         # Calculate summary metrics
         summary = {
             "timeframe_hours": timeframe_hours,
-            "period_start": (datetime.utcnow() - timedelta(hours=timeframe_hours)).isoformat(),
-            "period_end": datetime.utcnow().isoformat(),
+            "period_start": (
+                datetime.now(timezone.utc) - timedelta(hours=timeframe_hours)
+            ).isoformat(),
+            "period_end": datetime.now(timezone.utc).isoformat(),
             "decisions": {
                 "total_generated": engine_metrics.total_requests,
                 "successful": engine_metrics.successful_requests,
                 "failed": engine_metrics.failed_requests,
-                "success_rate": (engine_metrics.successful_requests / engine_metrics.total_requests * 100)
-                               if engine_metrics.total_requests > 0 else 0.0,
-                "avg_processing_time_ms": engine_metrics.avg_response_time_ms
+                "success_rate": (
+                    (engine_metrics.successful_requests / engine_metrics.total_requests * 100)
+                    if engine_metrics.total_requests > 0
+                    else 0.0
+                ),
+                "avg_processing_time_ms": engine_metrics.avg_response_time_ms,
             },
             "llm_usage": {
                 "total_requests": llm_metrics.total_requests,
                 "total_cost_usd": llm_metrics.total_cost_usd,
                 "avg_cost_per_request": llm_metrics.cost_per_request,
-                "avg_response_time_ms": llm_metrics.avg_response_time_ms
+                "avg_response_time_ms": llm_metrics.avg_response_time_ms,
             },
             "system_performance": {
                 "uptime_percentage": engine_metrics.uptime_percentage,
                 "requests_per_hour": engine_metrics.requests_per_hour,
-                "error_rate": engine_metrics.error_rate
+                "error_rate": engine_metrics.error_rate,
             },
             "strategies": {
                 "total_active": 0,  # Would calculate from strategy manager
                 "switches_performed": 0,  # Would track actual switches
-                "alerts_generated": 0  # Would count alerts
-            }
+                "alerts_generated": 0,  # Would count alerts
+            },
         }
 
         return summary
@@ -524,11 +510,11 @@ async def trigger_health_check():
 
         return {
             "message": "Health check completed",
-            "check_time": datetime.utcnow().isoformat(),
+            "check_time": datetime.now(timezone.utc).isoformat(),
             "overall_status": health_response.overall_status,
             "components_checked": len(health_response.components),
             "issues_found": len(health_response.issues),
-            "details": health_response
+            "details": health_response,
         }
 
     except Exception as e:

@@ -1,9 +1,9 @@
-from fastapi import Request, HTTPException
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from starlette.middleware.base import BaseHTTPMiddleware
-from .core.security import verify_token, credentials_exception
+
+from .core.security import credentials_exception, verify_token
 from .db.session import get_sync_engine
 from .models.account import User
 

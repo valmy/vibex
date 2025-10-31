@@ -6,9 +6,10 @@ Create Date: 2025-10-30 00:00:00.000001
 
 """
 from typing import Sequence, Union
-from alembic import op
+
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers
 revision: str = '002'
@@ -28,13 +29,13 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id'),
         schema='trading'
     )
-    
+
     # Create unique index for address
     op.create_index('idx_users_address_unique', 'users', ['address'], unique=True, schema='trading')
-    
+
     # Add user_id column to accounts table
-    op.add_column('accounts', 
-        sa.Column('user_id', sa.String(), nullable=True), 
+    op.add_column('accounts',
+        sa.Column('user_id', sa.String(), nullable=True),
         schema='trading'
     )
 
@@ -48,7 +49,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id'),
         schema='trading'
     )
-    
+
     # Create index for challenges
     op.create_index('idx_challenges_address', 'challenges', ['address'], schema='trading')
     op.create_index('idx_challenges_challenge_unique', 'challenges', ['challenge'], unique=True, schema='trading')
@@ -57,9 +58,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Drop challenges table
     op.drop_table('challenges', schema='trading')
-    
+
     # Remove user_id column from accounts table
     op.drop_column('accounts', 'user_id', schema='trading')
-    
+
     # Drop users table
     op.drop_table('users', schema='trading')

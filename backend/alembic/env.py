@@ -1,9 +1,8 @@
-from logging.config import fileConfig
-import sys
 import os
+import sys
+from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
@@ -66,10 +65,10 @@ def run_migrations_online() -> None:
     """
     # Use the database URL from the app config
     database_url = config.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
-    
+
     # Set the sqlalchemy.url in the alembic config
     alembic_config.set_main_option("sqlalchemy.url", database_url)
-    
+
     connectable = engine_from_config(
         alembic_config.get_section(alembic_config.config_ini_section),
         prefix="sqlalchemy.",

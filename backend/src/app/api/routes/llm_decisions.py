@@ -10,14 +10,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ...schemas.trading_decision import DecisionResult, TradingContext, TradingDecision
-from ...services.llm.llm_service import get_llm_service
 from ...services.llm.llm_metrics import HealthStatus, UsageMetrics
+from ...services.llm.llm_service import get_llm_service
 
 router = APIRouter(prefix="/api/v1/decisions", tags=["LLM Decisions"])
 
 
 class DecisionRequest(BaseModel):
     """Request model for decision generation."""
+
     symbol: str = Field(..., description="Trading pair symbol")
     context: TradingContext = Field(..., description="Trading context")
     strategy_override: Optional[str] = Field(None, description="Strategy override")
@@ -26,11 +27,13 @@ class DecisionRequest(BaseModel):
 
 class ModelSwitchRequest(BaseModel):
     """Request model for model switching."""
+
     model_name: str = Field(..., description="Model name to switch to")
 
 
 class ABTestRequest(BaseModel):
     """Request model for starting A/B test."""
+
     test_name: str = Field(..., description="Unique test name")
     model_a: str = Field(..., description="First model to test")
     model_b: str = Field(..., description="Second model to test")
@@ -40,8 +43,7 @@ class ABTestRequest(BaseModel):
 
 @router.post("/generate", response_model=DecisionResult)
 async def generate_decision(
-    request: DecisionRequest,
-    llm_service = Depends(get_llm_service)
+    request: DecisionRequest, llm_service=Depends(get_llm_service)
 ) -> DecisionResult:
     """
     Generate a trading decision using LLM analysis.
@@ -65,9 +67,7 @@ async def generate_decision(
 
 
 @router.get("/health", response_model=HealthStatus)
-async def get_health_status(
-    llm_service = Depends(get_llm_service)
-) -> HealthStatus:
+async def get_health_status(llm_service=Depends(get_llm_service)) -> HealthStatus:
     """
     Get LLM service health status.
 
@@ -84,7 +84,7 @@ async def get_health_status(
 @router.get("/metrics", response_model=UsageMetrics)
 async def get_usage_metrics(
     timeframe_hours: int = Query(24, ge=1, le=168, description="Hours to look back"),
-    llm_service = Depends(get_llm_service)
+    llm_service=Depends(get_llm_service),
 ) -> UsageMetrics:
     """
     Get usage metrics for specified timeframe.
@@ -104,8 +104,7 @@ async def get_usage_metrics(
 
 @router.post("/models/switch")
 async def switch_model(
-    request: ModelSwitchRequest,
-    llm_service = Depends(get_llm_service)
+    request: ModelSwitchRequest, llm_service=Depends(get_llm_service)
 ) -> Dict[str, str]:
     """
     Switch to a different LLM model.
@@ -127,9 +126,7 @@ async def switch_model(
 
 
 @router.get("/models/supported")
-async def get_supported_models(
-    llm_service = Depends(get_llm_service)
-) -> Dict[str, List[str]]:
+async def get_supported_models(llm_service=Depends(get_llm_service)) -> Dict[str, List[str]]:
     """
     Get list of supported LLM models.
 
@@ -144,8 +141,7 @@ async def get_supported_models(
 
 @router.post("/ab-tests/start")
 async def start_ab_test(
-    request: ABTestRequest,
-    llm_service = Depends(get_llm_service)
+    request: ABTestRequest, llm_service=Depends(get_llm_service)
 ) -> Dict[str, str]:
     """
     Start an A/B test between two models.
@@ -179,9 +175,7 @@ async def start_ab_test(
 
 
 @router.get("/ab-tests/active")
-async def get_active_ab_tests(
-    llm_service = Depends(get_llm_service)
-) -> Dict:
+async def get_active_ab_tests(llm_service=Depends(get_llm_service)) -> Dict:
     """
     Get all active A/B tests.
 
@@ -196,10 +190,7 @@ async def get_active_ab_tests(
 
 
 @router.post("/ab-tests/{test_name}/end")
-async def end_ab_test(
-    test_name: str,
-    llm_service = Depends(get_llm_service)
-) -> Dict:
+async def end_ab_test(test_name: str, llm_service=Depends(get_llm_service)) -> Dict:
     """
     End an A/B test and get results.
 
@@ -226,7 +217,7 @@ async def end_ab_test(
 async def get_model_performance(
     model_name: str,
     timeframe_hours: int = Query(24, ge=1, le=168, description="Hours to look back"),
-    llm_service = Depends(get_llm_service)
+    llm_service=Depends(get_llm_service),
 ) -> Dict:
     """
     Get performance metrics for a specific model.

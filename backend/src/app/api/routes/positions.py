@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api/v1/positions", tags=["Trading"])
 async def create_position(
     position_data: PositionCreate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
     """Create a new position."""
     try:
@@ -41,11 +41,7 @@ async def create_position(
 
 
 @router.get("", response_model=PositionListResponse)
-async def list_positions(
-    skip: int = 0,
-    limit: int = 100,
-    db: AsyncSession = Depends(get_db)
-):
+async def list_positions(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
     """List all positions with pagination."""
     try:
         # Get total count
@@ -63,10 +59,7 @@ async def list_positions(
 
 
 @router.get("/{position_id}", response_model=PositionRead)
-async def get_position(
-    position_id: int,
-    db: AsyncSession = Depends(get_db)
-):
+async def get_position(position_id: int, db: AsyncSession = Depends(get_db)):
     """Get a specific position by ID."""
     try:
         result = await db.execute(select(Position).where(Position.id == position_id))
@@ -88,7 +81,7 @@ async def update_position(
     position_id: int,
     position_data: PositionUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
     """Update a position."""
     try:
@@ -117,9 +110,7 @@ async def update_position(
 
 @router.delete("/{position_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_position(
-    position_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    position_id: int, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
 ):
     """Delete a position."""
     try:

@@ -5,7 +5,7 @@ Initializes the FastAPI app with middleware, routes, and WebSocket handlers.
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from .api.routes import (
     accounts,
     analysis,
+    auth,
     decision_engine,
     diary,
     llm_decisions,
@@ -25,7 +26,6 @@ from .api.routes import (
     positions,
     strategies,
     trades,
-    auth,
 )
 from .core.config import config
 from .core.config_manager import get_config_manager
@@ -72,6 +72,7 @@ app = FastAPI(
     ],
 )
 
+
 # Configure OpenAPI security scheme for Bearer token authentication
 def custom_openapi():
     if app.openapi_schema:
@@ -92,12 +93,13 @@ def custom_openapi():
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "JWT",
-            "description": "Enter JWT token obtained from /api/v1/auth/login"
+            "description": "Enter JWT token obtained from /api/v1/auth/login",
         }
     }
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema
+
 
 app.openapi = custom_openapi
 
@@ -141,7 +143,7 @@ async def health_check():
         "app": config.APP_NAME,
         "version": config.APP_VERSION,
         "environment": config.ENVIRONMENT,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "detailed_health": "/api/v1/monitoring/health/system",
     }
 
@@ -162,7 +164,7 @@ async def status():
         "debug": config.DEBUG,
         "api_host": config.API_HOST,
         "api_port": config.API_PORT,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "components": {
             "decision_engine": "active",
             "llm_service": "active",
@@ -215,9 +217,10 @@ async def root():
     }
 
 
+from .core.exceptions import ConfigurationError, ValidationError
+
 # Error handlers
 from .services.llm.decision_engine import DecisionEngineError, RateLimitExceededError
-from .core.exceptions import ValidationError, ConfigurationError
 
 
 @app.exception_handler(DecisionEngineError)

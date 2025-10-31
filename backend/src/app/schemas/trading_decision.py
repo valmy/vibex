@@ -4,12 +4,10 @@ Trading decision schemas for LLM-generated decisions.
 Provides structured data models for trading decisions and related components.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
-
-from .base import BaseSchema
 
 
 class PositionAdjustment(BaseModel):
@@ -37,12 +35,8 @@ class OrderAdjustment(BaseModel):
 
     adjust_tp: bool = Field(default=False, description="Whether to adjust take-profit")
     adjust_sl: bool = Field(default=False, description="Whether to adjust stop-loss")
-    new_tp_price: Optional[float] = Field(
-        None, gt=0, description="New take-profit price"
-    )
-    new_sl_price: Optional[float] = Field(
-        None, gt=0, description="New stop-loss price"
-    )
+    new_tp_price: Optional[float] = Field(None, gt=0, description="New take-profit price")
+    new_sl_price: Optional[float] = Field(None, gt=0, description="New stop-loss price")
     cancel_tp: bool = Field(default=False, description="Cancel existing take-profit order")
     cancel_sl: bool = Field(default=False, description="Cancel existing stop-loss order")
 
@@ -51,8 +45,8 @@ class TradingDecision(BaseModel):
     """Structured trading decision from LLM."""
 
     asset: str = Field(..., description="Trading pair symbol")
-    action: Literal["buy", "sell", "hold", "adjust_position", "close_position", "adjust_orders"] = Field(
-        ..., description="Trading action"
+    action: Literal["buy", "sell", "hold", "adjust_position", "close_position", "adjust_orders"] = (
+        Field(..., description="Trading action")
     )
     allocation_usd: float = Field(..., ge=0, description="Allocation amount in USD")
     position_adjustment: Optional[PositionAdjustment] = Field(
@@ -146,7 +140,7 @@ class MarketContext(BaseModel):
             return False
 
         latest_data = max(self.price_history, key=lambda x: x.timestamp)
-        age_minutes = (datetime.utcnow() - latest_data.timestamp).total_seconds() / 60
+        age_minutes = (datetime.now(timezone.utc) - latest_data.timestamp).total_seconds() / 60
         return age_minutes <= max_age_minutes
 
     def get_price_trend(self) -> str:
@@ -154,13 +148,17 @@ class MarketContext(BaseModel):
         if len(self.price_history) < 2:
             return "insufficient_data"
 
-        recent_prices = [p.price for p in sorted(self.price_history, key=lambda x: x.timestamp)[-5:]]
+        recent_prices = [
+            p.price for p in sorted(self.price_history, key=lambda x: x.timestamp)[-5:]
+        ]
 
         if len(recent_prices) < 2:
             return "insufficient_data"
 
-        trend_score = sum(1 if recent_prices[i] > recent_prices[i-1] else -1
-                         for i in range(1, len(recent_prices)))
+        trend_score = sum(
+            1 if recent_prices[i] > recent_prices[i - 1] else -1
+            for i in range(1, len(recent_prices))
+        )
 
         if trend_score > 0:
             return "bullish"
@@ -176,7 +174,7 @@ class MarketContext(BaseModel):
             indicators.ema_20,
             indicators.ema_50,
             indicators.rsi,
-            indicators.macd
+            indicators.macd,
         ]
         return sum(1 for ind in required_indicators if ind is not None) >= 3
 
@@ -220,8 +218,8 @@ class TradingStrategy(BaseModel):
 
     strategy_id: str = Field(..., description="Unique strategy identifier")
     strategy_name: str = Field(..., description="Human-readable strategy name")
-    strategy_type: Literal["conservative", "aggressive", "scalping", "swing", "dca", "custom"] = Field(
-        ..., description="Strategy type classification"
+    strategy_type: Literal["conservative", "aggressive", "scalping", "swing", "dca", "custom"] = (
+        Field(..., description="Strategy type classification")
     )
     prompt_template: str = Field(..., description="LLM prompt template for this strategy")
     risk_parameters: StrategyRiskParameters = Field(..., description="Risk management parameters")
@@ -239,7 +237,21 @@ class TradingStrategy(BaseModel):
         errors = []
 
         # Validate timeframe preferences
-        valid_timeframes = ["1m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w"]
+        valid_timeframes = [
+            "1m",
+            "5m",
+            "15m",
+            "30m",
+            "1h",
+            "2h",
+            "4h",
+            "6h",
+            "8h",
+            "12h",
+            "1d",
+            "3d",
+            "1w",
+        ]
         for tf in self.timeframe_preference:
             if tf not in valid_timeframes:
                 errors.append(f"Invalid timeframe: {tf}")
@@ -249,10 +261,14 @@ class TradingStrategy(BaseModel):
             errors.append("max_risk_per_trade cannot exceed max_daily_loss")
 
         # Strategy-specific validations
-        if self.strategy_type == "scalping" and not any(tf in ["1m", "5m", "15m"] for tf in self.timeframe_preference):
+        if self.strategy_type == "scalping" and not any(
+            tf in ["1m", "5m", "15m"] for tf in self.timeframe_preference
+        ):
             errors.append("Scalping strategy should include short timeframes (1m, 5m, 15m)")
 
-        if self.strategy_type == "swing" and not any(tf in ["4h", "1d"] for tf in self.timeframe_preference):
+        if self.strategy_type == "swing" and not any(
+            tf in ["4h", "1d"] for tf in self.timeframe_preference
+        ):
             errors.append("Swing strategy should include longer timeframes (4h, 1d)")
 
         return errors
@@ -264,9 +280,11 @@ class TradingStrategy(BaseModel):
             "aggressive": "Look for high-probability setups with strong momentum. Accept higher risk for greater returns.",
             "scalping": "Identify quick profit opportunities on short timeframes. Focus on tight spreads and quick exits.",
             "swing": "Analyze medium-term trends and key levels. Hold positions for days to weeks.",
-            "dca": "Implement dollar-cost averaging strategy. Focus on accumulation during favorable conditions."
+            "dca": "Implement dollar-cost averaging strategy. Focus on accumulation during favorable conditions.",
         }
-        return templates.get(self.strategy_type, "Analyze market conditions and provide trading recommendations.")
+        return templates.get(
+            self.strategy_type, "Analyze market conditions and provide trading recommendations."
+        )
 
 
 class AccountContext(BaseModel):
@@ -312,7 +330,9 @@ class AccountContext(BaseModel):
     def is_within_risk_limits(self, additional_allocation: float = 0) -> bool:
         """Check if account is within risk limits."""
         total_exposure = self.calculate_total_exposure() + additional_allocation
-        max_exposure = self.balance_usd * (self.active_strategy.risk_parameters.max_daily_loss / 100)
+        max_exposure = self.balance_usd * (
+            self.active_strategy.risk_parameters.max_daily_loss / 100
+        )
         return total_exposure <= max_exposure
 
 
@@ -379,7 +399,7 @@ class TradingContext(BaseModel):
             "strategy": self.account_state.active_strategy.strategy_name,
             "risk_exposure": self.account_state.risk_exposure,
             "price_trend": self.market_data.get_price_trend(),
-            "data_age_valid": self.market_data.validate_data_freshness()
+            "data_age_valid": self.market_data.validate_data_freshness(),
         }
 
     def is_ready_for_decision(self) -> bool:
@@ -536,13 +556,17 @@ class StrategyAlert(BaseModel):
 
     strategy_id: str
     account_id: int
-    alert_type: Literal["performance_degradation", "risk_limit_exceeded", "consecutive_losses", "drawdown_limit"] = Field(
-        ..., description="Type of alert"
+    alert_type: Literal[
+        "performance_degradation", "risk_limit_exceeded", "consecutive_losses", "drawdown_limit"
+    ] = Field(..., description="Type of alert")
+    severity: Literal["low", "medium", "high", "critical"] = Field(
+        ..., description="Alert severity"
     )
-    severity: Literal["low", "medium", "high", "critical"] = Field(..., description="Alert severity")
     message: str = Field(..., description="Alert message")
     threshold_value: Optional[float] = Field(None, description="Threshold that triggered the alert")
-    current_value: Optional[float] = Field(None, description="Current value that exceeded threshold")
+    current_value: Optional[float] = Field(
+        None, description="Current value that exceeded threshold"
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow)
     acknowledged: bool = Field(default=False)
     acknowledged_by: Optional[str] = None

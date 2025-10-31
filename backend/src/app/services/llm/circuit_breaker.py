@@ -4,7 +4,6 @@ Circuit breaker pattern implementation for LLM API calls.
 Provides fault tolerance and prevents cascading failures.
 """
 
-import asyncio
 import time
 from enum import Enum
 from typing import Any, Callable, Optional
@@ -17,6 +16,7 @@ logger = get_logger(__name__)
 
 class CircuitState(Enum):
     """Circuit breaker states."""
+
     CLOSED = "closed"
     OPEN = "open"
     HALF_OPEN = "half_open"
@@ -97,9 +97,7 @@ class CircuitBreaker:
 
         if self.failure_count >= self.failure_threshold:
             self.state = CircuitState.OPEN
-            logger.warning(
-                f"Circuit breaker OPENED after {self.failure_count} failures"
-            )
+            logger.warning(f"Circuit breaker OPENED after {self.failure_count} failures")
 
     @property
     def is_open(self) -> bool:

@@ -7,49 +7,54 @@ comprehensive context for trading decisions.
 
 import asyncio
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime, timedelta, timezone
 from statistics import stdev
+from typing import Dict, List, Optional, Tuple
 
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc, func
 
 # Removed unused import
 from ...db.session import AsyncSessionLocal
 from ...models.account import Account
+from ...models.market_data import MarketData
 from ...models.position import Position
 from ...models.trade import Trade
-from ...models.market_data import MarketData
 from ...schemas.context import (
-    TradingContext,
-    MarketContext,
     AccountContext,
-    PositionSummary,
-    TradeHistory,
-    PerformanceMetrics,
-    RiskMetrics,
-    PricePoint,
     ContextValidationResult,
+    MarketContext,
+    PerformanceMetrics,
+    PositionSummary,
+    PricePoint,
+    RiskMetrics,
+    TradeHistory,
+    TradingContext,
 )
 from ...services.market_data.service import get_market_data_service
+from ...services.technical_analysis.exceptions import (
+    InsufficientDataError as TAInsufficientDataError,
+)
 from ...services.technical_analysis.service import TechnicalAnalysisService
-from ...services.technical_analysis.exceptions import InsufficientDataError as TAInsufficientDataError
 
 logger = logging.getLogger(__name__)
 
 
 class ContextBuilderError(Exception):
     """Base exception for context builder errors."""
+
     pass
 
 
 class InsufficientMarketDataError(ContextBuilderError):
     """Raised when insufficient market data is available."""
+
     pass
 
 
 class StaleDataError(ContextBuilderError):
     """Raised when data is too stale for reliable decisions."""
+
     pass
 
 
@@ -77,7 +82,7 @@ class ContextBuilderService:
         symbol: str,
         account_id: int,
         timeframes: Optional[List[str]] = None,
-        force_refresh: bool = False
+        force_refresh: bool = False,
     ) -> TradingContext:
         """
         Build complete trading context for decision making.
@@ -107,15 +112,21 @@ class ContextBuilderService:
 
             # Pre-validate data availability if not forcing refresh
             if not force_refresh:
-                availability_check = await self.validate_context_data_availability(symbol, account_id)
+                availability_check = await self.validate_context_data_availability(
+                    symbol, account_id
+                )
                 if not availability_check.is_valid:
                     # Try graceful degradation
-                    degraded_context = self.handle_data_unavailability(symbol, account_id, availability_check)
+                    degraded_context = self.handle_data_unavailability(
+                        symbol, account_id, availability_check
+                    )
                     if degraded_context:
                         logger.info(f"Using degraded context for {symbol}")
                         return degraded_context
                     else:
-                        raise InsufficientMarketDataError(f"Data unavailable: {availability_check.missing_data}")
+                        raise InsufficientMarketDataError(
+                            f"Data unavailable: {availability_check.missing_data}"
+                        )
 
             # Build context components concurrently
             market_context_task = self.get_market_context(symbol, timeframes, force_refresh)
@@ -126,7 +137,7 @@ class ContextBuilderService:
                 market_context_task,
                 account_context_task,
                 recent_trades_task,
-                return_exceptions=True
+                return_exceptions=True,
             )
 
             # Check for exceptions
@@ -143,7 +154,9 @@ class ContextBuilderService:
             if not validation_result.is_valid:
                 logger.warning(f"Context validation warnings: {validation_result.warnings}")
                 if validation_result.missing_data:
-                    raise InsufficientMarketDataError(f"Missing data: {validation_result.missing_data}")
+                    raise InsufficientMarketDataError(
+                        f"Missing data: {validation_result.missing_data}"
+                    )
                 if validation_result.stale_data:
                     raise StaleDataError(f"Stale data: {validation_result.stale_data}")
 
@@ -153,10 +166,12 @@ class ContextBuilderService:
                 market_data=market_context,
                 account_state=account_context,
                 recent_trades=recent_trades,
-                timestamp=datetime.now(timezone.utc)
+                timestamp=datetime.now(timezone.utc),
             )
 
-            logger.info(f"Successfully built trading context for {symbol} (data age: {validation_result.data_age_seconds/60:.1f}min)")
+            logger.info(
+                f"Successfully built trading context for {symbol} (data age: {validation_result.data_age_seconds/60:.1f}min)"
+            )
             return context
 
         except Exception as e:
@@ -164,10 +179,7 @@ class ContextBuilderService:
             raise ContextBuilderError(f"Context building failed: {str(e)}") from e
 
     async def get_market_context(
-        self,
-        symbol: str,
-        timeframes: List[str],
-        force_refresh: bool = False
+        self, symbol: str, timeframes: List[str], force_refresh: bool = False
     ) -> MarketContext:
         """
         Build market context with price data and technical indicators.
@@ -209,14 +221,16 @@ class ContextBuilderService:
             current_price = latest_candle.close
 
             # Calculate 24h price change
-            price_24h_ago = market_data[-24].close if len(market_data) >= 24 else market_data[0].close
+            price_24h_ago = (
+                market_data[-24].close if len(market_data) >= 24 else market_data[0].close
+            )
             price_change_24h = ((current_price - price_24h_ago) / price_24h_ago) * 100
 
             # Calculate volatility (standard deviation of returns)
             if len(market_data) >= 20:
                 returns = []
                 for i in range(1, min(21, len(market_data))):
-                    prev_price = market_data[-i-1].close
+                    prev_price = market_data[-i - 1].close
                     curr_price = market_data[-i].close
                     returns.append((curr_price - prev_price) / prev_price)
                 volatility = stdev(returns) * 100 if len(returns) > 1 else 0.0
@@ -225,11 +239,7 @@ class ContextBuilderService:
 
             # Build price history
             price_history = [
-                PricePoint(
-                    timestamp=candle.timestamp,
-                    price=candle.close,
-                    volume=candle.volume
-                )
+                PricePoint(timestamp=candle.timestamp, price=candle.close, volume=candle.volume)
                 for candle in market_data[-50:]  # Last 50 points
             ]
 
@@ -237,8 +247,12 @@ class ContextBuilderService:
             technical_indicators = None
             if len(market_data) >= self.MIN_CANDLES_FOR_INDICATORS:
                 try:
-                    technical_indicators = self.technical_analysis_service.calculate_all_indicators(market_data)
-                    logger.debug(f"Calculated technical indicators for {symbol} with {len(market_data)} candles")
+                    technical_indicators = self.technical_analysis_service.calculate_all_indicators(
+                        market_data
+                    )
+                    logger.debug(
+                        f"Calculated technical indicators for {symbol} with {len(market_data)} candles"
+                    )
                 except TAInsufficientDataError as e:
                     logger.warning(f"Insufficient data for technical indicators on {symbol}: {e}")
                     # Create partial indicators with available data
@@ -248,7 +262,9 @@ class ContextBuilderService:
                     # Graceful degradation - continue without indicators
                     technical_indicators = None
             else:
-                logger.warning(f"Not enough candles for technical indicators on {symbol}: {len(market_data)} < {self.MIN_CANDLES_FOR_INDICATORS}")
+                logger.warning(
+                    f"Not enough candles for technical indicators on {symbol}: {len(market_data)} < {self.MIN_CANDLES_FOR_INDICATORS}"
+                )
                 # Try to create basic indicators with available data
                 technical_indicators = self._create_partial_indicators(market_data)
 
@@ -258,7 +274,11 @@ class ContextBuilderService:
             open_interest = None
 
             # Calculate 24h volume
-            volume_24h = sum(candle.volume for candle in market_data[-24:]) if len(market_data) >= 24 else latest_candle.volume
+            volume_24h = (
+                sum(candle.volume for candle in market_data[-24:])
+                if len(market_data) >= 24
+                else latest_candle.volume
+            )
 
             market_context = MarketContext(
                 symbol=symbol,
@@ -270,7 +290,7 @@ class ContextBuilderService:
                 price_history=price_history,
                 volatility=volatility,
                 technical_indicators=technical_indicators,
-                data_freshness=latest_candle.timestamp
+                data_freshness=latest_candle.timestamp,
             )
 
             # Cache the result
@@ -279,9 +299,7 @@ class ContextBuilderService:
             return market_context
 
     async def get_account_context(
-        self,
-        account_id: int,
-        force_refresh: bool = False
+        self, account_id: int, force_refresh: bool = False
     ) -> AccountContext:
         """
         Build account context with balance, positions, and performance metrics.
@@ -314,10 +332,9 @@ class ContextBuilderService:
 
             # Get open positions with enhanced position awareness
             positions_result = await db.execute(
-                select(Position).where(
-                    Position.account_id == account_id,
-                    Position.status == "open"
-                ).order_by(desc(Position.created_at))
+                select(Position)
+                .where(Position.account_id == account_id, Position.status == "open")
+                .order_by(desc(Position.created_at))
             )
             positions = positions_result.scalars().all()
 
@@ -325,7 +342,9 @@ class ContextBuilderService:
             position_summaries = []
             for pos in positions:
                 # Calculate position age and performance
-                position_age_hours = (datetime.now(timezone.utc) - pos.created_at).total_seconds() / 3600
+                position_age_hours = (
+                    datetime.now(timezone.utc) - pos.created_at
+                ).total_seconds() / 3600
 
                 position_summary = PositionSummary(
                     symbol=pos.symbol,
@@ -337,7 +356,7 @@ class ContextBuilderService:
                     unrealized_pnl=pos.unrealized_pnl,
                     unrealized_pnl_percent=pos.unrealized_pnl_percent,
                     stop_loss=pos.stop_loss,
-                    take_profit=pos.take_profit
+                    take_profit=pos.take_profit,
                 )
                 position_summaries.append(position_summary)
 
@@ -366,19 +385,19 @@ class ContextBuilderService:
                 risk_exposure=risk_metrics.current_exposure,
                 max_position_size=account.max_position_size_usd,
                 active_strategy=None,  # TODO: implement strategy management
-                risk_metrics=risk_metrics
+                risk_metrics=risk_metrics,
             )
 
             # Cache the result
             self._cache[cache_key] = (datetime.now(timezone.utc), account_context)
 
-            logger.debug(f"Built account context: balance=${balance_usd:.2f}, positions={len(positions)}, pnl=${total_pnl:.2f}")
+            logger.debug(
+                f"Built account context: balance=${balance_usd:.2f}, positions={len(positions)}, pnl=${total_pnl:.2f}"
+            )
             return account_context
 
     async def get_recent_trades(
-        self,
-        account_id: int,
-        symbol: Optional[str] = None
+        self, account_id: int, symbol: Optional[str] = None
     ) -> List[TradeHistory]:
         """
         Get recent trade history for the account.
@@ -412,7 +431,7 @@ class ContextBuilderService:
                     total_cost=trade.total_cost,
                     pnl=trade.pnl,
                     pnl_percent=trade.pnl_percent,
-                    timestamp=trade.created_at
+                    timestamp=trade.created_at,
                 )
                 for trade in trades
             ]
@@ -420,9 +439,7 @@ class ContextBuilderService:
             return trade_history
 
     async def _calculate_performance_metrics(
-        self,
-        db: AsyncSession,
-        account_id: int
+        self, db: AsyncSession, account_id: int
     ) -> PerformanceMetrics:
         """Calculate performance metrics for the account."""
         # Get trades from the last 30 days
@@ -432,7 +449,7 @@ class ContextBuilderService:
             select(Trade).where(
                 Trade.account_id == account_id,
                 Trade.created_at >= cutoff_date,
-                Trade.pnl.isnot(None)
+                Trade.pnl.isnot(None),
             )
         )
         trades = result.scalars().all()
@@ -448,7 +465,7 @@ class ContextBuilderService:
                 max_drawdown=0.0,
                 trades_count=0,
                 winning_trades=0,
-                losing_trades=0
+                losing_trades=0,
             )
 
         # Calculate metrics
@@ -457,8 +474,14 @@ class ContextBuilderService:
         losing_trades = [trade for trade in trades if trade.pnl and trade.pnl < 0]
 
         win_rate = len(winning_trades) / len(trades) * 100 if trades else 0
-        avg_win = sum(trade.pnl for trade in winning_trades) / len(winning_trades) if winning_trades else 0
-        avg_loss = sum(trade.pnl for trade in losing_trades) / len(losing_trades) if losing_trades else 0
+        avg_win = (
+            sum(trade.pnl for trade in winning_trades) / len(winning_trades)
+            if winning_trades
+            else 0
+        )
+        avg_loss = (
+            sum(trade.pnl for trade in losing_trades) / len(losing_trades) if losing_trades else 0
+        )
 
         total_wins = sum(trade.pnl for trade in winning_trades) if winning_trades else 0
         total_losses = abs(sum(trade.pnl for trade in losing_trades)) if losing_trades else 1
@@ -489,14 +512,11 @@ class ContextBuilderService:
             max_drawdown=max_drawdown,
             trades_count=len(trades),
             winning_trades=len(winning_trades),
-            losing_trades=len(losing_trades)
+            losing_trades=len(losing_trades),
         )
 
     async def _calculate_risk_metrics(
-        self,
-        db: AsyncSession,
-        account: Account,
-        positions: List[Position]
+        self, db: AsyncSession, account: Account, positions: List[Position]
     ) -> RiskMetrics:
         """Calculate risk metrics for the account."""
         # Mock balance (TODO: implement actual balance fetching)
@@ -516,7 +536,7 @@ class ContextBuilderService:
             select(func.sum(Trade.pnl)).where(
                 Trade.account_id == account.id,
                 Trade.created_at >= today_start,
-                Trade.pnl.isnot(None)
+                Trade.pnl.isnot(None),
             )
         )
         daily_pnl = result.scalar() or 0.0
@@ -530,14 +550,11 @@ class ContextBuilderService:
             max_position_size=account.max_position_size_usd,
             daily_pnl=daily_pnl,
             daily_loss_limit=daily_loss_limit,
-            correlation_risk=0.0  # TODO: implement correlation calculation
+            correlation_risk=0.0,  # TODO: implement correlation calculation
         )
 
     async def _calculate_enhanced_risk_metrics(
-        self,
-        db: AsyncSession,
-        account: Account,
-        positions: List[Position]
+        self, db: AsyncSession, account: Account, positions: List[Position]
     ) -> RiskMetrics:
         """Calculate enhanced risk metrics with position awareness."""
         # Mock balance (TODO: implement actual balance fetching)
@@ -557,7 +574,7 @@ class ContextBuilderService:
             select(func.sum(Trade.pnl)).where(
                 Trade.account_id == account.id,
                 Trade.created_at >= today_start,
-                Trade.pnl.isnot(None)
+                Trade.pnl.isnot(None),
             )
         )
         realized_pnl = result.scalar() or 0.0
@@ -567,11 +584,15 @@ class ContextBuilderService:
         daily_pnl = realized_pnl + unrealized_pnl
 
         # Calculate dynamic daily loss limit based on account risk settings
-        daily_loss_limit = balance * account.risk_per_trade * 5  # 5x single trade risk as daily limit
+        daily_loss_limit = (
+            balance * account.risk_per_trade * 5
+        )  # 5x single trade risk as daily limit
 
         # Calculate correlation risk (simplified - based on symbol diversity)
         symbols = set(pos.symbol for pos in positions)
-        correlation_risk = max(0, (len(positions) - len(symbols)) / len(positions) * 100) if positions else 0
+        correlation_risk = (
+            max(0, (len(positions) - len(symbols)) / len(positions) * 100) if positions else 0
+        )
 
         return RiskMetrics(
             current_exposure=min(current_exposure, 100.0),  # Cap at 100%
@@ -579,14 +600,11 @@ class ContextBuilderService:
             max_position_size=account.max_position_size_usd,
             daily_pnl=daily_pnl,
             daily_loss_limit=daily_loss_limit,
-            correlation_risk=correlation_risk
+            correlation_risk=correlation_risk,
         )
 
     async def _calculate_account_balance(
-        self,
-        db: AsyncSession,
-        account_id: int,
-        positions: List[Position]
+        self, db: AsyncSession, account_id: int, positions: List[Position]
     ) -> float:
         """
         Calculate account balance with position awareness.
@@ -608,10 +626,7 @@ class ContextBuilderService:
 
         # Get realized PnL from closed trades
         result = await db.execute(
-            select(func.sum(Trade.pnl)).where(
-                Trade.account_id == account_id,
-                Trade.pnl.isnot(None)
-            )
+            select(func.sum(Trade.pnl)).where(Trade.account_id == account_id, Trade.pnl.isnot(None))
         )
         realized_pnl = result.scalar() or 0.0
 
@@ -621,9 +636,7 @@ class ContextBuilderService:
         return max(0, total_balance)  # Ensure non-negative balance
 
     def _validate_context(
-        self,
-        market_context: MarketContext,
-        account_context: AccountContext
+        self, market_context: MarketContext, account_context: AccountContext
     ) -> ContextValidationResult:
         """
         Validate the built context for completeness and freshness.
@@ -652,8 +665,7 @@ class ContextBuilderService:
         else:
             # Validate indicator freshness and completeness
             indicator_warnings = self._validate_indicator_freshness(
-                market_context.technical_indicators,
-                market_context.data_freshness
+                market_context.technical_indicators, market_context.data_freshness
             )
             warnings.extend(indicator_warnings)
 
@@ -674,7 +686,7 @@ class ContextBuilderService:
             missing_data=missing_data,
             stale_data=stale_data,
             warnings=warnings,
-            data_age_seconds=data_age
+            data_age_seconds=data_age,
         )
 
     def _create_partial_indicators(self, market_data: List[MarketData]) -> Optional[any]:
@@ -689,8 +701,12 @@ class ContextBuilderService:
         """
         try:
             from ...services.technical_analysis.schemas import (
-                TechnicalIndicators, EMAOutput, MACDOutput, RSIOutput,
-                BollingerBandsOutput, ATROutput
+                ATROutput,
+                BollingerBandsOutput,
+                EMAOutput,
+                MACDOutput,
+                RSIOutput,
+                TechnicalIndicators,
             )
 
             # Only create indicators if we have at least 20 candles
@@ -712,7 +728,7 @@ class ContextBuilderService:
                 gains = []
                 losses = []
                 for i in range(1, min(15, len(close_prices))):
-                    change = close_prices[i] - close_prices[i-1]
+                    change = close_prices[i] - close_prices[i - 1]
                     if change > 0:
                         gains.append(change)
                         losses.append(0)
@@ -741,14 +757,16 @@ class ContextBuilderService:
                 rsi=rsi,
                 bollinger_bands=bollinger_bands,
                 atr=atr,
-                candle_count=len(market_data)
+                candle_count=len(market_data),
             )
 
         except Exception as e:
             logger.error(f"Failed to create partial indicators: {e}")
             return None
 
-    def _validate_indicator_freshness(self, technical_indicators: any, data_timestamp: datetime) -> List[str]:
+    def _validate_indicator_freshness(
+        self, technical_indicators: any, data_timestamp: datetime
+    ) -> List[str]:
         """
         Validate freshness of technical indicators.
 
@@ -766,23 +784,24 @@ class ContextBuilderService:
             return warnings
 
         # Check if indicators have actual values
-        if hasattr(technical_indicators, 'ema') and technical_indicators.ema.ema is None:
+        if hasattr(technical_indicators, "ema") and technical_indicators.ema.ema is None:
             warnings.append("EMA indicator not available")
 
-        if hasattr(technical_indicators, 'rsi') and technical_indicators.rsi.rsi is None:
+        if hasattr(technical_indicators, "rsi") and technical_indicators.rsi.rsi is None:
             warnings.append("RSI indicator not available")
 
-        if hasattr(technical_indicators, 'macd'):
-            if (technical_indicators.macd.macd is None or
-                technical_indicators.macd.signal is None):
+        if hasattr(technical_indicators, "macd"):
+            if technical_indicators.macd.macd is None or technical_indicators.macd.signal is None:
                 warnings.append("MACD indicator incomplete")
 
-        if hasattr(technical_indicators, 'bollinger_bands'):
-            if (technical_indicators.bollinger_bands.upper is None or
-                technical_indicators.bollinger_bands.lower is None):
+        if hasattr(technical_indicators, "bollinger_bands"):
+            if (
+                technical_indicators.bollinger_bands.upper is None
+                or technical_indicators.bollinger_bands.lower is None
+            ):
                 warnings.append("Bollinger Bands indicator incomplete")
 
-        if hasattr(technical_indicators, 'atr') and technical_indicators.atr.atr is None:
+        if hasattr(technical_indicators, "atr") and technical_indicators.atr.atr is None:
             warnings.append("ATR indicator not available")
 
         # Check data age for indicator reliability
@@ -790,14 +809,14 @@ class ContextBuilderService:
         data_age_minutes = (now - data_timestamp).total_seconds() / 60
 
         if data_age_minutes > 30:
-            warnings.append(f"Technical indicators based on data {data_age_minutes:.1f} minutes old")
+            warnings.append(
+                f"Technical indicators based on data {data_age_minutes:.1f} minutes old"
+            )
 
         return warnings
 
     def validate_data_freshness(
-        self,
-        data_timestamp: datetime,
-        max_age_minutes: Optional[int] = None
+        self, data_timestamp: datetime, max_age_minutes: Optional[int] = None
     ) -> Tuple[bool, float]:
         """
         Validate data freshness.
@@ -862,7 +881,7 @@ class ContextBuilderService:
             "expired_entries": expired_entries,
             "active_entries": total_entries - expired_entries,
             "cache_ttl_seconds": self._cache_ttl_seconds,
-            "max_data_age_minutes": self.MAX_DATA_AGE_MINUTES
+            "max_data_age_minutes": self.MAX_DATA_AGE_MINUTES,
         }
 
     def cleanup_expired_cache(self):
@@ -881,9 +900,7 @@ class ContextBuilderService:
             logger.info(f"Cleaned up {len(expired_keys)} expired cache entries")
 
     async def validate_context_data_availability(
-        self,
-        symbol: str,
-        account_id: int
+        self, symbol: str, account_id: int
     ) -> ContextValidationResult:
         """
         Validate data availability before building context.
@@ -923,7 +940,9 @@ class ContextBuilderService:
                     is_fresh, age_minutes = self.validate_data_freshness(latest_candle.timestamp)
 
                     if not is_fresh:
-                        warnings.append(f"Market data for {symbol} is {age_minutes:.1f} minutes old")
+                        warnings.append(
+                            f"Market data for {symbol} is {age_minutes:.1f} minutes old"
+                        )
 
                 is_valid = len(missing_data) == 0
                 data_age_seconds = age_minutes * 60 if market_data else 0
@@ -933,7 +952,7 @@ class ContextBuilderService:
                     missing_data=missing_data,
                     stale_data=[],
                     warnings=warnings,
-                    data_age_seconds=data_age_seconds
+                    data_age_seconds=data_age_seconds,
                 )
 
         except Exception as e:
@@ -943,14 +962,11 @@ class ContextBuilderService:
                 missing_data=[f"Data validation failed: {str(e)}"],
                 stale_data=[],
                 warnings=[],
-                data_age_seconds=0
+                data_age_seconds=0,
             )
 
     def handle_data_unavailability(
-        self,
-        symbol: str,
-        account_id: int,
-        validation_result: ContextValidationResult
+        self, symbol: str, account_id: int, validation_result: ContextValidationResult
     ) -> Optional[TradingContext]:
         """
         Handle data unavailability with graceful degradation.

@@ -1,12 +1,12 @@
 import secrets
-from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from eth_account import Account
 from eth_account.messages import encode_defunct
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.account import User
 from ..models.challenge import Challenge
-from ..schemas.account import UserCreate
 
 
 async def get_challenge(db: AsyncSession, address: str) -> str:
@@ -35,7 +35,9 @@ async def get_or_create_user(db: AsyncSession, address: str) -> User:
     return user
 
 
-async def authenticate_user(db: AsyncSession, address: str, signature: str, challenge: str) -> User | None:
+async def authenticate_user(
+    db: AsyncSession, address: str, signature: str, challenge: str
+) -> User | None:
     """Verify signature for the challenge and return the user if valid."""
     result = await db.execute(select(Challenge).where(Challenge.challenge == challenge))
     db_challenge = result.scalar_one_or_none()

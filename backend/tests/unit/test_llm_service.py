@@ -6,30 +6,28 @@ error handling, and A/B testing functionality.
 """
 
 import json
-import pytest
-from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, Mock, patch
-from pydantic import ValidationError as PydanticValidationError
 
-from app.services.llm.llm_service import LLMService, get_llm_service
+import pytest
+
+from app.schemas.trading_decision import (
+    AccountContext,
+    DecisionResult,
+    MarketContext,
+    PerformanceMetrics,
+    RiskMetrics,
+    StrategyRiskParameters,
+    TechnicalIndicators,
+    TradingContext,
+    TradingDecision,
+    TradingStrategy,
+)
 from app.services.llm.llm_exceptions import (
     LLMAPIError,
     ModelSwitchError,
     ValidationError,
-    InsufficientDataError
 )
-from app.schemas.trading_decision import (
-    TradingDecision,
-    TradingContext,
-    MarketContext,
-    AccountContext,
-    TechnicalIndicators,
-    TradingStrategy,
-    StrategyRiskParameters,
-    DecisionResult,
-    RiskMetrics,
-    PerformanceMetrics
-)
+from app.services.llm.llm_service import LLMService, get_llm_service
 
 
 class TestLLMService:
@@ -67,7 +65,7 @@ class TestLLMService:
             "open": 47500.0,
             "change_percent": 2.5,
             "rsi": 65.0,
-            "macd": 100.0
+            "macd": 100.0,
         }
 
     @pytest.fixture
@@ -81,7 +79,7 @@ class TestLLMService:
             bb_upper=49000.0,
             bb_lower=46000.0,
             bb_middle=47500.0,
-            atr=500.0
+            atr=500.0,
         )
 
         market_context = MarketContext(
@@ -92,7 +90,7 @@ class TestLLMService:
             open_interest=50000000.0,
             volatility=0.02,
             technical_indicators=indicators,
-            price_history=[]
+            price_history=[],
         )
 
         risk_params = StrategyRiskParameters(
@@ -101,7 +99,7 @@ class TestLLMService:
             stop_loss_percentage=3.0,
             take_profit_ratio=2.0,
             max_leverage=3.0,
-            cooldown_period=300
+            cooldown_period=300,
         )
 
         strategy = TradingStrategy(
@@ -112,7 +110,7 @@ class TestLLMService:
             risk_parameters=risk_params,
             timeframe_preference=["4h", "1d"],
             max_positions=3,
-            is_active=True
+            is_active=True,
         )
 
         performance = PerformanceMetrics(
@@ -121,7 +119,7 @@ class TestLLMService:
             avg_win=150.0,
             avg_loss=-75.0,
             max_drawdown=-200.0,
-            sharpe_ratio=1.5
+            sharpe_ratio=1.5,
         )
 
         account_context = AccountContext(
@@ -133,14 +131,11 @@ class TestLLMService:
             risk_exposure=20.0,
             max_position_size=2000.0,
             active_strategy=strategy,
-            open_positions=[]
+            open_positions=[],
         )
 
         risk_metrics = RiskMetrics(
-            var_95=500.0,
-            max_drawdown=1000.0,
-            correlation_risk=15.0,
-            concentration_risk=25.0
+            var_95=500.0, max_drawdown=1000.0, correlation_risk=15.0, concentration_risk=25.0
         )
 
         return TradingContext(
@@ -148,7 +143,7 @@ class TestLLMService:
             account_id=1,
             market_data=market_context,
             account_state=account_context,
-            risk_metrics=risk_metrics
+            risk_metrics=risk_metrics,
         )
 
     def test_service_initialization(self, llm_service):
@@ -170,7 +165,9 @@ class TestLLMService:
         assert isinstance(service1, LLMService)
 
     @pytest.mark.asyncio
-    async def test_analyze_market_success(self, llm_service, mock_openai_client, sample_market_data):
+    async def test_analyze_market_success(
+        self, llm_service, mock_openai_client, sample_market_data
+    ):
         """Test successful market analysis."""
         llm_service._client = mock_openai_client
         result = await llm_service.analyze_market("BTCUSDT", sample_market_data)
@@ -190,7 +187,9 @@ class TestLLMService:
         assert "BTCUSDT" in call_args[1]["messages"][1]["content"]
 
     @pytest.mark.asyncio
-    async def test_analyze_market_with_additional_context(self, llm_service, mock_openai_client, sample_market_data):
+    async def test_analyze_market_with_additional_context(
+        self, llm_service, mock_openai_client, sample_market_data
+    ):
         """Test market analysis with additional context."""
         additional_context = "Market showing strong bullish momentum"
 
@@ -205,10 +204,14 @@ class TestLLMService:
         assert additional_context in prompt
 
     @pytest.mark.asyncio
-    async def test_get_trading_signal_json_response(self, llm_service, mock_openai_client, sample_market_data):
+    async def test_get_trading_signal_json_response(
+        self, llm_service, mock_openai_client, sample_market_data
+    ):
         """Test trading signal generation with JSON response."""
         json_response = '{"signal": "BUY", "confidence": 85, "reason": "Strong bullish momentum"}'
-        mock_openai_client.chat.completions.create.return_value.choices[0].message.content = json_response
+        mock_openai_client.chat.completions.create.return_value.choices[
+            0
+        ].message.content = json_response
 
         llm_service._client = mock_openai_client
         result = await llm_service.get_trading_signal("BTCUSDT", sample_market_data)
@@ -220,10 +223,14 @@ class TestLLMService:
         assert result["model"] == llm_service.model
 
     @pytest.mark.asyncio
-    async def test_get_trading_signal_text_response(self, llm_service, mock_openai_client, sample_market_data):
+    async def test_get_trading_signal_text_response(
+        self, llm_service, mock_openai_client, sample_market_data
+    ):
         """Test trading signal generation with non-JSON response."""
         text_response = "I recommend buying BTC due to strong momentum"
-        mock_openai_client.chat.completions.create.return_value.choices[0].message.content = text_response
+        mock_openai_client.chat.completions.create.return_value.choices[
+            0
+        ].message.content = text_response
 
         llm_service._client = mock_openai_client
         result = await llm_service.get_trading_signal("BTCUSDT", sample_market_data)
@@ -239,7 +246,7 @@ class TestLLMService:
         market_data_list = [
             {"symbol": "BTCUSDT", "close": 48000.0, "change_percent": 2.5},
             {"symbol": "ETHUSDT", "close": 3000.0, "change_percent": -1.2},
-            {"symbol": "SOLUSDT", "close": 100.0, "change_percent": 5.0}
+            {"symbol": "SOLUSDT", "close": 100.0, "change_percent": 5.0},
         ]
 
         llm_service._client = mock_openai_client
@@ -258,7 +265,9 @@ class TestLLMService:
         assert "SOLUSDT" in prompt
 
     @pytest.mark.asyncio
-    async def test_generate_trading_decision_success(self, llm_service, mock_openai_client, sample_trading_context):
+    async def test_generate_trading_decision_success(
+        self, llm_service, mock_openai_client, sample_trading_context
+    ):
         """Test successful trading decision generation."""
         decision_json = {
             "asset": "BTCUSDT",
@@ -269,13 +278,15 @@ class TestLLMService:
             "exit_plan": "Take profit at resistance",
             "rationale": "Strong bullish momentum with good risk/reward",
             "confidence": 85,
-            "risk_level": "medium"
+            "risk_level": "medium",
         }
 
-        mock_openai_client.chat.completions.create.return_value.choices[0].message.content = json.dumps(decision_json)
+        mock_openai_client.chat.completions.create.return_value.choices[
+            0
+        ].message.content = json.dumps(decision_json)
 
         llm_service._client = mock_openai_client
-        with patch.object(llm_service.metrics_tracker, 'record_api_call'):
+        with patch.object(llm_service.metrics_tracker, "record_api_call"):
             result = await llm_service.generate_trading_decision("BTCUSDT", sample_trading_context)
 
             assert isinstance(result, DecisionResult)
@@ -291,7 +302,9 @@ class TestLLMService:
             assert decision.confidence == 85
 
     @pytest.mark.asyncio
-    async def test_generate_trading_decision_insufficient_context(self, llm_service, sample_trading_context):
+    async def test_generate_trading_decision_insufficient_context(
+        self, llm_service, sample_trading_context
+    ):
         """Test decision generation with insufficient context."""
         # Make context insufficient
         sample_trading_context.market_data.current_price = None
@@ -308,12 +321,14 @@ class TestLLMService:
         assert result.decision.allocation_usd == 0.0
 
     @pytest.mark.asyncio
-    async def test_generate_trading_decision_api_failure(self, llm_service, mock_openai_client, sample_trading_context):
+    async def test_generate_trading_decision_api_failure(
+        self, llm_service, mock_openai_client, sample_trading_context
+    ):
         """Test decision generation with API failure."""
         mock_openai_client.chat.completions.create.side_effect = Exception("API Error")
 
         llm_service._client = mock_openai_client
-        with patch.object(llm_service.metrics_tracker, 'record_api_call'):
+        with patch.object(llm_service.metrics_tracker, "record_api_call"):
             result = await llm_service.generate_trading_decision("BTCUSDT", sample_trading_context)
 
             assert isinstance(result, DecisionResult)
@@ -325,12 +340,16 @@ class TestLLMService:
             assert result.decision.confidence == 0
 
     @pytest.mark.asyncio
-    async def test_generate_trading_decision_invalid_json(self, llm_service, mock_openai_client, sample_trading_context):
+    async def test_generate_trading_decision_invalid_json(
+        self, llm_service, mock_openai_client, sample_trading_context
+    ):
         """Test decision generation with invalid JSON response."""
-        mock_openai_client.chat.completions.create.return_value.choices[0].message.content = "Invalid JSON response"
+        mock_openai_client.chat.completions.create.return_value.choices[
+            0
+        ].message.content = "Invalid JSON response"
 
         llm_service._client = mock_openai_client
-        with patch.object(llm_service.metrics_tracker, 'record_api_call'):
+        with patch.object(llm_service.metrics_tracker, "record_api_call"):
             result = await llm_service.generate_trading_decision("BTCUSDT", sample_trading_context)
 
             assert isinstance(result, DecisionResult)
@@ -379,11 +398,9 @@ class TestLLMService:
     @pytest.mark.asyncio
     async def test_validate_api_health(self, llm_service):
         """Test API health validation."""
-        with patch.object(llm_service.metrics_tracker, 'get_health_status') as mock_health:
+        with patch.object(llm_service.metrics_tracker, "get_health_status") as mock_health:
             mock_health.return_value = Mock(
-                is_healthy=True,
-                consecutive_failures=0,
-                circuit_breaker_open=False
+                is_healthy=True, consecutive_failures=0, circuit_breaker_open=False
             )
 
             health_status = await llm_service.validate_api_health()
@@ -395,11 +412,11 @@ class TestLLMService:
     @pytest.mark.asyncio
     async def test_validate_api_health_with_failures(self, llm_service, mock_openai_client):
         """Test API health validation with consecutive failures."""
-        with patch.object(llm_service.metrics_tracker, 'get_health_status') as mock_health:
+        with patch.object(llm_service.metrics_tracker, "get_health_status") as mock_health:
             mock_health.return_value = Mock(
                 is_healthy=True,
                 consecutive_failures=5,  # High failure count
-                circuit_breaker_open=False
+                circuit_breaker_open=False,
             )
 
             # Mock failed connection test
@@ -418,7 +435,9 @@ class TestLLMService:
         mock_metrics.failed_requests = 5
         mock_metrics.avg_response_time_ms = 250.0
 
-        with patch.object(llm_service.metrics_tracker, 'get_usage_metrics', return_value=mock_metrics):
+        with patch.object(
+            llm_service.metrics_tracker, "get_usage_metrics", return_value=mock_metrics
+        ):
             metrics = llm_service.get_usage_metrics(24)
 
             assert metrics.total_requests == 100
@@ -429,29 +448,33 @@ class TestLLMService:
     def test_ab_testing_methods(self, llm_service):
         """Test A/B testing functionality."""
         # Test starting A/B test
-        with patch.object(llm_service.ab_test_manager, 'start_ab_test', return_value=True):
+        with patch.object(llm_service.ab_test_manager, "start_ab_test", return_value=True):
             result = llm_service.start_ab_test("test1", "gpt-4", "grok-beta", 0.5, 24)
             assert result is True
 
         # Test getting A/B test model
-        with patch.object(llm_service.ab_test_manager, 'get_model_for_decision', return_value="gpt-4"):
+        with patch.object(
+            llm_service.ab_test_manager, "get_model_for_decision", return_value="gpt-4"
+        ):
             model = llm_service.get_ab_test_model("test1", 123)
             assert model == "gpt-4"
 
         # Test ending A/B test
         mock_result = Mock()
-        with patch.object(llm_service.ab_test_manager, 'end_ab_test', return_value=mock_result):
+        with patch.object(llm_service.ab_test_manager, "end_ab_test", return_value=mock_result):
             result = llm_service.end_ab_test("test1")
             assert result is mock_result
 
         # Test getting active tests
         mock_tests = {"test1": Mock()}
-        with patch.object(llm_service.ab_test_manager, 'get_active_tests', return_value=mock_tests):
+        with patch.object(llm_service.ab_test_manager, "get_active_tests", return_value=mock_tests):
             tests = llm_service.get_active_ab_tests()
             assert tests == mock_tests
 
     @pytest.mark.asyncio
-    async def test_generate_decision_with_ab_test(self, llm_service, mock_openai_client, sample_trading_context):
+    async def test_generate_decision_with_ab_test(
+        self, llm_service, mock_openai_client, sample_trading_context
+    ):
         """Test decision generation with A/B testing."""
         decision_json = {
             "asset": "BTCUSDT",
@@ -460,19 +483,19 @@ class TestLLMService:
             "exit_plan": "Test exit plan",
             "rationale": "Test rationale",
             "confidence": 85,
-            "risk_level": "medium"
+            "risk_level": "medium",
         }
 
-        mock_openai_client.chat.completions.create.return_value.choices[0].message.content = json.dumps(decision_json)
+        mock_openai_client.chat.completions.create.return_value.choices[
+            0
+        ].message.content = json.dumps(decision_json)
 
         llm_service._client = mock_openai_client
-        with patch.object(llm_service, 'get_ab_test_model', return_value="gpt-4"):
-            with patch.object(llm_service.ab_test_manager, 'record_decision_performance'):
-                with patch.object(llm_service.metrics_tracker, 'record_api_call'):
+        with patch.object(llm_service, "get_ab_test_model", return_value="gpt-4"):
+            with patch.object(llm_service.ab_test_manager, "record_decision_performance"):
+                with patch.object(llm_service.metrics_tracker, "record_api_call"):
                     result = await llm_service.generate_trading_decision(
-                        "BTCUSDT",
-                        sample_trading_context,
-                        ab_test_name="test1"
+                        "BTCUSDT", sample_trading_context, ab_test_name="test1"
                     )
 
                     assert isinstance(result, DecisionResult)
@@ -502,10 +525,16 @@ class TestLLMService:
         # The simple template doesn't include detailed indicators, just the formatted template
         assert len(prompt) >= 49  # Should be a substantial prompt
 
-    def test_build_decision_prompt_with_strategy_override(self, llm_service, sample_trading_context):
+    def test_build_decision_prompt_with_strategy_override(
+        self, llm_service, sample_trading_context
+    ):
         """Test decision prompt building with strategy override."""
-        with patch.object(llm_service, '_get_strategy_template', return_value="Aggressive strategy: {symbol}"):
-            prompt = llm_service._build_decision_prompt("BTCUSDT", sample_trading_context, "aggressive")
+        with patch.object(
+            llm_service, "_get_strategy_template", return_value="Aggressive strategy: {symbol}"
+        ):
+            prompt = llm_service._build_decision_prompt(
+                "BTCUSDT", sample_trading_context, "aggressive"
+            )
 
             assert "Aggressive strategy: BTCUSDT" in prompt
 
@@ -518,7 +547,7 @@ class TestLLMService:
             "exit_plan": "Take profit at resistance",
             "rationale": "Strong momentum",
             "confidence": 85,
-            "risk_level": "medium"
+            "risk_level": "medium",
         }
 
         response_data = {"content": json.dumps(decision_json)}
@@ -546,7 +575,7 @@ class TestLLMService:
             "exit_plan": "Take profit at resistance",
             "rationale": "Strong momentum",
             "confidence": 85,
-            "risk_level": "medium"
+            "risk_level": "medium",
         }
 
         response_data = {"content": json.dumps(decision_json)}
@@ -557,11 +586,11 @@ class TestLLMService:
 
     def test_extract_json_from_text(self, llm_service):
         """Test extracting JSON from text response."""
-        text_with_json = '''
+        text_with_json = """
         Here is my analysis:
         {"asset": "BTCUSDT", "action": "buy", "allocation_usd": 1000.0, "exit_plan": "test", "rationale": "test", "confidence": 85, "risk_level": "medium"}
         That's my recommendation.
-        '''
+        """
 
         result = llm_service._extract_json_from_text(text_with_json)
 
@@ -630,8 +659,8 @@ class TestLLMService:
         mock_openai_client.chat.completions.create.return_value = mock_response
 
         llm_service._client = mock_openai_client
-        with patch.object(llm_service.metrics_tracker, 'record_api_call'):
-            with patch.object(llm_service.metrics_tracker, '_calculate_cost', return_value=0.01):
+        with patch.object(llm_service.metrics_tracker, "record_api_call"):
+            with patch.object(llm_service.metrics_tracker, "_calculate_cost", return_value=0.01):
                 result = await llm_service._call_llm_for_decision("Test prompt")
 
                 assert result["content"] == "Test response"
@@ -647,13 +676,13 @@ class TestLLMService:
             Exception("Second failure"),
             Mock(
                 choices=[Mock(message=Mock(content="Success"))],
-                usage=Mock(prompt_tokens=100, completion_tokens=50)
-            )
+                usage=Mock(prompt_tokens=100, completion_tokens=50),
+            ),
         ]
 
         llm_service._client = mock_openai_client
-        with patch.object(llm_service.metrics_tracker, 'record_api_call'):
-            with patch.object(llm_service.metrics_tracker, '_calculate_cost', return_value=0.01):
+        with patch.object(llm_service.metrics_tracker, "record_api_call"):
+            with patch.object(llm_service.metrics_tracker, "_calculate_cost", return_value=0.01):
                 result = await llm_service._call_llm_for_decision("Test prompt")
 
                 assert result["content"] == "Success"
@@ -661,12 +690,14 @@ class TestLLMService:
                 assert mock_openai_client.chat.completions.create.call_count == 3
 
     @pytest.mark.asyncio
-    async def test_call_llm_for_decision_max_retries_exceeded(self, llm_service, mock_openai_client):
+    async def test_call_llm_for_decision_max_retries_exceeded(
+        self, llm_service, mock_openai_client
+    ):
         """Test LLM API call when max retries are exceeded."""
         mock_openai_client.chat.completions.create.side_effect = Exception("Persistent failure")
 
         llm_service._client = mock_openai_client
-        with patch.object(llm_service.metrics_tracker, 'record_api_call'):
+        with patch.object(llm_service.metrics_tracker, "record_api_call"):
             with pytest.raises(LLMAPIError, match="failed after 3 attempts"):
                 await llm_service._call_llm_for_decision("Test prompt")
 
@@ -711,7 +742,9 @@ class TestLLMService:
 
         # Test analysis prompt with additional context
         context = "Strong bullish momentum"
-        analysis_prompt_with_context = llm_service._build_analysis_prompt("BTCUSDT", sample_market_data, context)
+        analysis_prompt_with_context = llm_service._build_analysis_prompt(
+            "BTCUSDT", sample_market_data, context
+        )
         assert context in analysis_prompt_with_context
 
         # Test signal prompt
@@ -722,11 +755,16 @@ class TestLLMService:
 
         # Test signal prompt with account info
         account_info = {"balance": 10000.0}
-        signal_prompt_with_account = llm_service._build_signal_prompt("BTCUSDT", sample_market_data, account_info)
+        signal_prompt_with_account = llm_service._build_signal_prompt(
+            "BTCUSDT", sample_market_data, account_info
+        )
         assert "10000.00" in signal_prompt_with_account
 
         # Test summary prompt
-        market_data_list = [sample_market_data, {"symbol": "ETHUSDT", "close": 3000.0, "change_percent": -1.0}]
+        market_data_list = [
+            sample_market_data,
+            {"symbol": "ETHUSDT", "close": 3000.0, "change_percent": -1.0},
+        ]
         summary_prompt = llm_service._build_summary_prompt(market_data_list)
         assert "BTCUSDT" in summary_prompt
         assert "ETHUSDT" in summary_prompt

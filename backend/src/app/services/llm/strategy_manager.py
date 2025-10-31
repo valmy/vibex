@@ -7,15 +7,12 @@ strategy assignment, switching, and performance tracking.
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ...core.exceptions import ConfigurationError, ValidationError
 from ...schemas.trading_decision import (
-    AccountContext,
     StrategyAlert,
     StrategyAssignment,
     StrategyComparison,
@@ -46,7 +43,9 @@ class StrategyManager:
         self._strategies: Dict[str, TradingStrategy] = {}
         self._strategy_assignments: Dict[int, str] = {}  # account_id -> strategy_id
         self._performance_cache: Dict[str, StrategyPerformance] = {}
-        self._metrics_cache: Dict[Tuple[str, int], StrategyMetrics] = {}  # (strategy_id, account_id)
+        self._metrics_cache: Dict[
+            Tuple[str, int], StrategyMetrics
+        ] = {}  # (strategy_id, account_id)
         self._alerts: List[StrategyAlert] = []
 
         # Initialize predefined strategies
@@ -67,12 +66,12 @@ class StrategyManager:
                 stop_loss_percentage=3.0,
                 take_profit_ratio=2.0,
                 max_leverage=2.0,
-                cooldown_period=600  # 10 minutes
+                cooldown_period=600,  # 10 minutes
             ),
             timeframe_preference=["4h", "1d"],
             max_positions=2,
             position_sizing="percentage",
-            is_active=True
+            is_active=True,
         )
 
         # Aggressive Strategy
@@ -87,12 +86,12 @@ class StrategyManager:
                 stop_loss_percentage=5.0,
                 take_profit_ratio=3.0,
                 max_leverage=5.0,
-                cooldown_period=300  # 5 minutes
+                cooldown_period=300,  # 5 minutes
             ),
             timeframe_preference=["1h", "4h"],
             max_positions=5,
             position_sizing="volatility_adjusted",
-            is_active=True
+            is_active=True,
         )
 
         # Scalping Strategy
@@ -107,12 +106,12 @@ class StrategyManager:
                 stop_loss_percentage=1.5,
                 take_profit_ratio=1.5,
                 max_leverage=3.0,
-                cooldown_period=60  # 1 minute
+                cooldown_period=60,  # 1 minute
             ),
             timeframe_preference=["1m", "5m", "15m"],
             max_positions=3,
             position_sizing="fixed",
-            is_active=True
+            is_active=True,
         )
 
         # Swing Strategy
@@ -127,12 +126,12 @@ class StrategyManager:
                 stop_loss_percentage=4.0,
                 take_profit_ratio=2.5,
                 max_leverage=3.0,
-                cooldown_period=1800  # 30 minutes
+                cooldown_period=1800,  # 30 minutes
             ),
             timeframe_preference=["4h", "1d", "3d"],
             max_positions=3,
             position_sizing="kelly",
-            is_active=True
+            is_active=True,
         )
 
         # DCA Strategy
@@ -147,12 +146,12 @@ class StrategyManager:
                 stop_loss_percentage=10.0,  # Wider stops for DCA
                 take_profit_ratio=1.8,
                 max_leverage=1.5,
-                cooldown_period=3600  # 1 hour
+                cooldown_period=3600,  # 1 hour
             ),
             timeframe_preference=["1d", "3d", "1w"],
             max_positions=2,
             position_sizing="fixed",
-            is_active=True
+            is_active=True,
         )
 
         # Store predefined strategies
@@ -161,7 +160,7 @@ class StrategyManager:
             "aggressive": aggressive_strategy,
             "scalping": scalping_strategy,
             "swing": swing_strategy,
-            "dca": dca_strategy
+            "dca": dca_strategy,
         }
 
         logger.info(f"Initialized {len(self._strategies)} predefined strategies")
@@ -355,7 +354,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
             ValidationError: If strategy configuration is invalid
         """
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path, "r") as f:
                 strategy_data = json.load(f)
 
             # Validate and create strategy
@@ -393,7 +392,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
 
             # Convert strategy to dict and save
             strategy_data = strategy.model_dump()
-            with open(file_path, 'w') as f:
+            with open(file_path, "w") as f:
                 json.dump(strategy_data, f, indent=2, default=str)
 
             logger.info(f"Saved strategy '{strategy.strategy_id}' to {file_path}")
@@ -409,7 +408,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         risk_parameters: StrategyRiskParameters,
         timeframe_preference: List[str] = None,
         max_positions: int = 3,
-        position_sizing: str = "percentage"
+        position_sizing: str = "percentage",
     ) -> TradingStrategy:
         """
         Create a custom trading strategy.
@@ -444,13 +443,15 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
             timeframe_preference=timeframe_preference,
             max_positions=max_positions,
             position_sizing=position_sizing,
-            is_active=True
+            is_active=True,
         )
 
         # Validate strategy constraints
         validation_errors = custom_strategy.validate_strategy_constraints()
         if validation_errors:
-            raise ValidationError(f"Custom strategy validation failed: {', '.join(validation_errors)}")
+            raise ValidationError(
+                f"Custom strategy validation failed: {', '.join(validation_errors)}"
+            )
 
         # Store the strategy
         self._strategies[strategy_id] = custom_strategy
@@ -501,7 +502,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         account_id: int,
         strategy_id: str,
         assigned_by: Optional[str] = None,
-        switch_reason: Optional[str] = None
+        switch_reason: Optional[str] = None,
     ) -> StrategyAssignment:
         """
         Assign a strategy to an account.
@@ -534,7 +535,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
             strategy_id=strategy_id,
             assigned_by=assigned_by,
             previous_strategy_id=previous_strategy_id,
-            switch_reason=switch_reason
+            switch_reason=switch_reason,
         )
 
         # Update assignment mapping
@@ -567,7 +568,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         account_id: int,
         new_strategy_id: str,
         switch_reason: str,
-        switched_by: Optional[str] = None
+        switched_by: Optional[str] = None,
     ) -> StrategyAssignment:
         """
         Switch an account's strategy.
@@ -587,7 +588,9 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         current_strategy_id = self._strategy_assignments.get(account_id)
 
         if current_strategy_id == new_strategy_id:
-            raise ValidationError(f"Account {account_id} is already using strategy '{new_strategy_id}'")
+            raise ValidationError(
+                f"Account {account_id} is already using strategy '{new_strategy_id}'"
+            )
 
         # Validate the switch (could add business rules here)
         await self._validate_strategy_switch(account_id, current_strategy_id, new_strategy_id)
@@ -597,18 +600,17 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
             account_id=account_id,
             strategy_id=new_strategy_id,
             assigned_by=switched_by,
-            switch_reason=switch_reason
+            switch_reason=switch_reason,
         )
 
-        logger.info(f"Switched account {account_id} from '{current_strategy_id}' to '{new_strategy_id}': {switch_reason}")
+        logger.info(
+            f"Switched account {account_id} from '{current_strategy_id}' to '{new_strategy_id}': {switch_reason}"
+        )
 
         return assignment
 
     async def _validate_strategy_switch(
-        self,
-        account_id: int,
-        current_strategy_id: Optional[str],
-        new_strategy_id: str
+        self, account_id: int, current_strategy_id: Optional[str], new_strategy_id: str
     ) -> None:
         """
         Validate a strategy switch operation.
@@ -632,7 +634,9 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         # Add business rules for strategy switching
         # For example, prevent switching from conservative to aggressive without approval
         if current_strategy_id == "conservative" and new_strategy_id == "aggressive":
-            logger.warning(f"Switching account {account_id} from conservative to aggressive strategy")
+            logger.warning(
+                f"Switching account {account_id} from conservative to aggressive strategy"
+            )
 
         # Could add more validation rules here:
         # - Check account balance requirements
@@ -694,7 +698,8 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
             List[int]: List of account IDs using the strategy
         """
         return [
-            account_id for account_id, assigned_strategy_id in self._strategy_assignments.items()
+            account_id
+            for account_id, assigned_strategy_id in self._strategy_assignments.items()
             if assigned_strategy_id == strategy_id
         ]
 
@@ -717,7 +722,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
             await self.assign_strategy_to_account(
                 account_id=account_id,
                 strategy_id="conservative",
-                switch_reason="Auto-assigned due to missing strategy"
+                switch_reason="Auto-assigned due to missing strategy",
             )
             conflicts.append("Auto-assigned conservative strategy")
             return conflicts
@@ -729,7 +734,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
             await self.assign_strategy_to_account(
                 account_id=account_id,
                 strategy_id="conservative",
-                switch_reason="Auto-assigned due to missing strategy"
+                switch_reason="Auto-assigned due to missing strategy",
             )
             conflicts.append("Auto-assigned conservative strategy")
 
@@ -739,7 +744,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
             await self.switch_account_strategy(
                 account_id=account_id,
                 new_strategy_id="conservative",
-                switch_reason="Switched due to inactive strategy"
+                switch_reason="Switched due to inactive strategy",
             )
             conflicts.append("Switched to conservative strategy")
 
@@ -754,7 +759,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         unrealized_pnl: float,
         realized_pnl_today: float,
         trades_today: int,
-        last_trade_time: Optional[datetime] = None
+        last_trade_time: Optional[datetime] = None,
     ) -> StrategyMetrics:
         """
         Update real-time metrics for a strategy.
@@ -778,13 +783,17 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
 
         # Calculate risk utilization
         max_risk = strategy.risk_parameters.max_daily_loss
-        risk_utilization = min(100.0, abs(realized_pnl_today) / max_risk * 100) if max_risk > 0 else 0.0
+        risk_utilization = (
+            min(100.0, abs(realized_pnl_today) / max_risk * 100) if max_risk > 0 else 0.0
+        )
 
         # Calculate cooldown remaining
         cooldown_remaining = 0
         if last_trade_time:
-            time_since_trade = (datetime.utcnow() - last_trade_time).total_seconds()
-            cooldown_remaining = max(0, strategy.risk_parameters.cooldown_period - int(time_since_trade))
+            time_since_trade = (datetime.now(timezone.utc) - last_trade_time).total_seconds()
+            cooldown_remaining = max(
+                0, strategy.risk_parameters.cooldown_period - int(time_since_trade)
+            )
 
         metrics = StrategyMetrics(
             strategy_id=strategy_id,
@@ -796,7 +805,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
             trades_today=trades_today,
             last_trade_time=last_trade_time,
             risk_utilization=risk_utilization,
-            cooldown_remaining=cooldown_remaining
+            cooldown_remaining=cooldown_remaining,
         )
 
         # Cache the metrics
@@ -807,7 +816,9 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
 
         return metrics
 
-    async def get_strategy_metrics(self, strategy_id: str, account_id: int) -> Optional[StrategyMetrics]:
+    async def get_strategy_metrics(
+        self, strategy_id: str, account_id: int
+    ) -> Optional[StrategyMetrics]:
         """
         Get current metrics for a strategy.
 
@@ -825,7 +836,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         strategy_id: str,
         start_date: datetime,
         end_date: datetime,
-        trades_data: List[dict]  # Trade data from database
+        trades_data: List[dict],  # Trade data from database
     ) -> StrategyPerformance:
         """
         Calculate comprehensive performance metrics for a strategy.
@@ -858,18 +869,18 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
                 total_volume_traded=0.0,
                 start_date=start_date,
                 end_date=end_date,
-                period_days=(end_date - start_date).days
+                period_days=(end_date - start_date).days,
             )
 
         # Calculate basic metrics
         total_trades = len(trades_data)
-        winning_trades = sum(1 for trade in trades_data if trade.get('pnl', 0) > 0)
-        losing_trades = sum(1 for trade in trades_data if trade.get('pnl', 0) < 0)
+        winning_trades = sum(1 for trade in trades_data if trade.get("pnl", 0) > 0)
+        losing_trades = sum(1 for trade in trades_data if trade.get("pnl", 0) < 0)
 
         win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0.0
 
         # P&L calculations
-        pnls = [trade.get('pnl', 0) for trade in trades_data]
+        pnls = [trade.get("pnl", 0) for trade in trades_data]
         total_pnl = sum(pnls)
 
         winning_pnls = [pnl for pnl in pnls if pnl > 0]
@@ -883,7 +894,11 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         # Calculate profit factor
         gross_profit = sum(winning_pnls) if winning_pnls else 0.0
         gross_loss = abs(sum(losing_pnls)) if losing_pnls else 0.0
-        profit_factor = gross_profit / gross_loss if gross_loss > 0 else (gross_profit if gross_profit > 0 else 1.0)
+        profit_factor = (
+            gross_profit / gross_loss
+            if gross_loss > 0
+            else (gross_profit if gross_profit > 0 else 1.0)
+        )
 
         # Calculate max drawdown
         max_drawdown = self._calculate_max_drawdown(pnls)
@@ -892,6 +907,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         sharpe_ratio = None
         if len(pnls) > 1:
             import statistics
+
             avg_return = statistics.mean(pnls)
             std_return = statistics.stdev(pnls)
             sharpe_ratio = avg_return / std_return if std_return > 0 else 0.0
@@ -900,6 +916,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         sortino_ratio = None
         if losing_pnls:
             import statistics
+
             avg_return = sum(pnls) / len(pnls)
             downside_deviation = statistics.stdev(losing_pnls)
             sortino_ratio = avg_return / downside_deviation if downside_deviation > 0 else 0.0
@@ -907,20 +924,20 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         # Calculate average trade duration
         durations = []
         for trade in trades_data:
-            if 'entry_time' in trade and 'exit_time' in trade:
-                entry_time = trade['entry_time']
-                exit_time = trade['exit_time']
+            if "entry_time" in trade and "exit_time" in trade:
+                entry_time = trade["entry_time"]
+                exit_time = trade["exit_time"]
                 if isinstance(entry_time, str):
-                    entry_time = datetime.fromisoformat(entry_time.replace('Z', '+00:00'))
+                    entry_time = datetime.fromisoformat(entry_time.replace("Z", "+00:00"))
                 if isinstance(exit_time, str):
-                    exit_time = datetime.fromisoformat(exit_time.replace('Z', '+00:00'))
+                    exit_time = datetime.fromisoformat(exit_time.replace("Z", "+00:00"))
                 duration = (exit_time - entry_time).total_seconds() / 3600  # hours
                 durations.append(duration)
 
         avg_trade_duration_hours = sum(durations) / len(durations) if durations else 0.0
 
         # Calculate total volume
-        total_volume_traded = sum(trade.get('volume', 0) for trade in trades_data)
+        total_volume_traded = sum(trade.get("volume", 0) for trade in trades_data)
 
         performance = StrategyPerformance(
             strategy_id=strategy_id,
@@ -941,7 +958,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
             total_volume_traded=total_volume_traded,
             start_date=start_date,
             end_date=end_date,
-            period_days=(end_date - start_date).days
+            period_days=(end_date - start_date).days,
         )
 
         # Cache the performance
@@ -969,9 +986,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         return max_drawdown
 
     async def get_strategy_performance(
-        self,
-        strategy_id: str,
-        timeframe: str = "7d"
+        self, strategy_id: str, timeframe: str = "7d"
     ) -> Optional[StrategyPerformance]:
         """
         Get cached performance metrics for a strategy.
@@ -989,7 +1004,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         self,
         strategy_ids: List[str],
         comparison_period_days: int = 30,
-        ranking_criteria: str = "sharpe_ratio"
+        ranking_criteria: str = "sharpe_ratio",
     ) -> StrategyComparison:
         """
         Compare performance of multiple strategies.
@@ -1022,14 +1037,14 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         else:  # sharpe_ratio
             best_strategy = max(
                 strategies_performance,
-                key=lambda x: x.sharpe_ratio if x.sharpe_ratio is not None else -999
+                key=lambda x: x.sharpe_ratio if x.sharpe_ratio is not None else -999,
             )
 
         return StrategyComparison(
             strategies=strategies_performance,
             comparison_period_days=comparison_period_days,
             best_performing_strategy=best_strategy.strategy_id,
-            ranking_criteria=ranking_criteria
+            ranking_criteria=ranking_criteria,
         )
 
     async def get_strategy_recommendations(self, account_id: int) -> List[str]:
@@ -1046,7 +1061,9 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         current_strategy_id = self._strategy_assignments.get(account_id)
 
         if not current_strategy_id:
-            recommendations.append("No strategy assigned. Consider starting with 'conservative' strategy.")
+            recommendations.append(
+                "No strategy assigned. Consider starting with 'conservative' strategy."
+            )
             return recommendations
 
         current_performance = self._performance_cache.get(current_strategy_id)
@@ -1056,23 +1073,35 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
 
         # Check if current strategy needs attention
         if current_performance.needs_attention():
-            recommendations.append(f"Current strategy '{current_strategy_id}' shows concerning performance patterns.")
+            recommendations.append(
+                f"Current strategy '{current_strategy_id}' shows concerning performance patterns."
+            )
 
             # Suggest alternative strategies
             if current_performance.win_rate < 30:
-                recommendations.append("Consider switching to 'conservative' strategy for better win rate.")
+                recommendations.append(
+                    "Consider switching to 'conservative' strategy for better win rate."
+                )
 
             if current_performance.max_drawdown < -1000:
-                recommendations.append("Consider reducing position sizes or switching to lower-risk strategy.")
+                recommendations.append(
+                    "Consider reducing position sizes or switching to lower-risk strategy."
+                )
 
         # Performance-based recommendations
         grade = current_performance.get_performance_grade()
         if grade in ["A+", "A"]:
-            recommendations.append(f"Excellent performance (Grade: {grade}). Continue with current strategy.")
+            recommendations.append(
+                f"Excellent performance (Grade: {grade}). Continue with current strategy."
+            )
         elif grade in ["B+", "B"]:
-            recommendations.append(f"Good performance (Grade: {grade}). Consider minor optimizations.")
+            recommendations.append(
+                f"Good performance (Grade: {grade}). Consider minor optimizations."
+            )
         elif grade in ["C+", "C"]:
-            recommendations.append(f"Average performance (Grade: {grade}). Review strategy parameters.")
+            recommendations.append(
+                f"Average performance (Grade: {grade}). Review strategy parameters."
+            )
         else:
             recommendations.append(f"Poor performance (Grade: {grade}). Consider strategy change.")
 
@@ -1094,38 +1123,44 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         # Check daily loss limit
         daily_loss_limit = strategy.risk_parameters.max_daily_loss
         if abs(metrics.realized_pnl_today) >= daily_loss_limit:
-            alerts.append(StrategyAlert(
-                strategy_id=metrics.strategy_id,
-                account_id=metrics.account_id,
-                alert_type="risk_limit_exceeded",
-                severity="critical",
-                message=f"Daily loss limit exceeded: {metrics.realized_pnl_today:.2f} >= {daily_loss_limit:.2f}",
-                threshold_value=daily_loss_limit,
-                current_value=abs(metrics.realized_pnl_today)
-            ))
+            alerts.append(
+                StrategyAlert(
+                    strategy_id=metrics.strategy_id,
+                    account_id=metrics.account_id,
+                    alert_type="risk_limit_exceeded",
+                    severity="critical",
+                    message=f"Daily loss limit exceeded: {metrics.realized_pnl_today:.2f} >= {daily_loss_limit:.2f}",
+                    threshold_value=daily_loss_limit,
+                    current_value=abs(metrics.realized_pnl_today),
+                )
+            )
 
         # Check risk utilization
         if metrics.risk_utilization >= 90:
-            alerts.append(StrategyAlert(
-                strategy_id=metrics.strategy_id,
-                account_id=metrics.account_id,
-                alert_type="risk_limit_exceeded",
-                severity="high",
-                message=f"High risk utilization: {metrics.risk_utilization:.1f}%",
-                threshold_value=90.0,
-                current_value=metrics.risk_utilization
-            ))
+            alerts.append(
+                StrategyAlert(
+                    strategy_id=metrics.strategy_id,
+                    account_id=metrics.account_id,
+                    alert_type="risk_limit_exceeded",
+                    severity="high",
+                    message=f"High risk utilization: {metrics.risk_utilization:.1f}%",
+                    threshold_value=90.0,
+                    current_value=metrics.risk_utilization,
+                )
+            )
 
         # Check for consecutive losses (simplified - would need trade history)
         if metrics.realized_pnl_today < -500 and metrics.trades_today >= 3:
-            alerts.append(StrategyAlert(
-                strategy_id=metrics.strategy_id,
-                account_id=metrics.account_id,
-                alert_type="consecutive_losses",
-                severity="medium",
-                message=f"Multiple losing trades today: {metrics.trades_today} trades, PnL: {metrics.realized_pnl_today:.2f}",
-                current_value=metrics.realized_pnl_today
-            ))
+            alerts.append(
+                StrategyAlert(
+                    strategy_id=metrics.strategy_id,
+                    account_id=metrics.account_id,
+                    alert_type="consecutive_losses",
+                    severity="medium",
+                    message=f"Multiple losing trades today: {metrics.trades_today} trades, PnL: {metrics.realized_pnl_today:.2f}",
+                    current_value=metrics.realized_pnl_today,
+                )
+            )
 
         # Add alerts to the list
         self._alerts.extend(alerts)
@@ -1141,7 +1176,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         self,
         strategy_id: Optional[str] = None,
         account_id: Optional[int] = None,
-        severity: Optional[str] = None
+        severity: Optional[str] = None,
     ) -> List[StrategyAlert]:
         """
         Get strategy alerts with optional filtering.
@@ -1182,7 +1217,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
             alert = self._alerts[alert_index]
             alert.acknowledged = True
             alert.acknowledged_by = acknowledged_by
-            alert.acknowledged_at = datetime.utcnow()
+            alert.acknowledged_at = datetime.now(timezone.utc)
             logger.info(f"Alert acknowledged by {acknowledged_by}: {alert.message}")
             return True
         return False
@@ -1197,11 +1232,12 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
         Returns:
             int: Number of alerts cleared
         """
-        cutoff_time = datetime.utcnow() - timedelta(hours=max_age_hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
         initial_count = len(self._alerts)
 
         self._alerts = [
-            alert for alert in self._alerts
+            alert
+            for alert in self._alerts
             if alert.created_at > cutoff_time or not alert.acknowledged
         ]
 

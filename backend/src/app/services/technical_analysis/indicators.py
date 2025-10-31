@@ -10,13 +10,7 @@ import numpy as np
 import talib
 
 from .exceptions import CalculationError, InsufficientDataError
-from .schemas import (
-    ATROutput,
-    BollingerBandsOutput,
-    EMAOutput,
-    MACDOutput,
-    RSIOutput,
-)
+from .schemas import ATROutput, BollingerBandsOutput, EMAOutput, MACDOutput, RSIOutput
 
 logger = logging.getLogger(__name__)
 

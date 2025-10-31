@@ -118,7 +118,7 @@ class TestingConfig(BaseConfig):
     DEBUG: bool = False
     LOG_LEVEL: str = "WARNING"
     DATABASE_ECHO: bool = False
-    DATABASE_URL: str = "sqlite:///:memory:"
+    DATABASE_URL: str = "postgresql://trading_user:trading_password@localhost:5432/trading_db"
     API_PORT: int = 8000
 
 

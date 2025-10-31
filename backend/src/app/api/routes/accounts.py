@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/v1/accounts", tags=["Trading"])
 async def create_account(
     account_data: AccountCreate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Create a new trading account."""
     try:
@@ -94,7 +94,7 @@ async def update_account(
     account_id: int,
     account_data: AccountUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Update a trading account."""
     try:
@@ -125,7 +125,7 @@ async def update_account(
 async def delete_account(
     account_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Delete a trading account."""
     try:

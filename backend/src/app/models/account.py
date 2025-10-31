@@ -4,7 +4,7 @@ Account model for trading accounts.
 Represents a trading account with configuration and status.
 """
 
-from sqlalchemy import Boolean, Column, Float, Index, Integer, String, Text, ForeignKey
+from sqlalchemy import Boolean, Column, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from .base import BaseModel
@@ -27,9 +27,7 @@ class Account(BaseModel):
     """Trading account model."""
 
     __tablename__ = "accounts"
-    __table_args__ = (
-        {"schema": "trading", "extend_existing": True},
-    )
+    __table_args__ = ({"schema": "trading", "extend_existing": True},)
 
     # Account identification
     name = Column(String(255), unique=True, nullable=False, index=True)

@@ -5,8 +5,21 @@ Stores trading strategies and their assignments to accounts.
 """
 
 from datetime import datetime
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, JSON
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.orm import relationship
+
 from .base import BaseModel
 
 
@@ -39,9 +52,11 @@ class Strategy(BaseModel):
         "StrategyAssignment",
         back_populates="strategy",
         foreign_keys="StrategyAssignment.strategy_id",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
-    strategy_performances = relationship("StrategyPerformance", back_populates="strategy", cascade="all, delete-orphan")
+    strategy_performances = relationship(
+        "StrategyPerformance", back_populates="strategy", cascade="all, delete-orphan"
+    )
 
 
 class StrategyAssignment(BaseModel):
@@ -70,7 +85,9 @@ class StrategyAssignment(BaseModel):
     deactivation_reason = Column(Text, nullable=True)
 
     account = relationship("Account", foreign_keys=[account_id])
-    strategy = relationship("Strategy", foreign_keys=[strategy_id], back_populates="strategy_assignments")
+    strategy = relationship(
+        "Strategy", foreign_keys=[strategy_id], back_populates="strategy_assignments"
+    )
     previous_strategy = relationship("Strategy", foreign_keys=[previous_strategy_id])
 
 

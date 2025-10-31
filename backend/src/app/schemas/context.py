@@ -9,8 +9,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from .trading_decision import TradingStrategy, StrategyRiskParameters
 from ..services.technical_analysis.schemas import TechnicalIndicators
+from .trading_decision import TradingStrategy
 
 
 class PricePoint(BaseModel):
@@ -30,10 +30,16 @@ class MarketContext(BaseModel):
     volume_24h: float = Field(..., ge=0, description="24h trading volume")
     funding_rate: Optional[float] = Field(None, description="Current funding rate")
     open_interest: Optional[float] = Field(None, ge=0, description="Open interest")
-    price_history: List[PricePoint] = Field(default_factory=list, description="Recent price history")
+    price_history: List[PricePoint] = Field(
+        default_factory=list, description="Recent price history"
+    )
     volatility: float = Field(..., ge=0, description="Price volatility")
-    technical_indicators: Optional[TechnicalIndicators] = Field(None, description="Technical analysis indicators")
-    data_freshness: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Data timestamp")
+    technical_indicators: Optional[TechnicalIndicators] = Field(
+        None, description="Technical analysis indicators"
+    )
+    data_freshness: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="Data timestamp"
+    )
 
 
 class PositionSummary(BaseModel):
@@ -83,7 +89,9 @@ class PerformanceMetrics(BaseModel):
 class RiskMetrics(BaseModel):
     """Risk assessment metrics."""
 
-    current_exposure: float = Field(..., description="Current risk exposure as percentage of balance")
+    current_exposure: float = Field(
+        ..., description="Current risk exposure as percentage of balance"
+    )
     available_capital: float = Field(..., description="Available capital for new positions")
     max_position_size: float = Field(..., description="Maximum allowed position size")
     daily_pnl: float = Field(..., description="Today's PnL")
@@ -98,11 +106,15 @@ class AccountContext(BaseModel):
     balance_usd: float = Field(..., ge=0, description="Account balance in USD")
     available_balance: float = Field(..., ge=0, description="Available balance for trading")
     total_pnl: float = Field(..., description="Total unrealized PnL")
-    open_positions: List[PositionSummary] = Field(default_factory=list, description="Open positions")
+    open_positions: List[PositionSummary] = Field(
+        default_factory=list, description="Open positions"
+    )
     recent_performance: PerformanceMetrics = Field(..., description="Recent performance metrics")
     risk_exposure: float = Field(..., ge=0, le=100, description="Current risk exposure percentage")
     max_position_size: float = Field(..., gt=0, description="Maximum position size in USD")
-    active_strategy: Optional[TradingStrategy] = Field(None, description="Currently active trading strategy")
+    active_strategy: Optional[TradingStrategy] = Field(
+        None, description="Currently active trading strategy"
+    )
     risk_metrics: RiskMetrics = Field(..., description="Risk assessment metrics")
 
 
@@ -113,8 +125,12 @@ class TradingContext(BaseModel):
     account_id: int
     market_data: MarketContext
     account_state: AccountContext
-    recent_trades: List[TradeHistory] = Field(default_factory=list, description="Recent trade history")
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Context timestamp")
+    recent_trades: List[TradeHistory] = Field(
+        default_factory=list, description="Recent trade history"
+    )
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="Context timestamp"
+    )
 
 
 class ContextValidationResult(BaseModel):
