@@ -10,11 +10,19 @@ services:
       POSTGRES_PASSWORD: trading_password
       POSTGRES_DB: trading_db
       # TimescaleDB is pre-installed and pre-configured in this image
+      # Performance tuning
+      POSTGRES_SHARED_BUFFERS: 256MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
+      POSTGRES_MAINTENANCE_WORK_MEM: 64MB
+      POSTGRES_CHECKPOINT_COMPLETION_TARGET: 0.9
+      POSTGRES_WAL_BUFFERS: 16MB
+      POSTGRES_DEFAULT_STATISTICS_TARGET: 100
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./scripts/postgres-tuning.conf:/etc/postgresql/postgresql.conf
     networks:
       - trading-network
     healthcheck:
@@ -23,8 +31,39 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
 
-  # Python Backend Service
+  # Redis Cache Service (for LLM Decision Engine caching)
+  redis:
+    image: docker.io/redis:7-alpine
+    container_name: trading-agent-redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+  # Python Backend Service with LLM Decision Engine
   backend:
     build:
       context: .
@@ -36,32 +75,103 @@ services:
       API_HOST: 0.0.0.0
       API_PORT: 3000
       DATABASE_URL: postgresql://trading_user:trading_password@postgres:5432/trading_db
-      LOG_LEVEL: DEBUG
+      REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: INFO
       LOG_FORMAT: json
       LOG_DIR: /app/logs
+      # LLM Decision Engine specific settings
+      LLM_CACHE_ENABLED: "true"
+      LLM_CACHE_TTL: 300
+      DECISION_CACHE_TTL: 300
+      CONTEXT_CACHE_TTL: 180
+      CIRCUIT_BREAKER_ENABLED: "true"
+      CIRCUIT_BREAKER_FAILURE_THRESHOLD: 5
+      CIRCUIT_BREAKER_RECOVERY_TIMEOUT: 60
+      # Performance settings
+      UVICORN_WORKERS: 1
+      UVICORN_WORKER_CONNECTIONS: 1000
+      UVICORN_BACKLOG: 2048
     ports:
       - "3000:3000"
     volumes:
       - ./src:/app/src
       - ./logs:/app/logs
       - ./data:/app/data
+      - ./cache:/app/cache
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - trading-network
     env_file:
       - .env
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/v1/monitoring/health/system"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
-      start_period: 5s
+      start_period: 10s
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '1.0'
+
+  # Prometheus Monitoring (Optional)
+  prometheus:
+    image: docker.io/prom/prometheus:latest
+    container_name: trading-agent-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - trading-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Grafana Dashboard (Optional)
+  grafana:
+    image: docker.io/grafana/grafana:latest
+    container_name: trading-agent-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: false
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - trading-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
 
 volumes:
   postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
     driver: local
 
 networks:

@@ -1,0 +1,72 @@
+groups:
+  - name: trading_agent_alerts
+    rules:
+      # High Response Time Alert
+      - alert: HighResponseTime
+        expr: trading_agent_decision_response_time_seconds > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High decision response time detected"
+          description: "Decision generation taking longer than 5 seconds for {{ $labels.instance }}"
+
+      # High Error Rate Alert
+      - alert: HighErrorRate
+        expr: rate(trading_agent_errors_total[5m]) > 0.1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }} errors per second for {{ $labels.instance }}"
+
+      # LLM Service Down Alert
+      - alert: LLMServiceDown
+        expr: trading_agent_llm_service_up == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "LLM Service is down"
+          description: "LLM service is not responding for {{ $labels.instance }}"
+
+      # Low Cache Hit Rate Alert
+      - alert: LowCacheHitRate
+        expr: trading_agent_cache_hit_rate < 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low cache hit rate"
+          description: "Cache hit rate is {{ $value }} for {{ $labels.instance }}"
+
+      # High Memory Usage Alert
+      - alert: HighMemoryUsage
+        expr: trading_agent_memory_usage_bytes / 1024 / 1024 / 1024 > 1.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}GB for {{ $labels.instance }}"
+
+      # Database Connection Issues
+      - alert: DatabaseConnectionIssues
+        expr: trading_agent_database_connections_active / trading_agent_database_connections_max > 0.8
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High database connection usage"
+          description: "Database connection pool is {{ $value }}% full for {{ $labels.instance }}"
+
+      # Strategy Performance Alert
+      - alert: PoorStrategyPerformance
+        expr: trading_agent_strategy_win_rate < 0.4
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Poor strategy performance"
+          description: "Strategy {{ $labels.strategy_id }} has win rate of {{ $value }} for {{ $labels.instance }}"

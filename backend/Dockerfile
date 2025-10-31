@@ -1,4 +1,4 @@
-# Multi-stage build for AI Trading Agent
+# Multi-stage build for AI Trading Agent with LLM Decision Engine
 
 # Stage 1: Builder
 FROM python:3.13-slim as builder
@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     git \
     curl \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for fast dependency resolution
@@ -32,14 +33,20 @@ FROM python:3.13-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH=/opt/venv/bin:$PATH \
-    VIRTUAL_ENV=/opt/venv
+    VIRTUAL_ENV=/opt/venv \
+    # LLM Decision Engine specific settings
+    LLM_CACHE_DIR=/app/cache \
+    LLM_LOG_LEVEL=INFO \
+    DECISION_CACHE_TTL=300 \
+    CONTEXT_CACHE_TTL=180
 
 # Set working directory
 WORKDIR /app
 
-# Install runtime dependencies only
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder
@@ -49,14 +56,26 @@ COPY --from=builder /build/.venv /opt/venv
 COPY src/ ./src/
 
 # Create necessary directories
-RUN mkdir -p logs data
+RUN mkdir -p logs data cache \
+    && mkdir -p logs/llm logs/decisions logs/strategies \
+    && chmod -R 755 logs cache data
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:3000/health')" || exit 1
+# Create non-root user for security
+RUN groupadd -r trading && useradd -r -g trading -d /app -s /bin/bash trading \
+    && chown -R trading:trading /app
+
+# Switch to non-root user
+USER trading
+
+# Enhanced health check for LLM Decision Engine
+HEALTHCHECK --interval=30s --timeout=15s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:3000/api/v1/monitoring/health/system || exit 1
 
 # Expose port
 EXPOSE 3000
 
-# Run the application
-CMD ["/opt/venv/bin/python", "-m", "uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "3000"]
+# Run the application with optimized settings
+CMD ["/opt/venv/bin/python", "-m", "uvicorn", "src.app.main:app", \
+     "--host", "0.0.0.0", "--port", "3000", \
+     "--workers", "1", "--loop", "asyncio", \
+     "--access-log", "--log-level", "info"]

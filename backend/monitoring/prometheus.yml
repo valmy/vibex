@@ -1,0 +1,37 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alert_rules.yml"
+
+scrape_configs:
+  # Trading Agent Backend
+  - job_name: 'trading-agent'
+    static_configs:
+      - targets: ['backend:3000']
+    metrics_path: '/api/v1/monitoring/metrics/prometheus'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # PostgreSQL Database
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+    scrape_interval: 60s
+
+  # Redis Cache
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 30s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# Alert rules for LLM Decision Engine
+rule_files:
+  - "/etc/prometheus/rules/*.yml"
