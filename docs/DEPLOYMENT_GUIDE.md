@@ -408,6 +408,112 @@ def send_slack_alert(message):
     requests.post(webhook_url, json=payload)
 ```
 
+### Testing Deployment
+Here is a summary of the deployment decisions, setup steps, and future update process for your `vibex-backend` project.
+
+1.  **Environment:** We are using `podman` and `podman-compose` (versions 4.9.3 and 1.0.6) from the Ubuntu 24.04 `apt` repositories.
+2.  **Build Process:** To keep the server clean and create a consistent, testable artifact, we are **building the container locally** and pushing it to a registry. We are **not** building on the server.
+3.  **Container Registry:** We are using **GitHub Container Registry (GHCR)** to host the backend image (`ghcr.io/valmy/vibex-backend:latest`).
+4.  **Secrets:** We are **not** committing the `.env` file. It is securely transferred to the server using `scp` and read by `podman-compose`.
+5.  **Process Management:** We are using a **rootless `systemd` user service** for the `vibex` user. This is more secure than running as root and ensures the application starts on boot (via `loginctl enable-linger`).
+6.  **SSL (Next Step):** We will use **Caddy** as a reverse proxy on the host to provide automatic SSL for your domain, forwarding traffic to the `backend` container.
+
+#### How The Server is Set Up (The "How")
+
+This is the final, working configuration after our troubleshooting.
+
+1.  **Linger (Root Command):**
+    We enabled lingering for the `vibex` user (one time, as root) to allow their services to start on boot:
+
+    ```bash
+    sudo loginctl enable-linger vibex
+    ```
+
+2.  **Project Location (As `vibex` user):**
+
+      * The repository is cloned to `/home/vibex/vibex/`.
+      * The working directory is `/home/vibex/vibex/backend/`.
+
+3.  **Secrets File (As `vibex` user):**
+    The secret `.env` file was securely copied to `/home/vibex/vibex/backend/.env`.
+
+4.  **`podman-compose.yml` (Modified):**
+    The `backend` service in `podman-compose.yml` was modified to use the pre-built image, not the `Dockerfile`:
+
+    ```yaml
+    backend:
+      # build: ... (THIS SECTION WAS REMOVED)
+      image: ghcr.io/valmy/vibex-backend:latest
+      container_name: trading-agent-backend
+      # ... rest of the service definition
+    ```
+
+5.  **The `systemd` Service (The Key Component):**
+    After finding the `podman-compose systemd` command was unreliable, we created a manual service file.
+
+      * **File Location:** `/home/vibex/.config/systemd/user/vibex-backend.service`
+      * **File Content:**
+        ```ini
+        [Unit]
+        Description=Vibex Backend (Podman Compose - Rootless)
+
+        [Service]
+        Type=simple
+        WorkingDirectory=/home/vibex/vibex/backend
+        ExecStart=/usr/bin/podman-compose up -d
+        ExecStop=/usr/bin/podman-compose down
+        Restart=always
+
+        [Install]
+        WantedBy=default.target
+        ```
+
+#### The Update Workflow (How to Deploy New Code)
+
+This is your new end-to-end process for shipping an update.
+
+##### 1\. On Your Local Machine
+
+  * `cd` into your `vibex/backend` directory.
+  * Make your code changes.
+  * Build and push the new image:
+    ```bash
+    # Build and tag the image
+    podman build -t ghcr.io/valmy/vibex-backend:latest .
+
+    # Push the image to the registry
+    podman push ghcr.io/valmy/vibex-backend:latest
+    ```
+
+##### 2\. On Your Ubuntu Server
+
+  * Log in as the `vibex` user: `ssh vibex@your-server-ip`
+  * Navigate to the project directory:
+    ```bash
+    cd /home/vibex/vibex/backend
+    ```
+  * Pull the new image:
+    ```bash
+    # This just downloads the new "latest" image from GHCR
+    podman-compose pull
+    ```
+  * Restart the `systemd` service:
+    ```bash
+    # This will run ExecStop (podman-compose down)
+    # and then ExecStart (podman-compose up -d)
+    # The new service will automatically use the new image.
+    systemctl --user restart vibex-backend.service
+    ```
+
+#### Important Notes from Our Troubleshooting
+
+  * **`systemctl --user` vs. `sudo`:** We confirmed you must **never** use `sudo` with `systemctl --user` commands. It will fail with a "No medium found" error.
+  * **`network-online.target`:** This target isn't available to rootless user services by default. We removed it from the `[Unit]` section to fix the "not found" error.
+  * **Crash Loops (`container name... is already in use`):** If the service gets stuck, the fix is to stop the `systemd` service first, then manually clean up the environment.
+    1.  `systemctl --user stop vibex-backend.service`
+    2.  `podman-compose down` (or `podman rm -f <id>` for "zombie" containers)
+    3.  `systemctl --user start vibex-backend.service`
+
 ## Security Configuration
 
 ### 1. API Security

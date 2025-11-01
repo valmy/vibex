@@ -90,7 +90,7 @@ services:
       UVICORN_WORKER_CONNECTIONS: 1000
       UVICORN_BACKLOG: 2048
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - ./src:/app/src
     depends_on:
