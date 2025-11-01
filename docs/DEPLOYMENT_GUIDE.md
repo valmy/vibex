@@ -460,7 +460,7 @@ This is the final, working configuration after our troubleshooting.
         [Service]
         Type=simple
         WorkingDirectory=/home/vibex/vibex/backend
-        ExecStart=/usr/bin/podman-compose up -d
+        ExecStart=/usr/bin/podman-compose up
         ExecStop=/usr/bin/podman-compose down
         Restart=always
 

@@ -1,0 +1,93 @@
+# .github/workflows/deploy.yml
+name: Build and Deploy to Server
+
+# 1. Trigger
+# Runs when a new Release is "published" on GitHub
+on:
+  release:
+    types: [published]
+
+# Environment variables to make the workflow cleaner
+env:
+  # IMPORTANT: Change this to your ghcr.io image path
+  IMAGE_NAME: ghcr.io/valmy/vibex-backend
+  # IMPORTANT: This is the working directory for your backend Dockerfile
+  WORKING_DIR: ./backend
+
+jobs:
+  #----------------------------------------------
+  # JOB 1: Build and Push Podman image to GHCR
+  #----------------------------------------------
+  build-and-push:
+    runs-on: ubuntu-latest
+    # Permissions needed to push to GHCR
+    permissions:
+      contents: read
+      packages: write # This is the key permission for GHCR
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          # GITHUB_TOKEN is a special secret automatically provided by Actions
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags) for image
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix={{date 'YYYYMMDD'}}-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Podman image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          # Note: This action uses buildah, which is the engine behind podman build
+          image: ${{ env.IMAGE_NAME }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          containerfiles: |
+            ${{ env.WORKING_DIR }}/Dockerfile
+          context: ${{ env.WORKING_DIR }}
+          # This pushes to the registry
+          push: true
+
+  #----------------------------------------------
+  # JOB 2: Trigger the update on the server
+  #----------------------------------------------
+  deploy-to-server:
+    # This job will only run if 'build-and-push' succeeds
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add SSH host key to known_hosts
+        run: |
+          ssh-keyscan ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: SSH and run deploy commands
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            echo 'Connected to server' &&
+            cd ${{ secrets.TARGET_DIR }} &&
+            echo 'Changed to directory: ${{ secrets.TARGET_DIR }}' &&
+            echo 'Pulling new image with podman-compose...' &&
+            podman-compose pull &&
+            echo 'Restarting systemd service...' &&
+            systemctl --user restart vibex-backend.service &&
+            echo 'Deployment complete!'
+          "
