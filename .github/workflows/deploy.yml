@@ -1,18 +1,13 @@
 # .github/workflows/deploy.yml
 name: Build and Deploy to Server
 
-# 1. Trigger
-# Runs when a new Release is "published" on GitHub
 on:
   release:
     types: [published]
 
-# Environment variables to make the workflow cleaner
 env:
-  # IMPORTANT: Change this to your ghcr.io image path
-  IMAGE_NAME: ghcr.io/valmy/vibex-backend
-  # IMPORTANT: This is the working directory for your backend Dockerfile
-  WORKING_DIR: ./backend
+  IMAGE_NAME: ghcr.io/valmy/vibex-backend # Change as needed
+  WORKING_DIR: ./backend # Change as needed
 
 jobs:
   #----------------------------------------------
@@ -20,10 +15,9 @@ jobs:
   #----------------------------------------------
   build-and-push:
     runs-on: ubuntu-latest
-    # Permissions needed to push to GHCR
     permissions:
       contents: read
-      packages: write # This is the key permission for GHCR
+      packages: write
 
     steps:
       - name: Checkout repository
@@ -33,7 +27,6 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          # GITHUB_TOKEN is a special secret automatically provided by Actions
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -48,24 +41,31 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build and push Podman image
+      # --- THIS STEP IS MODIFIED ---
+      - name: Build Podman image
+        id: build-image # <-- We add an ID here
         uses: redhat-actions/buildah-build@v2
         with:
-          # Note: This action uses buildah, which is the engine behind podman build
           image: ${{ env.IMAGE_NAME }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           containerfiles: |
             ${{ env.WORKING_DIR }}/Dockerfile
           context: ${{ env.WORKING_DIR }}
-          # This pushes to the registry
-          push: true
+          # 'push: true' has been REMOVED from this step
+
+      # --- THIS STEP IS NEW ---
+      - name: Push to GitHub Container Registry
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          # Use the image name and tags from the 'build-image' step's output
+          image: ${{ steps.build-image.outputs.image }}
+          tags: ${{ steps.build-image.outputs.tags }}
 
   #----------------------------------------------
   # JOB 2: Trigger the update on the server
   #----------------------------------------------
   deploy-to-server:
-    # This job will only run if 'build-and-push' succeeds
     needs: build-and-push
     runs-on: ubuntu-latest
 
