@@ -65,8 +65,7 @@ services:
 
   # Python Backend Service with LLM Decision Engine
   backend:
-    build:
-      image: ghcr.io/valmy/vibex-backend:latest
+    image: ghcr.io/valmy/vibex-backend:latest
     container_name: trading-agent-backend
     environment:
       ENVIRONMENT: development
