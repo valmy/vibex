@@ -279,7 +279,8 @@ class ContextBuilderService:
                 availability_check = await self.validate_context_data_availability(
                     symbol, account_id
                 )
-                if not availability_check.is_valid:
+                # availability_check is now a dict instead of ContextValidationResult object
+                if not availability_check["is_valid"]:
                     # Try graceful degradation
                     degraded_context = self.handle_data_unavailability(
                         symbol, account_id, availability_check

@@ -400,7 +400,7 @@ Provide:
 
             # Return fallback decision
             fallback_decision = self._create_fallback_decision(symbol)
-            
+
             # For the error case, we'll use the original context directly
             # as it's already a TradingContext object
             return DecisionResult(
@@ -692,13 +692,13 @@ Provide:
         bb_middle = indicators.bb_middle if indicators.bb_middle is not None else 'N/A'
         bb_lower = indicators.bb_lower if indicators.bb_lower is not None else 'N/A'
         atr = indicators.atr if indicators.atr is not None else 'N/A'
-        
+
         # Format price history
         price_history_text = "\n".join(
-            [f"- {ph.timestamp}: ${ph.price:.2f} (Vol: {ph.volume:.2f})" 
+            [f"- {ph.timestamp}: ${ph.price:.2f} (Vol: {ph.volume:.2f})"
              for ph in market_data.price_history[-10:]]  # Last 10 price points
         )
-        
+
         # Format account performance
         perf = account_state.recent_performance
         performance_text = f"""
@@ -706,7 +706,7 @@ Total PnL: ${perf.total_pnl:.2f} ({perf.win_rate:.1f}% win rate)
 Average Win: ${perf.avg_win:.2f}, Average Loss: ${abs(perf.avg_loss):.2f}
 Max Drawdown: {perf.max_drawdown:.1f}%
 """
-        
+
         # Format risk metrics
         risk_metrics = f"""
 Value at Risk (95%): ${context.risk_metrics.var_95:.2f}
@@ -773,7 +773,7 @@ Risk Exposure: {account_state.risk_exposure:.1f}%
 {risk_metrics}
 
 === INSTRUCTIONS ===
-{strategy.prompt_template}
+{prompt_template}
 """
 
         return prompt.strip()
