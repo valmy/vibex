@@ -93,12 +93,76 @@ class ContextBuilderService:
         for key, (timestamp, _) in self._cache.items():
             if (now - timestamp).total_seconds() > self._cache_ttl_seconds:
                 expired_keys.append(key)
-        
+
         for key in expired_keys:
             del self._cache[key]
-        
+
         if expired_keys:
             logger.info(f"Cleaned up {len(expired_keys)} expired cache entries.")
+
+    def _validate_context(self, market_context: 'MarketContext', account_context: 'AccountContext') -> 'ContextValidationResult':
+        """Validate the built context for completeness and freshness.
+
+        Args:
+            market_context: Market context to validate
+            account_context: Account context to validate
+
+        Returns:
+            ContextValidationResult with validation status
+        """
+        from ...schemas.context import ContextValidationResult
+
+        missing_data = []
+        stale_data = []
+        warnings = []
+
+        # Check market context
+        if market_context is None:
+            missing_data.append("Market context is None")
+        else:
+            if market_context.current_price <= 0:
+                missing_data.append("Invalid current price")
+            if market_context.technical_indicators is None:
+                warnings.append("No technical indicators available")
+
+            # Check data freshness
+            if market_context.data_freshness:
+                # Ensure both datetimes are timezone-aware
+                now = datetime.now(timezone.utc)
+                data_freshness = market_context.data_freshness
+                if data_freshness.tzinfo is None:
+                    data_freshness = data_freshness.replace(tzinfo=timezone.utc)
+                data_age = (now - data_freshness).total_seconds()
+                if data_age > self.MAX_DATA_AGE_MINUTES * 60:
+                    stale_data.append(f"Market data is {data_age/60:.1f} minutes old")
+
+        # Check account context
+        if account_context is None:
+            missing_data.append("Account context is None")
+        else:
+            if account_context.balance_usd < 0:
+                missing_data.append("Invalid account balance")
+            if account_context.available_balance < 0:
+                missing_data.append("Invalid available balance")
+
+        # Calculate data age
+        data_age_seconds = 0.0
+        if market_context and market_context.data_freshness:
+            now = datetime.now(timezone.utc)
+            data_freshness = market_context.data_freshness
+            if data_freshness.tzinfo is None:
+                data_freshness = data_freshness.replace(tzinfo=timezone.utc)
+            data_age_seconds = (now - data_freshness).total_seconds()
+
+        is_valid = len(missing_data) == 0 and len(stale_data) == 0
+
+        return ContextValidationResult(
+            is_valid=is_valid,
+            missing_data=missing_data,
+            stale_data=stale_data,
+            warnings=warnings,
+            data_age_seconds=data_age_seconds,
+        )
 
     async def build_trading_context(
         self,
@@ -453,18 +517,18 @@ class ContextBuilderService:
         try:
             # Build the base query
             query = select(Trade).where(Trade.account_id == account_id)
-            
+
             # Add symbol filter if provided
             if symbol:
                 query = query.where(Trade.symbol == symbol)
-                
+
             # Order by most recent first and limit results
             query = query.order_by(desc(Trade.created_at)).limit(self.RECENT_TRADES_LIMIT)
-            
+
             # Execute the query
             result = await db.execute(query)
             trades = result.scalars().all()
-            
+
             # Convert to TradeHistory objects
             trade_history = [
                 TradeHistory(
@@ -746,7 +810,7 @@ class ContextBuilderService:
         missing_data = []
         warnings = []
         db = self._db_session
-        
+
         if db is None:
             return ContextValidationResult(
                 is_valid=False,
@@ -859,7 +923,7 @@ _context_builder_service: Optional[ContextBuilderService] = None
 
 def get_context_builder_service(db_session: Optional[AsyncSession] = None) -> 'ContextBuilderService':
     """Get or create the context builder service instance.
-    
+
     Args:
         db_session: Optional database session. If not provided, the service will create its own.
     """
