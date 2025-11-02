@@ -213,7 +213,11 @@ class ContextBuilderService:
                 # Calculate age from price history
                 if market_context.price_history:
                     latest_data = max(market_context.price_history, key=lambda x: x.timestamp)
-                    data_age = (datetime.now(timezone.utc) - latest_data.timestamp).total_seconds()
+                    # Handle both timezone-aware and timezone-naive datetimes
+                    latest_timestamp = latest_data.timestamp
+                    if latest_timestamp.tzinfo is None:
+                        latest_timestamp = latest_timestamp.replace(tzinfo=timezone.utc)
+                    data_age = (datetime.now(timezone.utc) - latest_timestamp).total_seconds()
                     stale_data.append(f"Market data is {data_age/60:.1f} minutes old")
 
         # Check account context
@@ -229,7 +233,11 @@ class ContextBuilderService:
         data_age_seconds = 0.0
         if market_context and market_context.price_history:
             latest_data = max(market_context.price_history, key=lambda x: x.timestamp)
-            data_age_seconds = (datetime.now(timezone.utc) - latest_data.timestamp).total_seconds()
+            # Handle both timezone-aware and timezone-naive datetimes
+            latest_timestamp = latest_data.timestamp
+            if latest_timestamp.tzinfo is None:
+                latest_timestamp = latest_timestamp.replace(tzinfo=timezone.utc)
+            data_age_seconds = (datetime.now(timezone.utc) - latest_timestamp).total_seconds()
 
         is_valid = len(missing_data) == 0 and len(stale_data) == 0
 

@@ -220,8 +220,10 @@ class TestLLMDecisionEngineE2E:
         from app.services.llm.context_builder import ContextBuilderService
         from app.services.market_data.service import MarketDataService
         from app.services.technical_analysis import TechnicalAnalysisService
-        from app.schemas.context import AccountContext, PerformanceMetrics, RiskMetrics
-        from app.schemas.trading_decision import TradingStrategy, StrategyRiskParameters
+        from app.schemas.trading_decision import (
+            AccountContext, PerformanceMetrics, RiskMetrics,
+            TradingStrategy, StrategyRiskParameters
+        )
 
         logger.info("Starting LLM integration test with real market data...")
 
@@ -256,28 +258,15 @@ class TestLLMDecisionEngineE2E:
             open_positions=[],
             recent_performance=PerformanceMetrics(
                 total_pnl=0.0,
-                total_pnl_percent=0.0,
                 win_rate=0.0,
                 avg_win=0.0,
                 avg_loss=0.0,
-                profit_factor=0.0,
-                sharpe_ratio=0.0,
                 max_drawdown=0.0,
-                trades_count=0,
-                winning_trades=0,
-                losing_trades=0,
+                sharpe_ratio=0.0,
             ),
             risk_exposure=0.0,
             max_position_size=2000.0,
             active_strategy=mock_strategy,
-            risk_metrics=RiskMetrics(
-                current_exposure=0.0,
-                available_capital=8000.0,
-                max_position_size=2000.0,
-                daily_pnl=0.0,
-                daily_loss_limit=-500.0,
-                correlation_risk=0.0,
-            ),
         )
 
         # Mock the get_account_context method
