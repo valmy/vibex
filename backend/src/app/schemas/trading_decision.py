@@ -140,7 +140,12 @@ class MarketContext(BaseModel):
             return False
 
         latest_data = max(self.price_history, key=lambda x: x.timestamp)
-        age_minutes = (datetime.now(timezone.utc) - latest_data.timestamp).total_seconds() / 60
+        # Handle both timezone-aware and timezone-naive datetimes
+        now = datetime.now(timezone.utc)
+        latest_timestamp = latest_data.timestamp
+        if latest_timestamp.tzinfo is None:
+            latest_timestamp = latest_timestamp.replace(tzinfo=timezone.utc)
+        age_minutes = (now - latest_timestamp).total_seconds() / 60
         return age_minutes <= max_age_minutes
 
     def get_price_trend(self) -> str:

@@ -20,8 +20,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.market_data import MarketData
-from app.schemas.context import MarketContext, AccountContext, PerformanceMetrics, RiskMetrics, TradingContext, TradeHistory
-from app.schemas.trading_decision import DecisionResult, TradingDecision, TechnicalIndicators
+from app.schemas.trading_decision import (
+    AccountContext,
+    DecisionResult,
+    MarketContext,
+    PerformanceMetrics,
+    RiskMetrics,
+    TechnicalIndicators,
+    TradeHistory,
+    TradingContext,
+    TradingDecision,
+)
 from app.schemas.market_data import MarketDataRead
 from app.services import get_technical_analysis_service
 from app.services.llm.decision_engine import get_decision_engine
@@ -106,6 +115,27 @@ class TestLLMDecisionEngineE2E:
         decision_engine.decision_validator.validate_decision = mocker.AsyncMock(return_value=mock_validation_result)
 
         # Mock the account context to avoid database account lookup
+        from app.schemas.trading_decision import TradingStrategy, StrategyRiskParameters
+
+        mock_strategy = TradingStrategy(
+            strategy_id="test_strategy",
+            strategy_name="Test Strategy",
+            strategy_type="conservative",
+            prompt_template="Test prompt",
+            risk_parameters=StrategyRiskParameters(
+                max_risk_per_trade=2.0,
+                max_daily_loss=5.0,
+                stop_loss_percentage=2.0,
+                take_profit_ratio=2.0,
+                max_leverage=2.0,
+                cooldown_period=300,
+            ),
+            timeframe_preference=["5m", "1h"],
+            max_positions=3,
+            position_sizing="percentage",
+            is_active=True,
+        )
+
         mock_account_context = AccountContext(
             account_id=1,
             balance_usd=10000.0,
@@ -114,41 +144,28 @@ class TestLLMDecisionEngineE2E:
             open_positions=[],
             recent_performance=PerformanceMetrics(
                 total_pnl=0.0,
-                total_pnl_percent=0.0,
                 win_rate=0.0,
                 avg_win=0.0,
                 avg_loss=0.0,
-                profit_factor=0.0,
-                sharpe_ratio=0.0,
                 max_drawdown=0.0,
-                trades_count=0,
-                winning_trades=0,
-                losing_trades=0,
+                sharpe_ratio=None,
             ),
             risk_exposure=0.0,
             max_position_size=2000.0,
-            risk_metrics=RiskMetrics(
-                current_exposure=0.0,
-                available_capital=8000.0,
-                max_position_size=2000.0,
-                daily_pnl=0.0,
-                daily_loss_limit=-500.0,
-                correlation_risk=0.0,
-            ),
+            active_strategy=mock_strategy,
         )
 
         # Mock the get_account_context method
         decision_engine.context_builder.get_account_context = mocker.AsyncMock(return_value=mock_account_context)
 
-        # Mock the _validate_context method (it doesn't exist in ContextBuilderService)
-        from app.schemas.context import ContextValidationResult
-        mock_validation_result = ContextValidationResult(
-            is_valid=True,
-            missing_data=[],
-            stale_data=[],
-            warnings=[],
-            data_age_seconds=0,
-        )
+        # Mock the _validate_context method to return dict
+        mock_validation_result = {
+            "is_valid": True,
+            "missing_data": [],
+            "stale_data": [],
+            "warnings": [],
+            "data_age_seconds": 0,
+        }
         decision_engine.context_builder._validate_context = mocker.Mock(return_value=mock_validation_result)
 
         # The context_builder is real and should use the db_session from the DI container
@@ -184,11 +201,9 @@ class TestLLMDecisionEngineE2E:
         )
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(
-        reason="Schema mismatch: ContextBuilderService returns TradingContext from app.schemas.context, "
-        "but LLMService expects TradingContext from app.schemas.trading_decision. "
-        "These schemas have different structures and use different TechnicalIndicators schemas. "
-        "Requires refactoring to unify the schemas."
+    @pytest.mark.skipif(
+        os.getenv("RUN_REAL_LLM_TESTS") != "1",
+        reason="Requires RUN_REAL_LLM_TESTS=1 environment variable to run real LLM API tests"
     )
     async def test_llm_integration_with_real_data(
         self, db_session, real_market_data, mocker
@@ -199,8 +214,7 @@ class TestLLMDecisionEngineE2E:
         using real market data and database context. Account context is mocked
         to avoid requiring a real trading account.
 
-        NOTE: Currently skipped due to schema mismatch between ContextBuilderService
-        and LLMService. See skip reason for details.
+        Requires RUN_REAL_LLM_TESTS=1 environment variable to run.
         """
         from app.services.llm.llm_service import LLMService
         from app.services.llm.context_builder import ContextBuilderService
@@ -416,12 +430,13 @@ class TestLLMDecisionEngineE2E:
                 atr=500.0
             )
 
-            # Create market context
+            # Create market context (no symbol field in new schema)
             market_context = MarketContext(
-                symbol="BTCUSDT",
                 current_price=50000.0,
                 price_change_24h=500.0,
                 volume_24h=1000000.0,
+                funding_rate=0.01,
+                open_interest=1000000.0,
                 price_history=[
                     PricePoint(
                         timestamp=datetime.now(timezone.utc) - timedelta(minutes=i),
@@ -455,7 +470,7 @@ class TestLLMDecisionEngineE2E:
                 is_active=True
             )
 
-            # Create account context
+            # Create account context (new schema has different PerformanceMetrics fields)
             account_context = AccountContext(
                 account_id=1,
                 balance_usd=10000.0,
@@ -464,36 +479,23 @@ class TestLLMDecisionEngineE2E:
                 open_positions=[],
                 recent_performance=PerformanceMetrics(
                     total_pnl=500.0,
-                    total_pnl_percent=5.0,
                     win_rate=60.0,
                     avg_win=100.0,
-                    avg_loss=50.0,
-                    profit_factor=1.5,
-                    max_drawdown=10.0,
-                    trades_count=10,
-                    winning_trades=6,
-                    losing_trades=4
+                    avg_loss=-50.0,
+                    max_drawdown=-100.0,
+                    sharpe_ratio=1.5,
                 ),
                 risk_exposure=20.0,
                 max_position_size=2000.0,
                 active_strategy=strategy,
-                risk_metrics=RiskMetrics(
-                    var_95=1000.0,  # Value at Risk (95%)
-                    max_drawdown=500.0,  # Maximum drawdown
-                    correlation_risk=0.2,  # Correlation risk
-                    concentration_risk=0.1  # Concentration risk
-                )
             )
 
-            # Import RiskMetrics from the correct module
-            from app.schemas.trading_decision import RiskMetrics as TradingRiskMetrics
-
             # Create risk metrics for the trading context
-            risk_metrics = TradingRiskMetrics(
-                var_95=1000.0,  # Example value for Value at Risk (95%)
-                max_drawdown=500.0,  # Example value for maximum drawdown
-                correlation_risk=0.2,  # Example value for correlation risk
-                concentration_risk=0.1  # Example value for concentration risk
+            risk_metrics = RiskMetrics(
+                var_95=1000.0,  # Value at Risk (95%)
+                max_drawdown=-500.0,  # Maximum drawdown (negative value)
+                correlation_risk=20.0,  # Correlation risk (percentage)
+                concentration_risk=10.0  # Concentration risk (percentage)
             )
 
             # Create trading context with all required fields

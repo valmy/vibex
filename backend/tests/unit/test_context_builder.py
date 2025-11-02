@@ -7,10 +7,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from app.schemas.context import (
-    ContextValidationResult,
-    TradingContext,
-)
+from app.schemas.trading_decision import TradingContext
 from app.services.llm.context_builder import (
     ContextBuilderError,
     ContextBuilderService,

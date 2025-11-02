@@ -6,6 +6,31 @@ The LLM Decision Engine Integration enhances the existing AI Trading Agent by im
 
 The design focuses on creating a robust, scalable, and maintainable system that can handle real-time trading decisions while ensuring data integrity, error handling, and performance optimization.
 
+## Schema Unification (2025-11-02)
+
+**IMPORTANT**: The codebase previously had two different `TradingContext` schemas:
+1. `app.schemas.context.TradingContext` (used by ContextBuilderService) - **DEPRECATED**
+2. `app.schemas.trading_decision.TradingContext` (used by LLMService) - **CANONICAL**
+
+These schemas have been unified to use `app.schemas.trading_decision.TradingContext` as the single canonical schema throughout the codebase.
+
+### Key Changes:
+- **Deleted**: `backend/src/app/schemas/context.py` (entire file removed)
+- **Updated**: `ContextBuilderService` now uses schemas from `app.schemas.trading_decision`
+- **TechnicalIndicators**: Changed from nested structure (EMAOutput, MACDOutput, etc.) to flat structure (ema_20, ema_50, macd, macd_signal, rsi, bb_upper, bb_middle, bb_lower, atr)
+- **RiskMetrics**: Now uses var_95, max_drawdown, correlation_risk, concentration_risk fields
+- **PerformanceMetrics**: Simplified to total_pnl, win_rate, avg_win, avg_loss, max_drawdown, sharpe_ratio
+- **AccountContext**: active_strategy is now required (not Optional)
+- **MarketContext**: No longer has symbol field (symbol is in TradingContext)
+- **PositionSummary**: Uses 'size' instead of 'quantity', 'percentage_pnl' instead of 'unrealized_pnl_percent'
+- **TradeHistory**: Uses 'size' instead of 'quantity'
+
+### Migration Impact:
+- All services now use the same schema definitions
+- Tests updated to use canonical schemas
+- Adapter methods added to convert between nested and flat TechnicalIndicators structures
+- Validation methods now return dict instead of ContextValidationResult object
+
 ## LLM Services Package Organization
 
 All LLM Decision Engine components are organized in the `services/llm/` package for better maintainability and clear separation of concerns:

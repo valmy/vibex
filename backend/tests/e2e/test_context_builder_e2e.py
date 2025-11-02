@@ -76,7 +76,7 @@ class TestContextBuilderE2E:
 
         # Validate context structure
         assert market_context is not None, "Should build market context"
-        assert market_context.symbol == "BTCUSDT", "Symbol should match"
+        # Note: symbol field is in TradingContext, not MarketContext
         assert market_context.current_price > 0, "Should have current price"
         assert market_context.volume_24h >= 0, "Should have volume"
 
@@ -88,15 +88,16 @@ class TestContextBuilderE2E:
 
         # Validate technical indicators if present
         if market_context.technical_indicators is not None:
-            # At least some indicators should be present
+            # At least some indicators should be present (flat structure now)
             indicators = market_context.technical_indicators
             has_indicators = any(
                 [
-                    indicators.ema.ema is not None,
-                    indicators.rsi.rsi is not None,
-                    indicators.macd.macd is not None,
-                    indicators.bollinger_bands.upper is not None,
-                    indicators.atr.atr is not None,
+                    indicators.ema_20 is not None,
+                    indicators.ema_50 is not None,
+                    indicators.rsi is not None,
+                    indicators.macd is not None,
+                    indicators.bb_upper is not None,
+                    indicators.atr is not None,
                 ]
             )
             assert has_indicators, "Should have at least some technical indicators"
@@ -158,9 +159,10 @@ class TestContextBuilderE2E:
         logger.info(f"Market context: {market_context}")
 
         assert market_context is not None
-        assert market_context.symbol == "BTCUSDT"
+        # Note: symbol field is in TradingContext, not MarketContext
         assert market_context.current_price > 0
-        assert market_context.data_freshness is not None
+        # Note: data_freshness is not a field, use validate_data_freshness() method instead
+        assert market_context.validate_data_freshness(max_age_minutes=60), "Market data should be fresh"
 
         # Validate context data availability
         # Use account_id=1 for testing (may not exist, which is acceptable)
@@ -171,10 +173,10 @@ class TestContextBuilderE2E:
 
         assert validation_result is not None, "Should return validation result"
 
-        # Check validation result properties
-        assert hasattr(validation_result, "is_valid"), "Should have is_valid property"
-        assert hasattr(validation_result, "data_age_seconds"), "Should have data_age_seconds property"
-        assert validation_result.data_age_seconds >= 0, "Data age should be non-negative"
+        # Check validation result properties (now returns dict instead of object)
+        assert "is_valid" in validation_result, "Should have is_valid key"
+        assert "data_age_seconds" in validation_result, "Should have data_age_seconds key"
+        assert validation_result["data_age_seconds"] >= 0, "Data age should be non-negative"
 
     @pytest.mark.asyncio
     async def test_cache_invalidation_with_new_data(
@@ -187,17 +189,17 @@ class TestContextBuilderE2E:
         # Build context first time (should populate cache)
         context1 = await context_builder_service.get_market_context("BTCUSDT", ["5m"])
         assert context1 is not None, "Should build market context"
-        assert context1.symbol == "BTCUSDT", "Symbol should match"
+        # Note: symbol field is in TradingContext, not MarketContext
 
         # Build context second time (should use cache)
         context2 = await context_builder_service.get_market_context("BTCUSDT", ["5m"])
         assert context2 is not None, "Should build market context from cache"
-        assert context2.symbol == "BTCUSDT", "Symbol should match"
+        # Note: symbol field is in TradingContext, not MarketContext
 
         # Build context with force_refresh (should bypass cache)
         context3 = await context_builder_service.get_market_context("BTCUSDT", ["5m"], force_refresh=True)
         assert context3 is not None, "Should build fresh market context"
-        assert context3.symbol == "BTCUSDT", "Symbol should match"
+        # Note: symbol field is in TradingContext, not MarketContext
 
         # Verify contexts have valid data
         assert context1.current_price > 0, "Should have current price"
