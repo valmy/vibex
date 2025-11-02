@@ -85,10 +85,8 @@ def main() -> None:
     print(access_token)
     print("\nExport for curl:")
     print(f"export AUTH='Authorization: Bearer {access_token}'")
-    print("# example: curl -H \"$AUTH\"", f"{api_base}/api/v1/auth/me")
+    print('# example: curl -H "$AUTH"', f"{api_base}/api/v1/auth/me")
 
 
 if __name__ == "__main__":
     main()
-
-

@@ -172,7 +172,8 @@ class TestDecisionAccuracyRegression:
             mock_context.market_data.current_price = market_data[-1].close
             mock_context.market_data.price_change_24h = (
                 (market_data[-1].close - market_data[-24].close) / market_data[-24].close * 100
-                if len(market_data) >= 24 else 5.0
+                if len(market_data) >= 24
+                else 5.0
             )
 
             # Setup decision engine
@@ -231,7 +232,8 @@ class TestDecisionAccuracyRegression:
             mock_context.market_data.current_price = market_data[-1].close
             mock_context.market_data.price_change_24h = (
                 (market_data[-1].close - market_data[-24].close) / market_data[-24].close * 100
-                if len(market_data) >= 24 else -5.0
+                if len(market_data) >= 24
+                else -5.0
             )
 
             # Setup decision engine
@@ -434,13 +436,17 @@ class TestDecisionAccuracyRegression:
 
         # Validate we got results for most patterns
         successful_patterns = [k for k, v in pattern_results.items() if "error" not in v]
-        assert len(successful_patterns) >= 2, f"At least 2 patterns should succeed, got {len(successful_patterns)}"
+        assert (
+            len(successful_patterns) >= 2
+        ), f"At least 2 patterns should succeed, got {len(successful_patterns)}"
 
         # Log summary
         logger.info("Pattern recognition summary:")
         for pattern, result in pattern_results.items():
             if "error" not in result:
-                logger.info(f"  {pattern}: {result['action']} (confidence: {result['confidence']}%)")
+                logger.info(
+                    f"  {pattern}: {result['action']} (confidence: {result['confidence']}%)"
+                )
             else:
                 logger.warning(f"  {pattern}: ERROR - {result['error']}")
 

@@ -6,14 +6,14 @@ Provides common fixtures and setup for all tests.
 
 import asyncio
 import os
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import AsyncMock, Mock
 
 # Set testing environment before importing app modules
 os.environ["ENVIRONMENT"] = "testing"
 
-from app.core.config import config
-from app.db.session import init_db, close_db, AsyncSessionLocal
+from app.db.session import AsyncSessionLocal, close_db, init_db
 
 
 @pytest.fixture(scope="session")
@@ -50,9 +50,14 @@ async def db_session():
 def create_mock_context():
     """Create a mock trading context for testing."""
     from app.schemas.trading_decision import (
-        TradingContext, MarketContext, AccountContext,
-        TechnicalIndicators, PerformanceMetrics, RiskMetrics,
-        TradingStrategy, StrategyRiskParameters
+        AccountContext,
+        MarketContext,
+        PerformanceMetrics,
+        RiskMetrics,
+        StrategyRiskParameters,
+        TechnicalIndicators,
+        TradingContext,
+        TradingStrategy,
     )
 
     # Create mock technical indicators
@@ -145,8 +150,8 @@ def create_mock_context():
 @pytest.fixture
 def mock_llm_service():
     """Create a mock LLM service for testing."""
-    from app.services.llm.llm_service import LLMService
     from app.schemas.trading_decision import DecisionResult, TradingDecision
+    from app.services.llm.llm_service import LLMService
 
     mock_service = AsyncMock(spec=LLMService)
 

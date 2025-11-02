@@ -6,30 +6,21 @@ technical indicators, and validates decision quality and consistency.
 """
 
 import asyncio
-import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
-from unittest.mock import AsyncMock, Mock, patch
+from typing import List
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.market_data import MarketData
 from app.schemas.trading_decision import (
-    AccountContext,
     DecisionResult,
-    MarketContext,
-    PerformanceMetrics,
-    RiskMetrics,
-    TechnicalIndicators,
-    TradingContext,
     TradingDecision,
-    TradingStrategy,
-    StrategyRiskParameters,
 )
-from app.services.llm.decision_engine import DecisionEngine, get_decision_engine
-from app.services.market_data.service import get_market_data_service
 from app.services import get_technical_analysis_service
+from app.services.llm.decision_engine import get_decision_engine
+from app.services.market_data.service import get_market_data_service
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +104,14 @@ class TestLLMDecisionEngineE2E:
             assert isinstance(result, DecisionResult)
             assert isinstance(result.decision, TradingDecision)
             assert result.decision.asset == "BTCUSDT"
-            assert result.decision.action in ["buy", "sell", "hold", "adjust_position", "close_position", "adjust_orders"]
+            assert result.decision.action in [
+                "buy",
+                "sell",
+                "hold",
+                "adjust_position",
+                "close_position",
+                "adjust_orders",
+            ]
             assert result.decision.confidence >= 0 and result.decision.confidence <= 100
             assert result.decision.risk_level in ["low", "medium", "high"]
             assert len(result.decision.rationale) > 10  # Should have meaningful rationale
@@ -130,21 +128,27 @@ class TestLLMDecisionEngineE2E:
             assert indicators.candle_count == 100  # Should match our test data
 
             # At least some indicators should be calculated
-            has_indicators = any([
-                indicators.ema.ema is not None,
-                indicators.rsi.rsi is not None,
-                indicators.macd.macd is not None,
-                indicators.bollinger_bands.upper is not None,
-                indicators.atr.atr is not None
-            ])
+            has_indicators = any(
+                [
+                    indicators.ema.ema is not None,
+                    indicators.rsi.rsi is not None,
+                    indicators.macd.macd is not None,
+                    indicators.bollinger_bands.upper is not None,
+                    indicators.atr.atr is not None,
+                ]
+            )
             assert has_indicators, "At least some technical indicators should be calculated"
 
             # Validate processing time is reasonable
             assert result.processing_time_ms > 0
             assert result.processing_time_ms < 30000  # Should complete within 30 seconds
 
-            logger.info(f"Decision generated: {result.decision.action} with confidence {result.decision.confidence}%")
-            logger.info(f"Technical indicators calculated: EMA={indicators.ema.ema}, RSI={indicators.rsi.rsi}")
+            logger.info(
+                f"Decision generated: {result.decision.action} with confidence {result.decision.confidence}%"
+            )
+            logger.info(
+                f"Technical indicators calculated: EMA={indicators.ema.ema}, RSI={indicators.rsi.rsi}"
+            )
 
         except Exception as e:
             logger.error(f"Test failed with error: {e}")
@@ -201,23 +205,68 @@ class TestLLMDecisionEngineE2E:
         else:
             # If actions differ, confidence should be relatively low (indicating uncertainty)
             avg_confidence = sum(confidences) / len(confidences)
-            assert avg_confidence < 80, f"High confidence ({avg_confidence}%) with inconsistent actions: {actions}"
+            assert (
+                avg_confidence < 80
+            ), f"High confidence ({avg_confidence}%) with inconsistent actions: {actions}"
             logger.info(f"Acceptable inconsistency with low confidence: {avg_confidence}%")
 
     @pytest.mark.asyncio
-    async def test_technical_analysis_with_real_data(self, real_market_data):
-        """Test technical analysis calculations with real market data."""
-        logger.info("Testing technical analysis with real market data")
+    async def test_technical_analysis_with_real_data(self):
+        """Test technical analysis calculations with real market data from database (5m interval BTCUSDT)."""
+
+        from sqlalchemy.ext.asyncio import create_async_engine
+        from sqlalchemy.orm import sessionmaker
+
+        logger.info(
+            "Testing technical analysis with real 5m interval BTCUSDT market data from database"
+        )
+
+        # Use the test database configuration explicitly
+        test_db_url = "postgresql+asyncpg://trading_user:trading_password@localhost:5432/trading_db"
+
+        # Create a separate engine for this test to avoid conflicts with global initialization
+        test_engine = create_async_engine(
+            test_db_url,
+            echo=False,
+            pool_size=5,
+            max_overflow=10,
+            pool_pre_ping=True,
+        )
+
+        async_session = sessionmaker(
+            test_engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autoflush=False,
+        )
+
+        market_data = []
+        try:
+            async with async_session() as session:
+                market_service = get_market_data_service()
+                market_data = await market_service.get_latest_market_data(
+                    db=session, symbol="BTCUSDT", interval="5m", limit=100
+                )
+        finally:
+            # Close the test-specific engine
+            await test_engine.dispose()
+
+        # If no data found in the database, fail the test to alert that real data is missing
+        if not market_data or len(market_data) == 0:
+            logger.error("No BTCUSDT 5m interval data found in database - test requires real data")
+            raise AssertionError("Test failed: No BTCUSDT 5m interval data found in database. The test needs real data from the database.")
+
+        logger.info(f"Fetched {len(market_data)} records of BTCUSDT 5m interval data from database")
 
         technical_service = get_technical_analysis_service()
 
-        # Test with the real market data
+        # Test with the 5m interval market data from database
         try:
-            indicators_result = technical_service.calculate_all_indicators(real_market_data)
+            indicators_result = technical_service.calculate_all_indicators(market_data)
 
             # Validate that indicators were calculated
             assert indicators_result is not None
-            assert indicators_result.candle_count == 100
+            assert indicators_result.candle_count == len(market_data)
 
             # Check that at least some indicators have values
             has_ema = indicators_result.ema.ema is not None
@@ -227,24 +276,48 @@ class TestLLMDecisionEngineE2E:
             has_atr = indicators_result.atr.atr is not None
 
             indicators_calculated = sum([has_ema, has_rsi, has_macd, has_bb, has_atr])
-            assert indicators_calculated >= 2, f"At least 2 indicators should be calculated, got {indicators_calculated}"
+            assert (
+                indicators_calculated >= 2
+            ), f"At least 2 indicators should be calculated, got {indicators_calculated}"
 
             # Validate indicator values are reasonable
             if has_ema:
                 assert indicators_result.ema.ema > 0, "EMA should be positive"
 
             if has_rsi:
-                assert 0 <= indicators_result.rsi.rsi <= 100, f"RSI should be 0-100, got {indicators_result.rsi.rsi}"
+                assert (
+                    0 <= indicators_result.rsi.rsi <= 100
+                ), f"RSI should be 0-100, got {indicators_result.rsi.rsi}"
 
             if has_atr:
                 assert indicators_result.atr.atr >= 0, "ATR should be non-negative"
 
-            logger.info(f"Technical indicators calculated successfully:")
+            # Log the complete technical analysis data
+            logger.info(
+                f"Technical indicators calculated successfully for {len(market_data)} candles:"
+            )
             logger.info(f"  EMA: {indicators_result.ema.ema}")
+            logger.info(f"  EMA Period: {indicators_result.ema.period}")
             logger.info(f"  RSI: {indicators_result.rsi.rsi}")
+            logger.info(f"  RSI Period: {indicators_result.rsi.period}")
             logger.info(f"  MACD: {indicators_result.macd.macd}")
+            logger.info(f"  MACD Signal: {indicators_result.macd.signal}")
+            logger.info(f"  MACD Histogram: {indicators_result.macd.histogram}")
             logger.info(f"  BB Upper: {indicators_result.bollinger_bands.upper}")
+            logger.info(f"  BB Middle: {indicators_result.bollinger_bands.middle}")
+            logger.info(f"  BB Lower: {indicators_result.bollinger_bands.lower}")
+            logger.info(f"  BB Period: {indicators_result.bollinger_bands.period}")
             logger.info(f"  ATR: {indicators_result.atr.atr}")
+            logger.info(f"  ATR Period: {indicators_result.atr.period}")
+            logger.info(f"  Candle Count: {indicators_result.candle_count}")
+            logger.info(f"  Timestamp: {indicators_result.timestamp}")
+
+            # Log the first few market data points for context
+            logger.info("Sample market data points:")
+            for i, candle in enumerate(market_data[:3]):  # Log first 3 data points
+                logger.info(
+                    f"  Candle {i+1}: Time={candle.time}, Open={candle.open}, High={candle.high}, Low={candle.low}, Close={candle.close}, Volume={candle.volume}"
+                )
 
         except Exception as e:
             logger.error(f"Technical analysis failed: {e}")
@@ -313,10 +386,12 @@ class TestLLMDecisionEngineE2E:
                         "rsi": indicators_result.rsi.rsi,
                         "ema": indicators_result.ema.ema,
                         "current_price": market_data[-1].close,
-                    }
+                    },
                 }
 
-                logger.info(f"{scenario_name}: {result.decision.action} (confidence: {result.decision.confidence}%)")
+                logger.info(
+                    f"{scenario_name}: {result.decision.action} (confidence: {result.decision.confidence}%)"
+                )
 
             except Exception as e:
                 logger.warning(f"Scenario {scenario_name} failed: {e}")
@@ -359,8 +434,10 @@ class TestLLMDecisionEngineE2E:
         assert cache_stats["total_cache_entries"] >= 0
         assert cache_stats["cache_hit_rate"] >= 0
 
-        logger.info(f"Performance metrics: {usage_metrics.total_requests} requests, "
-                   f"{usage_metrics.avg_response_time_ms:.2f}ms avg response time")
+        logger.info(
+            f"Performance metrics: {usage_metrics.total_requests} requests, "
+            f"{usage_metrics.avg_response_time_ms:.2f}ms avg response time"
+        )
 
     # Helper methods for creating test data
 

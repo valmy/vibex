@@ -24,7 +24,11 @@ from app.schemas.trading_decision import (
     ValidationResult,
 )
 from app.services.llm.context_builder import ContextBuilderService
-from app.services.llm.decision_engine import DecisionEngine, DecisionEngineError, get_decision_engine
+from app.services.llm.decision_engine import (
+    DecisionEngine,
+    DecisionEngineError,
+    get_decision_engine,
+)
 from app.services.llm.decision_validator import DecisionValidator
 from app.services.llm.llm_service import LLMService
 from app.services.llm.strategy_manager import StrategyManager
@@ -438,7 +442,10 @@ class TestLLMDecisionEngineIntegration:
 
         # Verify strategy manager was called
         mock_strategy_manager.switch_account_strategy.assert_called_once_with(
-            account_id=1, new_strategy_id="aggressive", switch_reason="Manual switch", switched_by=None
+            account_id=1,
+            new_strategy_id="aggressive",
+            switch_reason="Manual switch",
+            switched_by=None,
         )
 
         # Test decision generation after strategy switch
@@ -458,6 +465,7 @@ class TestLLMDecisionEngineIntegration:
         mock_strategy_manager,
     ):
         """Test error handling and recovery scenarios."""
+
         # Mock context building failure
         def mock_build_context_failure(symbol, account_id, force_refresh=False):
             raise Exception("Context building failed")

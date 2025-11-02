@@ -4,8 +4,7 @@ Unit tests for trading decision schemas.
 Tests validation rules, constraints, and serialization for all trading decision models.
 """
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import pytest
 from pydantic import ValidationError

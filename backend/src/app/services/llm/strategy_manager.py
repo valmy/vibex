@@ -43,9 +43,9 @@ class StrategyManager:
         self._strategies: Dict[str, TradingStrategy] = {}
         self._strategy_assignments: Dict[int, str] = {}  # account_id -> strategy_id
         self._performance_cache: Dict[str, StrategyPerformance] = {}
-        self._metrics_cache: Dict[
-            Tuple[str, int], StrategyMetrics
-        ] = {}  # (strategy_id, account_id)
+        self._metrics_cache: Dict[Tuple[str, int], StrategyMetrics] = (
+            {}
+        )  # (strategy_id, account_id)
         self._alerts: List[StrategyAlert] = []
 
         # Initialize predefined strategies

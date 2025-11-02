@@ -5,7 +5,6 @@ Tests integration with other services and components.
 """
 
 from datetime import datetime, timezone
-import json
 
 import pytest
 
