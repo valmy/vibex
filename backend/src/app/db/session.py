@@ -33,9 +33,43 @@ def get_sync_engine():
     return engine
 
 
-# Asynchronous engine (for FastAPI)
-async def get_async_engine():
-    """Create asynchronous SQLAlchemy engine."""
+# Async session factory - global state
+async_engine = None
+AsyncSessionLocal = None
+
+
+def get_async_engine():
+    """
+    Get the global async engine instance.
+
+    Returns the cached engine if available, otherwise raises RuntimeError.
+    Use init_db() to initialize the engine first.
+    """
+    global async_engine
+
+    if async_engine is None:
+        raise RuntimeError("Database engine not initialized. Call init_db() first.")
+
+    return async_engine
+
+
+def get_session_factory():
+    """
+    Get the global session factory.
+
+    Returns the cached AsyncSessionLocal if available, otherwise raises RuntimeError.
+    Use init_db() to initialize the session factory first.
+    """
+    global AsyncSessionLocal
+
+    if AsyncSessionLocal is None:
+        raise RuntimeError("Database session factory not initialized. Call init_db() first.")
+
+    return AsyncSessionLocal
+
+
+async def _create_async_engine():
+    """Create asynchronous SQLAlchemy engine (internal use only)."""
     # Use asyncpg for async operations
     database_url = config.DATABASE_URL
     if not database_url.startswith("postgresql+asyncpg://"):
@@ -54,32 +88,35 @@ async def get_async_engine():
     return engine
 
 
-# Async session factory
-async_engine = None
-AsyncSessionLocal = None
-
-
 async def init_db():
     """Initialize database engine and session factory."""
     global async_engine, AsyncSessionLocal
 
-    async_engine = await get_async_engine()
-    AsyncSessionLocal = async_sessionmaker(
-        async_engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-        autoflush=False,
-    )
-
-    logger.info("Database engine and session factory initialized")
+    try:
+        # Only create engine if not already initialized
+        if async_engine is None:
+            async_engine = await _create_async_engine()
+            AsyncSessionLocal = async_sessionmaker(
+                async_engine,
+                class_=AsyncSession,
+                expire_on_commit=False,
+                autoflush=False,
+            )
+            logger.info("Database engine and session factory initialized")
+        else:
+            logger.info("Database already initialized, skipping")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+        async_engine = None
+        AsyncSessionLocal = None
+        raise
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Get database session for dependency injection."""
-    if AsyncSessionLocal is None:
-        raise RuntimeError("Database not initialized. Call init_db() first.")
+    session_factory = get_session_factory()
 
-    async with AsyncSessionLocal() as session:
+    async with session_factory() as session:
         try:
             yield session
         except Exception as e:
@@ -92,10 +129,12 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 async def close_db():
     """Close database engine."""
-    global async_engine
+    global async_engine, AsyncSessionLocal
 
     if async_engine:
         await async_engine.dispose()
+        async_engine = None
+        AsyncSessionLocal = None
         logger.info("Database engine closed")
 
 
@@ -103,13 +142,14 @@ async def close_db():
 async def check_db_health() -> bool:
     """Check database connection health."""
     try:
-        if async_engine is None:
-            return False
-
-        async with async_engine.connect() as conn:
+        engine = get_async_engine()
+        async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
 
         return True
+    except RuntimeError:
+        # Engine not initialized
+        return False
     except Exception as e:
         logger.error(f"Database health check failed: {e}")
         return False

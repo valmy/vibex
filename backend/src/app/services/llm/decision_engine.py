@@ -14,6 +14,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from ...schemas.trading_decision import (
     DecisionResult,
     HealthStatus,
@@ -113,10 +115,10 @@ class DecisionEngine:
     unified interface with caching and rate limiting.
     """
 
-    def __init__(self):
+    def __init__(self, db_session: Optional[AsyncSession] = None):
         """Initialize the Decision Engine."""
         self.llm_service = get_llm_service()
-        self.context_builder = get_context_builder_service()
+        self.context_builder = get_context_builder_service(db_session=db_session)
         self.decision_validator = get_decision_validator()
         self.strategy_manager = StrategyManager()
 
@@ -893,9 +895,9 @@ class DecisionEngine:
 _decision_engine: Optional[DecisionEngine] = None
 
 
-def get_decision_engine() -> DecisionEngine:
+def get_decision_engine(db_session: Optional[AsyncSession] = None) -> DecisionEngine:
     """Get or create the decision engine instance."""
     global _decision_engine
     if _decision_engine is None:
-        _decision_engine = DecisionEngine()
+        _decision_engine = DecisionEngine(db_session=db_session)
     return _decision_engine

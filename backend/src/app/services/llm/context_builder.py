@@ -5,37 +5,41 @@ Aggregates market data, technical indicators, and account state to build
 comprehensive context for trading decisions.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from statistics import stdev
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Removed unused import
 from ...db.session import AsyncSessionLocal
 from ...models.account import Account
 from ...models.market_data import MarketData
 from ...models.position import Position
 from ...models.trade import Trade
-from ...schemas.context import (
-    AccountContext,
-    ContextValidationResult,
-    MarketContext,
-    PerformanceMetrics,
-    PositionSummary,
-    PricePoint,
-    RiskMetrics,
-    TradeHistory,
-    TradingContext,
-)
 from ...services.market_data.service import get_market_data_service
 from ...services.technical_analysis.exceptions import (
     InsufficientDataError as TAInsufficientDataError,
 )
 from ...services.technical_analysis.service import TechnicalAnalysisService
+
+if TYPE_CHECKING:
+    from ...schemas.context import (
+        AccountContext,
+        ContextValidationResult,
+        MarketContext,
+        PerformanceMetrics,
+        PositionSummary,
+        PricePoint,
+        RiskMetrics,
+        TechnicalIndicators,
+        TradeHistory,
+        TradingContext,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -68,14 +72,33 @@ class ContextBuilderService:
     RECENT_TRADES_LIMIT = 20  # Number of recent trades to include
     PERFORMANCE_LOOKBACK_DAYS = 30  # Days to look back for performance metrics
 
-    def __init__(self):
-        """Initialize the Context Builder Service."""
+    def __init__(self, db_session: AsyncSession = None):
+        """Initialize the Context Builder Service.
+
+        Args:
+            db_session: Optional database session. If not provided, will use AsyncSessionLocal.
+        """
         self.market_data_service = get_market_data_service()
         self.technical_analysis_service = TechnicalAnalysisService()
         self._cache: Dict[str, Tuple[datetime, any]] = {}
         self._cache_ttl_seconds = 300  # 5 minutes cache TTL
+        self._db_session = db_session
 
         logger.info("ContextBuilderService initialized")
+
+    def cleanup_expired_cache(self):
+        """Remove expired entries from the cache."""
+        now = datetime.now(timezone.utc)
+        expired_keys = []
+        for key, (timestamp, _) in self._cache.items():
+            if (now - timestamp).total_seconds() > self._cache_ttl_seconds:
+                expired_keys.append(key)
+        
+        for key in expired_keys:
+            del self._cache[key]
+        
+        if expired_keys:
+            logger.info(f"Cleaned up {len(expired_keys)} expired cache entries.")
 
     async def build_trading_context(
         self,
@@ -83,7 +106,7 @@ class ContextBuilderService:
         account_id: int,
         timeframes: Optional[List[str]] = None,
         force_refresh: bool = False,
-    ) -> TradingContext:
+    ) -> 'TradingContext':
         """
         Build complete trading context for decision making.
 
@@ -101,8 +124,9 @@ class ContextBuilderService:
             InsufficientMarketDataError: If insufficient market data
             StaleDataError: If data is too stale
         """
+        from ...schemas.context import TradingContext
         if timeframes is None:
-            timeframes = ["1h", "4h"]
+            timeframes = ["5m"]
 
         logger.info(f"Building trading context for {symbol}, account {account_id}")
 
@@ -179,8 +203,12 @@ class ContextBuilderService:
             raise ContextBuilderError(f"Context building failed: {str(e)}") from e
 
     async def get_market_context(
-        self, symbol: str, timeframes: List[str], force_refresh: bool = False
-    ) -> MarketContext:
+        self,
+        symbol: str,
+        timeframes: List[str],
+        force_refresh: bool = False,
+        db_session: AsyncSession = None
+    ) -> 'MarketContext':
         """
         Build market context with price data and technical indicators.
 
@@ -188,10 +216,12 @@ class ContextBuilderService:
             symbol: Trading pair symbol
             timeframes: List of timeframes to analyze
             force_refresh: Force refresh of cached data
+            db_session: Optional database session to use
 
         Returns:
             MarketContext object
         """
+        from ...schemas.context import MarketContext, PricePoint
         cache_key = f"market_context_{symbol}_{'-'.join(timeframes)}"
 
         # Check cache first
@@ -199,11 +229,12 @@ class ContextBuilderService:
             cached_time, cached_data = self._cache[cache_key]
             if (datetime.now(timezone.utc) - cached_time).total_seconds() < self._cache_ttl_seconds:
                 logger.debug(f"Using cached market context for {symbol}")
-                return cached_data
+        db = db_session or self._db_session
+        if db is None:
+            raise ContextBuilderError("No database session provided.")
+        should_close = False
 
-        logger.debug(f"Building market context for {symbol} with timeframes {timeframes}")
-
-        async with AsyncSessionLocal() as db:
+        try:
             # Get market data for primary timeframe (first in list)
             primary_timeframe = timeframes[0]
             market_data = await self.market_data_service.get_latest_market_data(
@@ -213,8 +244,8 @@ class ContextBuilderService:
             if not market_data or len(market_data) < 10:
                 raise InsufficientMarketDataError(f"Insufficient market data for {symbol}")
 
-            # Sort by timestamp (oldest first for technical analysis)
-            market_data.sort(key=lambda x: x.timestamp)
+            # Sort by time (oldest first for technical analysis)
+            market_data.sort(key=lambda x: x.time)
 
             # Get current price and calculate metrics
             latest_candle = market_data[-1]
@@ -239,7 +270,7 @@ class ContextBuilderService:
 
             # Build price history
             price_history = [
-                PricePoint(timestamp=candle.timestamp, price=candle.close, volume=candle.volume)
+                PricePoint(timestamp=candle.time, price=candle.close, volume=candle.volume)
                 for candle in market_data[-50:]  # Last 50 points
             ]
 
@@ -290,7 +321,7 @@ class ContextBuilderService:
                 price_history=price_history,
                 volatility=volatility,
                 technical_indicators=technical_indicators,
-                data_freshness=latest_candle.timestamp,
+                data_freshness=latest_candle.time,
             )
 
             # Cache the result
@@ -298,31 +329,31 @@ class ContextBuilderService:
 
             return market_context
 
+        finally:
+            if should_close:
+                await db.close()
+
     async def get_account_context(
-        self, account_id: int, force_refresh: bool = False
-    ) -> AccountContext:
+        self, account_id: int, force_refresh: bool = False, db_session: AsyncSession = None
+    ) -> 'AccountContext':
         """
         Build account context with balance, positions, and performance metrics.
 
         Args:
             account_id: Account ID
             force_refresh: Force refresh of cached data
+            db_session: Optional database session to use
 
         Returns:
             AccountContext object
         """
-        cache_key = f"account_context_{account_id}"
+        from ...schemas.context import AccountContext, PositionSummary
+        db = db_session or self._db_session
+        if db is None:
+            raise ContextBuilderError("No database session provided.")
+        should_close = False
 
-        # Check cache first
-        if not force_refresh and cache_key in self._cache:
-            cached_time, cached_data = self._cache[cache_key]
-            if (datetime.now(timezone.utc) - cached_time).total_seconds() < self._cache_ttl_seconds:
-                logger.debug(f"Using cached account context for account {account_id}")
-                return cached_data
-
-        logger.debug(f"Building account context for account {account_id}")
-
-        async with AsyncSessionLocal() as db:
+        try:
             # Get account details
             account_result = await db.execute(select(Account).where(Account.id == account_id))
             account = account_result.scalar_one_or_none()
@@ -362,7 +393,6 @@ class ContextBuilderService:
 
             # Calculate total unrealized PnL and position metrics
             total_pnl = sum(pos.unrealized_pnl for pos in positions)
-            total_position_value = sum(pos.current_value for pos in positions)
 
             # Get recent performance metrics
             performance_metrics = await self._calculate_performance_metrics(db, account_id)
@@ -396,34 +426,49 @@ class ContextBuilderService:
             )
             return account_context
 
+        finally:
+            if should_close:
+                await db.close()
+
     async def get_recent_trades(
-        self, account_id: int, symbol: Optional[str] = None
-    ) -> List[TradeHistory]:
+        self, account_id: int, symbol: Optional[str] = None, db_session: AsyncSession = None
+    ) -> List['TradeHistory']:
         """
         Get recent trade history for the account.
 
         Args:
             account_id: Account ID
             symbol: Optional symbol filter
+            db_session: Optional database session to use
 
         Returns:
-            List of recent trades
+           List of TradeHistory objects
         """
-        logger.debug(f"Getting recent trades for account {account_id}")
+        from ...schemas.context import TradeHistory
+        db = db_session or self._db_session
+        if db is None:
+            raise ContextBuilderError("No database session provided.")
+        should_close = False
 
-        async with AsyncSessionLocal() as db:
+        try:
+            # Build the base query
             query = select(Trade).where(Trade.account_id == account_id)
-
+            
+            # Add symbol filter if provided
             if symbol:
                 query = query.where(Trade.symbol == symbol)
-
+                
+            # Order by most recent first and limit results
             query = query.order_by(desc(Trade.created_at)).limit(self.RECENT_TRADES_LIMIT)
-
+            
+            # Execute the query
             result = await db.execute(query)
             trades = result.scalars().all()
-
+            
+            # Convert to TradeHistory objects
             trade_history = [
                 TradeHistory(
+                    id=trade.id,
                     symbol=trade.symbol,
                     side=trade.side,
                     quantity=trade.quantity,
@@ -437,11 +482,15 @@ class ContextBuilderService:
             ]
 
             return trade_history
+        finally:
+            if should_close:
+                await db.close()
 
     async def _calculate_performance_metrics(
         self, db: AsyncSession, account_id: int
-    ) -> PerformanceMetrics:
+    ) -> 'PerformanceMetrics':
         """Calculate performance metrics for the account."""
+        from ...schemas.context import PerformanceMetrics
         # Get trades from the last 30 days
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.PERFORMANCE_LOOKBACK_DAYS)
 
@@ -517,8 +566,9 @@ class ContextBuilderService:
 
     async def _calculate_risk_metrics(
         self, db: AsyncSession, account: Account, positions: List[Position]
-    ) -> RiskMetrics:
+    ) -> 'RiskMetrics':
         """Calculate risk metrics for the account."""
+        from ...schemas.context import RiskMetrics
         # Mock balance (TODO: implement actual balance fetching)
         balance = 10000.0
 
@@ -555,8 +605,9 @@ class ContextBuilderService:
 
     async def _calculate_enhanced_risk_metrics(
         self, db: AsyncSession, account: Account, positions: List[Position]
-    ) -> RiskMetrics:
+    ) -> 'RiskMetrics':
         """Calculate enhanced risk metrics with position awareness."""
+        from ...schemas.context import RiskMetrics
         # Mock balance (TODO: implement actual balance fetching)
         balance = 10000.0
 
@@ -603,93 +654,7 @@ class ContextBuilderService:
             correlation_risk=correlation_risk,
         )
 
-    async def _calculate_account_balance(
-        self, db: AsyncSession, account_id: int, positions: List[Position]
-    ) -> float:
-        """
-        Calculate account balance with position awareness.
-
-        Args:
-            db: Database session
-            account_id: Account ID
-            positions: Current open positions
-
-        Returns:
-            Account balance in USD
-        """
-        # TODO: Implement actual balance fetching from exchange API
-        # For now, use mock balance with position adjustments
-        base_balance = 10000.0
-
-        # Add unrealized PnL from positions
-        unrealized_pnl = sum(pos.unrealized_pnl for pos in positions)
-
-        # Get realized PnL from closed trades
-        result = await db.execute(
-            select(func.sum(Trade.pnl)).where(Trade.account_id == account_id, Trade.pnl.isnot(None))
-        )
-        realized_pnl = result.scalar() or 0.0
-
-        # Calculate total balance
-        total_balance = base_balance + realized_pnl + unrealized_pnl
-
-        return max(0, total_balance)  # Ensure non-negative balance
-
-    def _validate_context(
-        self, market_context: MarketContext, account_context: AccountContext
-    ) -> ContextValidationResult:
-        """
-        Validate the built context for completeness and freshness.
-
-        Args:
-            market_context: Market context to validate
-            account_context: Account context to validate
-
-        Returns:
-            ContextValidationResult with validation details
-        """
-        missing_data = []
-        stale_data = []
-        warnings = []
-
-        # Check market data freshness
-        now = datetime.now(timezone.utc)
-        data_age = (now - market_context.data_freshness).total_seconds()
-
-        if data_age > self.MAX_DATA_AGE_MINUTES * 60:
-            stale_data.append(f"Market data is {data_age/60:.1f} minutes old")
-
-        # Check for missing technical indicators and validate their freshness
-        if not market_context.technical_indicators:
-            warnings.append("Technical indicators not available")
-        else:
-            # Validate indicator freshness and completeness
-            indicator_warnings = self._validate_indicator_freshness(
-                market_context.technical_indicators, market_context.data_freshness
-            )
-            warnings.extend(indicator_warnings)
-
-        # Check for missing funding rate and open interest
-        if market_context.funding_rate is None:
-            warnings.append("Funding rate not available")
-        if market_context.open_interest is None:
-            warnings.append("Open interest not available")
-
-        # Check account data
-        if account_context.available_balance <= 0:
-            warnings.append("No available balance for trading")
-
-        is_valid = len(missing_data) == 0 and len(stale_data) == 0
-
-        return ContextValidationResult(
-            is_valid=is_valid,
-            missing_data=missing_data,
-            stale_data=stale_data,
-            warnings=warnings,
-            data_age_seconds=data_age,
-        )
-
-    def _create_partial_indicators(self, market_data: List[MarketData]) -> Optional[any]:
+    def _create_partial_indicators(self, market_data: List[MarketData]) -> Optional['TechnicalIndicators']:
         """
         Create partial technical indicators with available data.
 
@@ -764,144 +729,9 @@ class ContextBuilderService:
             logger.error(f"Failed to create partial indicators: {e}")
             return None
 
-    def _validate_indicator_freshness(
-        self, technical_indicators: any, data_timestamp: datetime
-    ) -> List[str]:
-        """
-        Validate freshness of technical indicators.
-
-        Args:
-            technical_indicators: Technical indicators object
-            data_timestamp: Timestamp of the underlying data
-
-        Returns:
-            List of validation warnings
-        """
-        warnings = []
-
-        if not technical_indicators:
-            warnings.append("No technical indicators available")
-            return warnings
-
-        # Check if indicators have actual values
-        if hasattr(technical_indicators, "ema") and technical_indicators.ema.ema is None:
-            warnings.append("EMA indicator not available")
-
-        if hasattr(technical_indicators, "rsi") and technical_indicators.rsi.rsi is None:
-            warnings.append("RSI indicator not available")
-
-        if hasattr(technical_indicators, "macd"):
-            if technical_indicators.macd.macd is None or technical_indicators.macd.signal is None:
-                warnings.append("MACD indicator incomplete")
-
-        if hasattr(technical_indicators, "bollinger_bands"):
-            if (
-                technical_indicators.bollinger_bands.upper is None
-                or technical_indicators.bollinger_bands.lower is None
-            ):
-                warnings.append("Bollinger Bands indicator incomplete")
-
-        if hasattr(technical_indicators, "atr") and technical_indicators.atr.atr is None:
-            warnings.append("ATR indicator not available")
-
-        # Check data age for indicator reliability
-        now = datetime.now(timezone.utc)
-        data_age_minutes = (now - data_timestamp).total_seconds() / 60
-
-        if data_age_minutes > 30:
-            warnings.append(
-                f"Technical indicators based on data {data_age_minutes:.1f} minutes old"
-            )
-
-        return warnings
-
-    def validate_data_freshness(
-        self, data_timestamp: datetime, max_age_minutes: Optional[int] = None
-    ) -> Tuple[bool, float]:
-        """
-        Validate data freshness.
-
-        Args:
-            data_timestamp: Timestamp of the data
-            max_age_minutes: Maximum allowed age in minutes (uses default if None)
-
-        Returns:
-            Tuple of (is_fresh, age_in_minutes)
-        """
-        if max_age_minutes is None:
-            max_age_minutes = self.MAX_DATA_AGE_MINUTES
-
-        now = datetime.now(timezone.utc)
-        age_seconds = (now - data_timestamp).total_seconds()
-        age_minutes = age_seconds / 60
-
-        is_fresh = age_minutes <= max_age_minutes
-
-        return is_fresh, age_minutes
-
-    def invalidate_cache_for_account(self, account_id: int):
-        """
-        Invalidate cache entries for a specific account.
-
-        Args:
-            account_id: Account ID to invalidate cache for
-        """
-        pattern = f"account_context_{account_id}"
-        self.clear_cache(pattern)
-        logger.info(f"Invalidated cache for account {account_id}")
-
-    def invalidate_cache_for_symbol(self, symbol: str):
-        """
-        Invalidate cache entries for a specific symbol.
-
-        Args:
-            symbol: Symbol to invalidate cache for
-        """
-        pattern = f"market_context_{symbol}"
-        self.clear_cache(pattern)
-        logger.info(f"Invalidated cache for symbol {symbol}")
-
-    def get_cache_stats(self) -> Dict[str, any]:
-        """
-        Get cache statistics.
-
-        Returns:
-            Dictionary with cache statistics
-        """
-        now = datetime.now(timezone.utc)
-        total_entries = len(self._cache)
-        expired_entries = 0
-
-        for cached_time, _ in self._cache.values():
-            if (now - cached_time).total_seconds() > self._cache_ttl_seconds:
-                expired_entries += 1
-
-        return {
-            "total_entries": total_entries,
-            "expired_entries": expired_entries,
-            "active_entries": total_entries - expired_entries,
-            "cache_ttl_seconds": self._cache_ttl_seconds,
-            "max_data_age_minutes": self.MAX_DATA_AGE_MINUTES,
-        }
-
-    def cleanup_expired_cache(self):
-        """Clean up expired cache entries."""
-        now = datetime.now(timezone.utc)
-        expired_keys = []
-
-        for key, (cached_time, _) in self._cache.items():
-            if (now - cached_time).total_seconds() > self._cache_ttl_seconds:
-                expired_keys.append(key)
-
-        for key in expired_keys:
-            del self._cache[key]
-
-        if expired_keys:
-            logger.info(f"Cleaned up {len(expired_keys)} expired cache entries")
-
     async def validate_context_data_availability(
         self, symbol: str, account_id: int
-    ) -> ContextValidationResult:
+    ) -> 'ContextValidationResult':
         """
         Validate data availability before building context.
 
@@ -912,48 +742,59 @@ class ContextBuilderService:
         Returns:
             ContextValidationResult with availability status
         """
+        from ...schemas.context import ContextValidationResult
         missing_data = []
         warnings = []
+        db = self._db_session
+        
+        if db is None:
+            return ContextValidationResult(
+                is_valid=False,
+                missing_data=["Database session not available"],
+                stale_data=[],
+                warnings=[],
+                data_age_seconds=0,
+            )
 
         try:
-            async with AsyncSessionLocal() as db:
-                # Check if account exists
-                account_result = await db.execute(select(Account).where(Account.id == account_id))
-                account = account_result.scalar_one_or_none()
+            # Check if account exists
+            account_result = await db.execute(select(Account).where(Account.id == account_id))
+            account = account_result.scalar_one_or_none()
 
-                if not account:
-                    missing_data.append(f"Account {account_id} not found")
+            if not account:
+                missing_data.append(f"Account {account_id} not found")
 
-                # Check market data availability
-                market_data = await self.market_data_service.get_latest_market_data(
-                    db, symbol, "1h", 10
-                )
+            # Check market data availability
+            market_data = await self.market_data_service.get_latest_market_data(
+                db, symbol, "1h", 10
+            )
 
-                if not market_data:
-                    missing_data.append(f"No market data available for {symbol}")
-                elif len(market_data) < 10:
-                    warnings.append(f"Limited market data for {symbol}: {len(market_data)} candles")
+            if not market_data:
+                missing_data.append(f"No market data available for {symbol}")
+            elif len(market_data) < 10:
+                warnings.append(f"Limited market data for {symbol}: {len(market_data)} candles")
 
-                # Check data freshness
-                if market_data:
-                    latest_candle = max(market_data, key=lambda x: x.timestamp)
-                    is_fresh, age_minutes = self.validate_data_freshness(latest_candle.timestamp)
+            # Check data freshness
+            data_age_seconds = 0
+            if market_data:
+                latest_candle = max(market_data, key=lambda x: x.timestamp)
+                is_fresh, age_minutes = self.validate_data_freshness(latest_candle.timestamp)
+                data_age_seconds = age_minutes * 60
 
-                    if not is_fresh:
-                        warnings.append(
-                            f"Market data for {symbol} is {age_minutes:.1f} minutes old"
-                        )
+                if not is_fresh:
+                    warnings.append(
+                        f"Market data for {symbol} is {age_minutes:.1f} minutes old"
+                    )
 
-                is_valid = len(missing_data) == 0
-                data_age_seconds = age_minutes * 60 if market_data else 0
+            is_valid = len(missing_data) == 0
 
-                return ContextValidationResult(
-                    is_valid=is_valid,
-                    missing_data=missing_data,
-                    stale_data=[],
-                    warnings=warnings,
-                    data_age_seconds=data_age_seconds,
-                )
+            return ContextValidationResult(
+                is_valid=is_valid,
+                missing_data=missing_data,
+                stale_data=[],
+                warnings=warnings,
+                data_age_seconds=data_age_seconds,
+            )
 
         except Exception as e:
             logger.error(f"Failed to validate data availability: {e}")
@@ -966,8 +807,8 @@ class ContextBuilderService:
             )
 
     def handle_data_unavailability(
-        self, symbol: str, account_id: int, validation_result: ContextValidationResult
-    ) -> Optional[TradingContext]:
+        self, symbol: str, account_id: int, validation_result: 'ContextValidationResult'
+    ) -> Optional['TradingContext']:
         """
         Handle data unavailability with graceful degradation.
 
@@ -979,6 +820,7 @@ class ContextBuilderService:
         Returns:
             Degraded TradingContext or None if critical data missing
         """
+        from ...schemas.context import TradingContext
         if not validation_result.is_valid:
             logger.warning(f"Cannot create context for {symbol}: {validation_result.missing_data}")
             return None
@@ -1015,9 +857,16 @@ class ContextBuilderService:
 _context_builder_service: Optional[ContextBuilderService] = None
 
 
-def get_context_builder_service() -> ContextBuilderService:
-    """Get or create the context builder service instance."""
+def get_context_builder_service(db_session: Optional[AsyncSession] = None) -> 'ContextBuilderService':
+    """Get or create the context builder service instance.
+    
+    Args:
+        db_session: Optional database session. If not provided, the service will create its own.
+    """
     global _context_builder_service
     if _context_builder_service is None:
-        _context_builder_service = ContextBuilderService()
+        _context_builder_service = ContextBuilderService(db_session=db_session)
+    elif db_session is not None and _context_builder_service._db_session is None:
+        # Update the existing instance with the new session if needed
+        _context_builder_service._db_session = db_session
     return _context_builder_service

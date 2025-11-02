@@ -108,6 +108,7 @@ class DevelopmentConfig(BaseConfig):
     DEBUG: bool = True
     LOG_LEVEL: str = "DEBUG"
     DATABASE_ECHO: bool = True
+    # Use postgres hostname for Docker/Podman networking in development
     DATABASE_URL: str = "postgresql://trading_user:trading_password@postgres:5432/trading_db"
 
 
@@ -118,8 +119,17 @@ class TestingConfig(BaseConfig):
     DEBUG: bool = False
     LOG_LEVEL: str = "WARNING"
     DATABASE_ECHO: bool = False
+    # Use localhost for direct host connection in testing
     DATABASE_URL: str = "postgresql://trading_user:trading_password@localhost:5432/trading_db"
     API_PORT: int = 8000
+
+    # Pydantic v2 configuration: use model_config (dict) instead of inner Config class
+    # Keep keys compatible with pydantic-settings expectations for BaseSettings
+    model_config = {
+        "env_file": ".env.testing",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": True,
+    }
 
 
 class ProductionConfig(BaseConfig):
