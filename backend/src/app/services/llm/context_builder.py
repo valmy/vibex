@@ -120,6 +120,30 @@ class ContextBuilderService:
         if expired_keys:
             logger.info(f"Cleaned up {len(expired_keys)} expired cache entries.")
 
+    def validate_data_freshness(self, timestamp: datetime, max_age_minutes: int = None) -> Tuple[bool, float]:
+        """Validate that data is fresh enough for trading decisions.
+
+        Args:
+            timestamp: Timestamp of the data
+            max_age_minutes: Maximum age in minutes (uses MAX_DATA_AGE_MINUTES if not provided)
+
+        Returns:
+            Tuple of (is_fresh: bool, age_minutes: float)
+        """
+        if max_age_minutes is None:
+            max_age_minutes = self.MAX_DATA_AGE_MINUTES
+
+        # Handle both timezone-aware and timezone-naive datetimes
+        now = datetime.now(timezone.utc)
+        check_timestamp = timestamp
+        if check_timestamp.tzinfo is None:
+            check_timestamp = check_timestamp.replace(tzinfo=timezone.utc)
+
+        age_minutes = (now - check_timestamp).total_seconds() / 60
+        is_fresh = age_minutes <= max_age_minutes
+
+        return is_fresh, age_minutes
+
     def _convert_technical_indicators(
         self, indicators: TATechnicalIndicators
     ) -> TechnicalIndicators:

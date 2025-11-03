@@ -63,20 +63,38 @@ class TestContextBuilderService:
         service2 = get_context_builder_service()
         assert service1 is service2
 
-    @pytest.mark.skip(reason="validate_data_freshness method removed - functionality moved to MarketContext.validate_data_freshness()")
     def test_validate_data_freshness_fresh_data(self, context_builder):
         """Test data freshness validation with fresh data."""
-        pass
+        # Create a timestamp from 2 minutes ago (fresh)
+        fresh_timestamp = datetime.now(timezone.utc) - timedelta(minutes=2)
 
-    @pytest.mark.skip(reason="validate_data_freshness method removed - functionality moved to MarketContext.validate_data_freshness()")
+        is_fresh, age_minutes = context_builder.validate_data_freshness(fresh_timestamp)
+
+        assert is_fresh is True
+        assert age_minutes < 3  # Should be around 2 minutes
+
     def test_validate_data_freshness_stale_data(self, context_builder):
         """Test data freshness validation with stale data."""
-        pass
+        # Create a timestamp from 30 minutes ago (stale, default max is 15 minutes)
+        stale_timestamp = datetime.now(timezone.utc) - timedelta(minutes=30)
 
-    @pytest.mark.skip(reason="validate_data_freshness method removed - functionality moved to MarketContext.validate_data_freshness()")
+        is_fresh, age_minutes = context_builder.validate_data_freshness(stale_timestamp)
+
+        assert is_fresh is False
+        assert age_minutes > 29  # Should be around 30 minutes
+
     def test_validate_data_freshness_custom_max_age(self, context_builder):
         """Test data freshness validation with custom max age."""
-        pass
+        # Create a timestamp from 10 minutes ago
+        timestamp = datetime.now(timezone.utc) - timedelta(minutes=10)
+
+        # With default max age (15 minutes), should be fresh
+        is_fresh, age_minutes = context_builder.validate_data_freshness(timestamp)
+        assert is_fresh is True
+
+        # With custom max age of 5 minutes, should be stale
+        is_fresh, age_minutes = context_builder.validate_data_freshness(timestamp, max_age_minutes=5)
+        assert is_fresh is False
 
     def test_cache_operations(self, context_builder):
         """Test cache operations."""
@@ -106,15 +124,37 @@ class TestContextBuilderService:
         context_builder.clear_cache()
         assert len(context_builder._cache) == 0
 
-    @pytest.mark.skip(reason="invalidate_cache_for_account method removed - use clear_cache() instead")
     def test_invalidate_cache_for_account(self, context_builder):
-        """Test cache invalidation for specific account."""
-        pass
+        """Test cache invalidation for specific account using clear_cache()."""
+        # Set up cache with account-specific entries
+        now = datetime.now(timezone.utc)
+        context_builder._cache["account_context_1"] = (now, "account_1_data")
+        context_builder._cache["account_context_2"] = (now, "account_2_data")
+        context_builder._cache["market_context_BTC"] = (now, "market_data")
 
-    @pytest.mark.skip(reason="invalidate_cache_for_symbol method removed - use clear_cache() instead")
+        # Clear cache for account 1
+        context_builder.clear_cache("account_context_1")
+
+        # Verify account 1 cache is cleared but others remain
+        assert "account_context_1" not in context_builder._cache
+        assert "account_context_2" in context_builder._cache
+        assert "market_context_BTC" in context_builder._cache
+
     def test_invalidate_cache_for_symbol(self, context_builder):
-        """Test cache invalidation for specific symbol."""
-        pass
+        """Test cache invalidation for specific symbol using clear_cache()."""
+        # Set up cache with symbol-specific entries
+        now = datetime.now(timezone.utc)
+        context_builder._cache["market_context_BTCUSDT"] = (now, "btc_data")
+        context_builder._cache["market_context_ETHUSDT"] = (now, "eth_data")
+        context_builder._cache["account_context_1"] = (now, "account_data")
+
+        # Clear cache for BTCUSDT
+        context_builder.clear_cache("market_context_BTCUSDT")
+
+        # Verify BTCUSDT cache is cleared but others remain
+        assert "market_context_BTCUSDT" not in context_builder._cache
+        assert "market_context_ETHUSDT" in context_builder._cache
+        assert "account_context_1" in context_builder._cache
 
     def test_create_partial_indicators_insufficient_data(self, context_builder):
         """Test partial indicators creation with insufficient data."""
@@ -135,15 +175,53 @@ class TestContextBuilderService:
         assert hasattr(result, 'ema_20')
         assert hasattr(result, 'rsi')
 
-    @pytest.mark.skip(reason="_validate_indicator_freshness method removed - validation moved to _validate_context")
     def test_validate_indicator_freshness_no_indicators(self, context_builder):
         """Test indicator freshness validation with no indicators."""
-        pass
+        # Create mock contexts with no indicators
+        market_context = Mock()
+        market_context.current_price = 50000.0
+        market_context.technical_indicators = None  # No indicators
+        market_context.funding_rate = 0.01
+        market_context.open_interest = 1000000.0
+        mock_price = Mock()
+        mock_price.timestamp = datetime.now(timezone.utc) - timedelta(minutes=2)
+        market_context.price_history = [mock_price]
+        market_context.validate_data_freshness = Mock(return_value=True)
 
-    @pytest.mark.skip(reason="_validate_indicator_freshness method removed - validation moved to _validate_context")
+        account_context = Mock()
+        account_context.available_balance = 5000.0
+        account_context.balance_usd = 10000.0
+
+        result = context_builder._validate_context(market_context, account_context)
+
+        # Should have warning about no indicators but still be valid
+        assert result["is_valid"] is True
+        assert any("technical indicators" in w.lower() for w in result["warnings"])
+
     def test_validate_indicator_freshness_with_indicators(self, context_builder):
         """Test indicator freshness validation with indicators."""
-        pass
+        # Create mock contexts with indicators
+        market_context = Mock()
+        market_context.current_price = 50000.0
+        market_context.technical_indicators = Mock()
+        market_context.technical_indicators.ema_20 = 50000.0
+        market_context.technical_indicators.rsi = 65.0
+        market_context.funding_rate = 0.01
+        market_context.open_interest = 1000000.0
+        mock_price = Mock()
+        mock_price.timestamp = datetime.now(timezone.utc) - timedelta(minutes=2)
+        market_context.price_history = [mock_price]
+        market_context.validate_data_freshness = Mock(return_value=True)
+
+        account_context = Mock()
+        account_context.available_balance = 5000.0
+        account_context.balance_usd = 10000.0
+
+        result = context_builder._validate_context(market_context, account_context)
+
+        # Should be valid with indicators
+        assert result["is_valid"] is True
+        assert len(result["missing_data"]) == 0
 
     @pytest.mark.asyncio
     async def test_validate_context_data_availability_missing_account(self, context_builder):
