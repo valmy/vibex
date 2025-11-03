@@ -3,6 +3,25 @@ Context Builder Service for LLM Decision Engine.
 
 Aggregates market data, technical indicators, and account state to build
 comprehensive context for trading decisions.
+
+SCHEMA UNIFICATION (2025-11-02):
+This service now uses the CANONICAL schemas from app.schemas.trading_decision:
+- TradingContext: Complete trading context
+- MarketContext: Market data and technical indicators
+- AccountContext: Account state and positions
+- TechnicalIndicators: Flat structure (ema_20, ema_50, macd, etc.)
+- RiskMetrics: var_95, max_drawdown, correlation_risk, concentration_risk
+- PerformanceMetrics: total_pnl, win_rate, avg_win, avg_loss, max_drawdown, sharpe_ratio
+
+Previously, this service used schemas from app.schemas.context which has been deleted.
+All code should now import schemas from app.schemas.trading_decision.
+
+KEY METHODS:
+- build_trading_context(): Build complete trading context for decision making
+- get_market_context(): Get market data and technical indicators
+- get_account_context(): Get account state and positions
+- validate_context_data_availability(): Validate data freshness and availability
+- clear_cache(): Clear cached context data
 """
 
 from __future__ import annotations

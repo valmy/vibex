@@ -1,7 +1,30 @@
 """
 Trading decision schemas for LLM-generated decisions.
 
-Provides structured data models for trading decisions and related components.
+This module contains the CANONICAL schemas for the entire trading system. These schemas
+are used by:
+- LLMService: For generating structured trading decisions
+- ContextBuilderService: For building trading context
+- DecisionValidator: For validating trading decisions
+- All API endpoints: For request/response validation
+
+SCHEMA UNIFICATION (2025-11-02):
+This module is the single source of truth for all trading-related schemas. Previously,
+there were duplicate schemas in app.schemas.context which have been removed. All code
+should import schemas from this module.
+
+KEY SCHEMA CHANGES:
+- TechnicalIndicators: Uses flat structure (ema_20, ema_50, macd, etc.) instead of nested
+- RiskMetrics: Uses var_95, max_drawdown, correlation_risk, concentration_risk
+- PerformanceMetrics: Simplified to total_pnl, win_rate, avg_win, avg_loss, max_drawdown, sharpe_ratio
+- AccountContext: active_strategy is now required (not Optional)
+- MarketContext: No longer has symbol field (symbol is in TradingContext)
+- PositionSummary: Uses 'size' instead of 'quantity', 'percentage_pnl' instead of 'unrealized_pnl_percent'
+- TradeHistory: Uses 'size' instead of 'quantity'
+
+MIGRATION NOTES:
+If you find code importing from app.schemas.context, update it to import from this module instead.
+The old context.py file has been deleted and should not be used.
 """
 
 from datetime import datetime, timezone
@@ -101,7 +124,16 @@ class TradingDecision(BaseModel):
 
 
 class TechnicalIndicators(BaseModel):
-    """Technical indicators for market analysis."""
+    """Technical indicators for market analysis.
+
+    Uses a FLAT structure where all indicators are direct fields on this model.
+    This is the canonical representation used throughout the system.
+
+    Previously, indicators were nested in separate output objects (EMAOutput, MACDOutput, etc.)
+    but have been flattened for simplicity and consistency.
+
+    All fields are optional to support partial indicator availability.
+    """
 
     ema_20: Optional[float] = Field(None, description="20-period EMA")
     ema_50: Optional[float] = Field(None, description="50-period EMA")
@@ -353,7 +385,18 @@ class TradeHistory(BaseModel):
 
 
 class RiskMetrics(BaseModel):
-    """Risk metrics for decision context."""
+    """Risk metrics for decision context.
+
+    CANONICAL FIELDS (as of 2025-11-02):
+    - var_95: Value at Risk at 95% confidence level
+    - max_drawdown: Maximum drawdown percentage
+    - correlation_risk: Portfolio correlation risk (0-100%)
+    - concentration_risk: Position concentration risk (0-100%)
+
+    These are the only fields that should be used. Previous versions had different
+    fields (current_exposure, available_capital, max_position_size, daily_pnl, daily_loss_limit)
+    which have been removed during schema unification.
+    """
 
     var_95: float = Field(..., description="Value at Risk (95%)")
     max_drawdown: float = Field(..., description="Maximum drawdown")
@@ -362,7 +405,19 @@ class RiskMetrics(BaseModel):
 
 
 class TradingContext(BaseModel):
-    """Complete context for trading decisions."""
+    """Complete context for trading decisions.
+
+    CANONICAL SCHEMA (as of 2025-11-02):
+    This is the single source of truth for trading context throughout the system.
+    Used by:
+    - ContextBuilderService: To build complete trading context
+    - LLMService: To generate trading decisions
+    - DecisionValidator: To validate decisions
+    - All API endpoints: For request/response validation
+
+    IMPORTANT: This schema was previously duplicated in app.schemas.context.TradingContext
+    which has been deleted. All code should use this canonical version.
+    """
 
     symbol: str
     account_id: int
