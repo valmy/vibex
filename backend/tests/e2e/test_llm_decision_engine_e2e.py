@@ -773,23 +773,24 @@ class TestLLMDecisionEngineE2E:
         # Create mock account context
         recent_performance = mocker.MagicMock()
         recent_performance.total_pnl = 1000.0
-        recent_performance.total_pnl_percent = 10.0
         recent_performance.win_rate = 60.0
         recent_performance.avg_win = 200.0
         recent_performance.avg_loss = 100.0
-        recent_performance.profit_factor = 1.5
         recent_performance.max_drawdown = 5.0
-        recent_performance.trades_count = 10
-        recent_performance.winning_trades = 6
-        recent_performance.losing_trades = 4
+        recent_performance.sharpe_ratio = 1.5
 
         risk_metrics = mocker.MagicMock()
-        risk_metrics.current_exposure = 20.0
-        risk_metrics.available_capital = 8000.0
-        risk_metrics.max_position_size = 3000.0
-        risk_metrics.daily_pnl = 100.0
-        risk_metrics.daily_loss_limit = 500.0
-        risk_metrics.correlation_risk = 0.0
+        risk_metrics.var_95 = 500.0
+        risk_metrics.max_drawdown = 500.0
+        risk_metrics.correlation_risk = 20.0
+        risk_metrics.concentration_risk = 30.0
+
+        # Create a mock trading strategy
+        mock_strategy = mocker.MagicMock()
+        mock_strategy.strategy_id = "test_strategy"
+        mock_strategy.strategy_name = "test_strategy"
+        mock_strategy.is_active = True
+        mock_strategy.max_positions = 5
 
         account_context = mocker.MagicMock()
         account_context.account_id = 1
@@ -800,8 +801,7 @@ class TestLLMDecisionEngineE2E:
         account_context.recent_performance = recent_performance
         account_context.risk_exposure = 30.0
         account_context.max_position_size = 3000.0
-        account_context.active_strategy = None
-        account_context.risk_metrics = risk_metrics
+        account_context.active_strategy = mock_strategy
 
         # Create mock trading context
         trading_context = mocker.MagicMock()
@@ -810,6 +810,7 @@ class TestLLMDecisionEngineE2E:
         trading_context.market_data = market_context
         trading_context.account_state = account_context
         trading_context.recent_trades = []
+        trading_context.risk_metrics = risk_metrics
         trading_context.timestamp = datetime.now(timezone.utc)
         # Update mock to return proper context
         mock_context_builder.build_trading_context.return_value = trading_context
