@@ -400,9 +400,12 @@ Provide:
 
             # Return fallback decision
             fallback_decision = self._create_fallback_decision(symbol)
+
+            # For the error case, we'll use the original context directly
+            # as it's already a TradingContext object
             return DecisionResult(
                 decision=fallback_decision,
-                context=context,
+                context=context,  # Use the original context directly
                 validation_passed=False,
                 validation_errors=[str(e)],
                 processing_time_ms=processing_time_ms,
@@ -592,6 +595,9 @@ Provide:
                     success=True,
                 )
 
+                # log debug response
+                logger.debug(f"LLM response: {response.choices[0].message.content}")
+
                 return {
                     "content": response.choices[0].message.content,
                     "usage": response.usage,
@@ -677,13 +683,46 @@ Provide:
 
         # Format technical indicators
         indicators = market_data.technical_indicators
+        ema_20 = indicators.ema_20 if indicators.ema_20 is not None else 'N/A'
+        ema_50 = indicators.ema_50 if indicators.ema_50 is not None else 'N/A'
+        macd = indicators.macd if indicators.macd is not None else 'N/A'
+        macd_signal = indicators.macd_signal if indicators.macd_signal is not None else 'N/A'
+        rsi = indicators.rsi if indicators.rsi is not None else 'N/A'
+        bb_upper = indicators.bb_upper if indicators.bb_upper is not None else 'N/A'
+        bb_middle = indicators.bb_middle if indicators.bb_middle is not None else 'N/A'
+        bb_lower = indicators.bb_lower if indicators.bb_lower is not None else 'N/A'
+        atr = indicators.atr if indicators.atr is not None else 'N/A'
+
+        # Format price history
+        price_history_text = "\n".join(
+            [f"- {ph.timestamp}: ${ph.price:.2f} (Vol: {ph.volume:.2f})"
+             for ph in market_data.price_history[-10:]]  # Last 10 price points
+        )
+
+        # Format account performance
+        perf = account_state.recent_performance
+        performance_text = f"""
+Total PnL: ${perf.total_pnl:.2f} ({perf.win_rate:.1f}% win rate)
+Average Win: ${perf.avg_win:.2f}, Average Loss: ${abs(perf.avg_loss):.2f}
+Max Drawdown: {perf.max_drawdown:.1f}%
+"""
+
+        # Format risk metrics
+        risk_metrics = f"""
+Value at Risk (95%): ${context.risk_metrics.var_95:.2f}
+Max Drawdown: ${context.risk_metrics.max_drawdown:.2f}
+Correlation Risk: {context.risk_metrics.correlation_risk*100:.1f}%
+Concentration Risk: {context.risk_metrics.concentration_risk*100:.1f}%
+"""
+
+        # Format indicators
         indicators_text = f"""
-EMA 20: {indicators.ema_20 or 'N/A'}
-EMA 50: {indicators.ema_50 or 'N/A'}
-MACD: {indicators.macd or 'N/A'}
-RSI: {indicators.rsi or 'N/A'}
-Bollinger Bands: Upper {indicators.bb_upper or 'N/A'}, Lower {indicators.bb_lower or 'N/A'}
-ATR: {indicators.atr or 'N/A'}
+=== TECHNICAL INDICATORS ===
+EMA: 20-period: {ema_20}, 50-period: {ema_50}
+MACD: {macd} (Signal: {macd_signal})
+RSI: {rsi}
+Bollinger Bands: Upper {bb_upper}, Middle {bb_middle}, Lower {bb_lower}
+ATR: {atr}
 """
 
         # Format positions
@@ -698,24 +737,46 @@ ATR: {indicators.atr or 'N/A'}
         else:
             positions_text = "No open positions"
 
-        prompt = prompt_template.format(
-            symbol=symbol,
-            current_price=market_data.current_price,
-            price_change_24h=market_data.price_change_24h,
-            volume_24h=market_data.volume_24h,
-            volatility=market_data.volatility,
-            technical_indicators=indicators_text.strip(),
-            balance_usd=account_state.balance_usd,
-            available_balance=account_state.available_balance,
-            open_positions=positions_text,
-            risk_exposure=account_state.risk_exposure,
-            max_risk_per_trade=strategy.risk_parameters.max_risk_per_trade,
-            max_daily_loss=strategy.risk_parameters.max_daily_loss,
-            stop_loss_percentage=strategy.risk_parameters.stop_loss_percentage,
-            take_profit_ratio=strategy.risk_parameters.take_profit_ratio,
-        )
+        # Format strategy parameters
+        strategy_params = f"""
+=== STRATEGY PARAMETERS ===
+Max Risk per Trade: {strategy.risk_parameters.max_risk_per_trade}%
+Max Daily Loss: {strategy.risk_parameters.max_daily_loss}%
+Stop Loss: {strategy.risk_parameters.stop_loss_percentage}%
+Take Profit Ratio: {strategy.risk_parameters.take_profit_ratio}
+Max Leverage: {strategy.risk_parameters.max_leverage}x
+"""
 
-        return prompt
+        # Build the complete prompt
+        prompt = f"""
+=== MARKET DATA ===
+Symbol: {symbol}
+Current Price: ${market_data.current_price:.2f}
+24h Change: {market_data.price_change_24h:.2f}%
+24h Volume: ${market_data.volume_24h:,.2f}
+Volatility: {market_data.volatility:.2f}%
+
+=== ACCOUNT INFO ===
+Balance: ${account_state.balance_usd:,.2f}
+Available: ${account_state.available_balance:,.2f}
+Risk Exposure: {account_state.risk_exposure:.1f}%
+
+{performance_text}
+{price_history_text}
+{indicators_text}
+{strategy_params}
+
+=== OPEN POSITIONS ===
+{positions_text}
+
+=== RISK METRICS ===
+{risk_metrics}
+
+=== INSTRUCTIONS ===
+{prompt_template}
+"""
+
+        return prompt.strip()
 
     def _get_decision_system_prompt(self) -> str:
         """Get system prompt for decision generation."""
@@ -824,8 +885,13 @@ Rules:
             asset=symbol,
             action="hold",
             allocation_usd=0.0,
-            exit_plan="Hold position due to analysis failure",
-            rationale="LLM analysis failed, defaulting to conservative hold position",
+            position_adjustment=None,
+            order_adjustment=None,
+            tp_price=None,
+            sl_price=None,
+            exit_plan="Hold position due to analysis failure. Will reassess when conditions improve.",
+            rationale="LLM analysis failed, defaulting to conservative hold position. "
+                    "This is a safety measure to prevent unintended trades when the analysis service is unavailable.",
             confidence=0,
             risk_level="low",
         )

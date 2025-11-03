@@ -3,6 +3,22 @@ Decision Engine Orchestrator for LLM-powered trading decisions.
 
 Coordinates all components to provide a unified interface for trading decision generation.
 Handles context building, LLM analysis, validation, caching, and multi-account support.
+
+SCHEMA UNIFICATION (2025-11-02):
+This service uses the CANONICAL schemas from app.schemas.trading_decision:
+- TradingContext: Complete trading context for decision making
+- TradingDecision: Structured trading decision from LLM
+- DecisionResult: Result of decision generation with context and decision
+- HealthStatus: Health status of the decision engine
+- UsageMetrics: Usage metrics for monitoring
+
+CACHE INVALIDATION:
+- _invalidate_account_caches(): Clears caches for a specific account using clear_cache()
+- invalidate_symbol_caches(): Clears caches for a specific symbol using clear_cache()
+
+These methods use the new clear_cache(pattern) API from ContextBuilderService.
+Previously, they called invalidate_cache_for_account() and invalidate_cache_for_symbol()
+which have been removed during schema unification.
 """
 
 import asyncio
@@ -13,6 +29,8 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...schemas.trading_decision import (
     DecisionResult,
@@ -113,10 +131,10 @@ class DecisionEngine:
     unified interface with caching and rate limiting.
     """
 
-    def __init__(self):
+    def __init__(self, db_session: Optional[AsyncSession] = None):
         """Initialize the Decision Engine."""
         self.llm_service = get_llm_service()
-        self.context_builder = get_context_builder_service()
+        self.context_builder = get_context_builder_service(db_session=db_session)
         self.decision_validator = get_decision_validator()
         self.strategy_manager = StrategyManager()
 
@@ -676,8 +694,8 @@ class DecisionEngine:
         for key in keys_to_remove:
             del self._context_cache[key]
 
-        # Invalidate context builder caches
-        self.context_builder.invalidate_cache_for_account(account_id)
+        # Invalidate context builder caches using the new clear_cache method
+        self.context_builder.clear_cache(f"account_context_{account_id}")
 
         logger.debug(f"Invalidated caches for account {account_id}")
 
@@ -695,8 +713,8 @@ class DecisionEngine:
         for key in keys_to_remove:
             del self._context_cache[key]
 
-        # Invalidate context builder caches
-        self.context_builder.invalidate_cache_for_symbol(symbol)
+        # Invalidate context builder caches using the new clear_cache method
+        self.context_builder.clear_cache(f"market_context_{symbol}")
 
         logger.debug(f"Invalidated caches for symbol {symbol}")
 
@@ -893,9 +911,9 @@ class DecisionEngine:
 _decision_engine: Optional[DecisionEngine] = None
 
 
-def get_decision_engine() -> DecisionEngine:
+def get_decision_engine(db_session: Optional[AsyncSession] = None) -> DecisionEngine:
     """Get or create the decision engine instance."""
     global _decision_engine
     if _decision_engine is None:
-        _decision_engine = DecisionEngine()
+        _decision_engine = DecisionEngine(db_session=db_session)
     return _decision_engine

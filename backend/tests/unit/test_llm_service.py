@@ -530,13 +530,15 @@ class TestLLMService:
     ):
         """Test decision prompt building with strategy override."""
         with patch.object(
-            llm_service, "_get_strategy_template", return_value="Aggressive strategy: {symbol}"
+            llm_service, "_get_strategy_template", return_value="Aggressive strategy for trading"
         ):
             prompt = llm_service._build_decision_prompt(
                 "BTCUSDT", sample_trading_context, "aggressive"
             )
 
-            assert "Aggressive strategy: BTCUSDT" in prompt
+            # The strategy template is used in the INSTRUCTIONS section
+            assert "Aggressive strategy for trading" in prompt
+            assert "=== INSTRUCTIONS ===" in prompt
 
     def test_parse_decision_response_valid_json(self, llm_service):
         """Test parsing valid JSON decision response."""

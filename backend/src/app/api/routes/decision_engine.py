@@ -200,21 +200,46 @@ async def validate_decision(decision: TradingDecision):
     without generating a full decision through the LLM.
     """
     try:
-        from ...schemas.context import AccountContext, MarketContext, TradingContext
-        from ...schemas.trading_decision import PerformanceMetrics, RiskMetrics, TechnicalIndicators
+        from ...schemas.trading_decision import (
+            AccountContext, MarketContext, TradingContext,
+            PerformanceMetrics, RiskMetrics, TechnicalIndicators
+        )
         from ...services.llm.decision_validator import get_decision_validator
 
         # Create minimal context for validation
         # In a real implementation, this would use actual account/market data
+        from ...schemas.trading_decision import (
+            PricePoint, StrategyRiskParameters, TradingStrategy, RiskMetrics
+        )
+
+        # Create a minimal trading strategy
+        strategy = TradingStrategy(
+            strategy_id="placeholder",
+            strategy_name="placeholder",
+            strategy_type="conservative",
+            prompt_template="",
+            risk_parameters=StrategyRiskParameters(
+                max_risk_per_trade=2.0,
+                max_daily_loss=5.0,
+                stop_loss_percentage=5.0,
+                take_profit_ratio=2.0,
+                max_leverage=1.0,
+                cooldown_period=300,
+            ),
+            is_active=True,
+        )
+
         context = TradingContext(
             symbol=decision.asset,
             account_id=1,  # Placeholder
             market_data=MarketContext(
-                symbol=decision.asset,
                 current_price=50000.0,  # Placeholder
                 price_change_24h=0.0,
                 volume_24h=1000000.0,
                 volatility=2.5,
+                price_history=[
+                    PricePoint(timestamp=datetime.now(timezone.utc), price=50000.0)
+                ],
                 technical_indicators=TechnicalIndicators(),
             ),
             account_state=AccountContext(
@@ -224,25 +249,21 @@ async def validate_decision(decision: TradingDecision):
                 total_pnl=0.0,
                 recent_performance=PerformanceMetrics(
                     total_pnl=0.0,
-                    total_pnl_percent=0.0,
                     win_rate=50.0,
                     avg_win=100.0,
                     avg_loss=-80.0,
-                    profit_factor=1.25,
                     max_drawdown=500.0,
-                    trades_count=10,
-                    winning_trades=5,
-                    losing_trades=5,
+                    sharpe_ratio=1.0,
                 ),
                 risk_exposure=20.0,
                 max_position_size=2000.0,
-                risk_metrics=RiskMetrics(
-                    current_exposure=20.0,
-                    available_capital=8000.0,
-                    max_position_size=2000.0,
-                    daily_pnl=0.0,
-                    daily_loss_limit=500.0,
-                ),
+                active_strategy=strategy,
+            ),
+            risk_metrics=RiskMetrics(
+                var_95=500.0,
+                max_drawdown=500.0,
+                correlation_risk=20.0,
+                concentration_risk=30.0,
             ),
         )
 
