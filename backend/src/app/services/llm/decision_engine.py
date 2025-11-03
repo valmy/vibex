@@ -678,8 +678,8 @@ class DecisionEngine:
         for key in keys_to_remove:
             del self._context_cache[key]
 
-        # Invalidate context builder caches
-        self.context_builder.invalidate_cache_for_account(account_id)
+        # Invalidate context builder caches using the new clear_cache method
+        self.context_builder.clear_cache(f"account_context_{account_id}")
 
         logger.debug(f"Invalidated caches for account {account_id}")
 
@@ -697,8 +697,8 @@ class DecisionEngine:
         for key in keys_to_remove:
             del self._context_cache[key]
 
-        # Invalidate context builder caches
-        self.context_builder.invalidate_cache_for_symbol(symbol)
+        # Invalidate context builder caches using the new clear_cache method
+        self.context_builder.clear_cache(f"market_context_{symbol}")
 
         logger.debug(f"Invalidated caches for symbol {symbol}")
 
