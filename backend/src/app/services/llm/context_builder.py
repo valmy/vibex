@@ -42,20 +42,6 @@ from ...services.technical_analysis.schemas import (
 )
 from ...services.technical_analysis.service import TechnicalAnalysisService
 
-if TYPE_CHECKING:
-    from ...schemas.context import (
-        AccountContext,
-        ContextValidationResult,
-        MarketContext,
-        PerformanceMetrics,
-        PositionSummary,
-        PricePoint,
-        RiskMetrics,
-        TechnicalIndicators,
-        TradeHistory,
-        TradingContext,
-    )
-
 logger = logging.getLogger(__name__)
 
 
@@ -298,7 +284,7 @@ class ContextBuilderService:
                         return degraded_context
                     else:
                         raise InsufficientMarketDataError(
-                            f"Data unavailable: {availability_check.missing_data}"
+                            f"Data unavailable: {availability_check['missing_data']}"
                         )
 
             # Build context components concurrently
