@@ -5,7 +5,7 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db.session import get_db
@@ -55,7 +55,7 @@ async def get_current_user(
 ) -> User:
     token = credentials.credentials
     token_data = verify_token(token, credentials_exception)
-    result = await db.execute(select(User).where(User.address == token_data.username))
+    result = await db.execute(select(User).where(func.lower(User.address) == func.lower(token_data.username)))
     user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception

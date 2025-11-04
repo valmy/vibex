@@ -89,7 +89,7 @@ class BaseConfig(BaseSettings):
     )
     ALGORITHM: str = Field(default="HS256", description="Algorithm for signing JWT tokens")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
-        default=30, description="Access token expiration time in minutes"
+        default=240, description="Access token expiration time in minutes"
     )
 
     # Pydantic v2 configuration: use model_config (dict) instead of inner Config class

@@ -1,5 +1,6 @@
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -29,7 +30,7 @@ class AdminOnlyMiddleware(BaseHTTPMiddleware):
                 engine = get_sync_engine()
                 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
                 db = SessionLocal()
-                user = db.query(User).filter(User.address == token_data.username).first()
+                user = db.query(User).filter(func.lower(User.address) == func.lower(token_data.username)).first()
                 db.close()
                 if not user or not user.is_admin:
                     return JSONResponse(
