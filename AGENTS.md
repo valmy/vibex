@@ -75,14 +75,21 @@ cd backend && uv run podman-compose down
 # Remove volumes
 cd backend && uv run podman-compose down -v
 
-### With python venv
+### With podman-compose (Recommended for Development)
+
+This method uses the `podman-compose.override.yml` to provide a hot-reloading development server while managing all services (backend, database, cache) in containers.
 
 ```bash
-# Start the development server
-cd backend && uv run python -m app.main
+# Copy the example override file for local development
+cd backend && cp podman-compose.override.yml.example podman-compose.override.yml
+# Start all services in the background
+cd backend && uv run podman-compose up -d --build
 
-# Run with specific environment
-cd backend && ENVIRONMENT=production uv run python -m app.main
+# View logs
+cd backend && uv run podman-compose logs -f backend
+
+# Stop services
+cd backend && uv run podman-compose down
 ```
 
 ## Code Style Guidelines

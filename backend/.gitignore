@@ -88,4 +88,5 @@ uv.lock
 # Podman/Docker
 .podman/
 .docker/
+podman-compose.override.yml
 

@@ -31,17 +31,15 @@ LLM-powered cryptocurrency trading agent for AsterDEX.
 
 4. **Start development environment**
    ```bash
-   uv run podman-compose up -d
+   # Copy the example override file for local development
+   cp podman-compose.override.yml.example podman-compose.override.yml
+   # This single command starts the database, cache, and the backend service with hot-reloading.
+   uv run podman-compose up -d --build
    ```
 
 5. **Run migrations**
    ```bash
    uv run alembic upgrade head
-   ```
-
-6. **Start the server**
-   ```bash
-   uv run uvicorn src.app.main:app --reload --host 0.0.0.0 --port 3000
    ```
 
 The API will be available at `http://localhost:3000`
