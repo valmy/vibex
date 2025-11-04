@@ -11,8 +11,10 @@ from ..models.challenge import Challenge
 
 async def get_challenge(db: AsyncSession, address: str) -> str:
     """Generate and store a challenge for the given address."""
+    # Normalize address to lowercase to prevent duplicate entries with different cases
+    normalized_address = address.lower()
     challenge_text = secrets.token_hex(32)
-    challenge = Challenge(address=address, challenge=challenge_text)
+    challenge = Challenge(address=normalized_address, challenge=challenge_text)
     db.add(challenge)
     await db.commit()
     return challenge_text
@@ -20,7 +22,9 @@ async def get_challenge(db: AsyncSession, address: str) -> str:
 
 async def get_or_create_user(db: AsyncSession, address: str) -> User:
     """Retrieve a user by address, creating one if it doesn't exist."""
-    result = await db.execute(select(User).where(User.address == address))
+    # Normalize address to lowercase to ensure consistent lookups
+    normalized_address = address.lower()
+    result = await db.execute(select(User).where(func.lower(User.address) == normalized_address))
     user = result.scalar_one_or_none()
     if user:
         return user
@@ -28,7 +32,7 @@ async def get_or_create_user(db: AsyncSession, address: str) -> User:
     count_result = await db.execute(select(func.count()).select_from(User))
     is_admin = (count_result.scalar() or 0) == 0
 
-    user = User(address=address, is_admin=is_admin)
+    user = User(address=normalized_address, is_admin=is_admin)
     db.add(user)
     await db.commit()
     await db.refresh(user)
@@ -52,7 +56,9 @@ async def authenticate_user(
         if recovered_address.lower() == address.lower():
             await db.delete(db_challenge)
             await db.commit()
-            return await get_or_create_user(db, address)
+            # Normalize address to lowercase before creating/getting user
+            normalized_address = address.lower()
+            return await get_or_create_user(db, normalized_address)
     except Exception:
         return None
 

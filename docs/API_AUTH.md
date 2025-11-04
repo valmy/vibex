@@ -258,4 +258,4 @@ JWT settings can be configured via environment variables:
 
 - `SECRET_KEY` - Secret key for signing JWT tokens
 - `ALGORITHM` - Algorithm for signing tokens (default: HS256)
-- `ACCESS_TOKEN_EXPIRE_MINUTES` - Token expiration time (default: 30)
+- `ACCESS_TOKEN_EXPIRE_MINUTES` - Token expiration time (default: 240)
