@@ -18,7 +18,6 @@ from .api.routes import (
     auth,
     decision_engine,
     diary,
-    llm_decisions,
     market_data,
     monitoring,
     orders,
@@ -122,7 +121,6 @@ app.include_router(diary.router)
 app.include_router(performance.router)
 app.include_router(market_data.router)
 app.include_router(analysis.router)
-app.include_router(llm_decisions.router)
 app.include_router(decision_engine.router)
 app.include_router(strategies.router)
 app.include_router(monitoring.router)
@@ -194,7 +192,6 @@ async def root():
             "decision_engine": "/api/v1/decisions",
             "strategies": "/api/v1/strategies",
             "monitoring": "/api/v1/monitoring",
-            "llm_decisions": "/api/v1/decisions",
             "market_data": "/api/v1/market-data",
             "trading": {
                 "accounts": "/api/v1/accounts",
