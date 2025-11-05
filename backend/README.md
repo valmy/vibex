@@ -34,7 +34,7 @@ LLM-powered cryptocurrency trading agent for AsterDEX.
    # Copy the example override file for local development
    cp podman-compose.override.yml.example podman-compose.override.yml
    # This single command starts the database, cache, and the backend service with hot-reloading.
-   uv run podman-compose up -d --build
+   podman-compose up -d --build
    ```
 
 5. **Run migrations**
@@ -217,16 +217,16 @@ podman run -p 3000:3000 --env-file .env trading-agent:latest
 
 ```bash
 # Start services
-uv run podman-compose up -d
+podman-compose up -d
 
 # View logs
-uv run podman-compose logs -f backend
+podman-compose logs -f backend
 
 # Stop services
-uv run podman-compose down
+podman-compose down
 
 # Remove volumes
-uv run podman-compose down -v
+podman-compose down -v
 ```
 
 ## Troubleshooting
@@ -235,13 +235,13 @@ uv run podman-compose down -v
 
 ```bash
 # Check PostgreSQL is running
-uv run podman-compose ps
+podman-compose ps
 
 # Check logs
-uv run podman-compose logs postgres
+podman-compose logs postgres
 
 # Restart PostgreSQL
-uv run podman-compose restart postgres
+podman-compose restart postgres
 ```
 
 ### Port Already in Use

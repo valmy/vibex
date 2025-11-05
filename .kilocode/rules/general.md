@@ -27,7 +27,7 @@ Based on the AGENTS.md file, here are the workspace rules for KiloCode to follow
 
 ### Running the Application
 - For Docker/Podman: Build with `cd backend && podman build -t trading-agent:latest .`, run with `cd backend && podman run -p 3000:3000 --env-file .env trading-agent:latest`.
-- For Podman Compose: Use `cd backend && uv run podman-compose up -d` to start, `cd backend && uv run podman-compose logs -f backend` to view logs, `cd backend && uv run podman-compose down` to stop, and `cd backend && uv run podman-compose down -v` to remove volumes.
+- For Podman Compose: Use `cd backend && podman-compose up -d` to start, `cd backend && podman-compose logs -f backend` to view logs, `cd backend && podman-compose down` to stop, and `cd backend && podman-compose down -v` to remove volumes.
 - For Python venv: Start server with `cd backend && uv run python -m app.main`, or with environment: `cd backend && ENVIRONMENT=production uv run python -m app.main`.
 
 ### Code Style Guidelines

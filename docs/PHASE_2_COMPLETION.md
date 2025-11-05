@@ -175,7 +175,7 @@ Phase 3: FastAPI Skeleton will include:
 
 ### Start PostgreSQL:
 ```bash
-cd backend && uv run podman-compose up -d postgres
+cd backend && podman-compose up -d postgres
 ```
 
 ### Start FastAPI Backend:
@@ -192,12 +192,12 @@ curl http://localhost:8000/
 
 ### View PostgreSQL Logs:
 ```bash
-cd backend && uv run podman-compose logs postgres
+cd backend && podman-compose logs postgres
 ```
 
 ### Connect to PostgreSQL:
 ```bash
-cd backend && uv run podman-compose exec postgres psql -U trading_user -d trading_db
+cd backend && podman-compose exec postgres psql -U trading_user -d trading_db
 ```
 
 ---

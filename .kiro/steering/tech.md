@@ -48,7 +48,7 @@ uv pip install -e backend/[dev,test]
 uv sync
 
 # Start development environment
-cd backend && uv run podman-compose up -d
+cd backend && podman-compose up -d
 
 # Run database migrations
 cd backend && uv run alembic upgrade head
@@ -120,10 +120,10 @@ cd backend && podman build -t trading-agent:latest .
 cd backend && podman run -p 3000:3000 --env-file .env trading-agent:latest
 
 # Using Podman Compose
-cd backend && uv run podman-compose up -d
-cd backend && uv run podman-compose logs -f backend
-cd backend && uv run podman-compose down
-cd backend && uv run podman-compose down -v
+cd backend && podman-compose up -d
+cd backend && podman-compose logs -f backend
+cd backend && podman-compose down
+cd backend && podman-compose down -v
 ```
 
 ### Environment Management

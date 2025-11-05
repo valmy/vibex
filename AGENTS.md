@@ -64,16 +64,16 @@ This is to run the database and backend app
 
 ```bash
 # Start services
-cd backend && uv run podman-compose up -d
+cd backend && podman-compose up -d
 
 # View logs
-cd backend && uv run podman-compose logs -f backend
+cd backend && podman-compose logs -f backend
 
 # Stop services
-cd backend && uv run podman-compose down
+cd backend && podman-compose down
 
 # Remove volumes
-cd backend && uv run podman-compose down -v
+cd backend && podman-compose down -v
 
 ### With podman-compose (Recommended for Development)
 
@@ -83,13 +83,13 @@ This method uses the `podman-compose.override.yml` to provide a hot-reloading de
 # Copy the example override file for local development
 cd backend && cp podman-compose.override.yml.example podman-compose.override.yml
 # Start all services in the background
-cd backend && uv run podman-compose up -d --build
+cd backend && podman-compose up -d --build
 
 # View logs
-cd backend && uv run podman-compose logs -f backend
+cd backend && podman-compose logs -f backend
 
 # Stop services
-cd backend && uv run podman-compose down
+cd backend && podman-compose down
 ```
 
 ## Code Style Guidelines

@@ -47,7 +47,7 @@ cp .env.example .env
 nano .env
 
 # Start services
-uv run podman-compose up -d
+podman-compose up -d
 
 # Run migrations
 uv run alembic upgrade head
@@ -115,23 +115,23 @@ services:
 
 ```bash
 # Start all services
-cd backend && uv run podman-compose up -d
+cd backend && podman-compose up -d
 
 # Check service status
-uv run podman-compose ps
+podman-compose ps
 
 # View logs
-uv run podman-compose logs -f backend
+podman-compose logs -f backend
 
 # Stop services
-uv run podman-compose down
+podman-compose down
 ```
 
 **With Monitoring:**
 
 ```bash
 # Start with monitoring stack
-uv run podman-compose --profile monitoring up -d
+podman-compose --profile monitoring up -d
 
 # Access Grafana dashboard
 open http://localhost:3001
@@ -658,7 +658,7 @@ WHERE account_id = 1 AND timestamp > NOW() - INTERVAL '24 hours';
 
 ```bash
 # Check logs
-uv run podman-compose logs backend
+podman-compose logs backend
 
 # Check configuration
 uv run python -c "from app.core.config import get_settings; print(get_settings())"
@@ -735,7 +735,7 @@ uv sync
 uv run alembic upgrade head
 
 # Restart services
-uv run podman-compose restart backend
+podman-compose restart backend
 ```
 
 **Database Migrations:**

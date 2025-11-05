@@ -374,14 +374,14 @@ start_monitoring() {
     cd "$PROJECT_ROOT"
 
     # Start with monitoring profile
-    uv run podman-compose --profile monitoring up -d
+    podman-compose --profile monitoring up -d
 
     # Wait for services to start
     echo "Waiting for services to start..."
     sleep 30
 
     # Check if services are running
-    if uv run podman-compose ps | grep -q "Up"; then
+    if podman-compose ps | grep -q "Up"; then
         print_status "Monitoring services started successfully"
 
         echo ""

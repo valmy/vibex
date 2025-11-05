@@ -166,7 +166,7 @@ docs/
 ### Start PostgreSQL
 ```bash
 cd backend
-uv run podman-compose up -d postgres
+podman-compose up -d postgres
 ```
 
 ### Start FastAPI Backend

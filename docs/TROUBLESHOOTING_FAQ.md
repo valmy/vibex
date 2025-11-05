@@ -287,7 +287,7 @@
 3. **Restart Services if Needed**
    ```bash
    # Restart the application
-   cd backend && uv run podman-compose restart backend
+   cd backend && podman-compose restart backend
    ```
 
 ### 4. Configuration Issues
@@ -339,10 +339,10 @@
 1. **Check Database Status**
    ```bash
    # Check if PostgreSQL is running
-   cd backend && uv run podman-compose ps
+   cd backend && podman-compose ps
 
    # Check database logs
-   cd backend && uv run podman-compose logs postgres
+   cd backend && podman-compose logs postgres
    ```
 
 2. **Test Database Connection**
@@ -358,8 +358,8 @@
 
 4. **Reset Database if Needed**
    ```bash
-   cd backend && uv run podman-compose down -v
-   cd backend && uv run podman-compose up -d
+   cd backend && podman-compose down -v
+   cd backend && podman-compose up -d
    cd backend && uv run alembic upgrade head
    ```
 
@@ -1250,7 +1250,7 @@ When reporting issues, include:
 2. Review recent logs for errors
 3. Restart services if needed:
    ```bash
-   cd backend && uv run podman-compose restart
+   cd backend && podman-compose restart
    ```
 4. Verify database connectivity
 5. Check external service status (OpenRouter, AsterDEX)

@@ -61,7 +61,7 @@ This document describes the WebSocket implementation for real-time market data u
 ### Starting the Application
 ```bash
 cd backend
-uv run podman-compose up
+podman-compose up
 ```
 
 The WebSocket service will automatically:

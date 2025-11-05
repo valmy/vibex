@@ -121,7 +121,7 @@ Create:
 ### 1. Start Development Environment
 ```bash
 # Terminal 1: Start PostgreSQL
-cd backend && uv run podman-compose up -d postgres
+cd backend && podman-compose up -d postgres
 
 # Terminal 2: Start FastAPI with auto-reload
 cd backend && .venv/bin/python -m uvicorn src.app.main:app --reload --host 0.0.0.0 --port 8000
@@ -244,7 +244,7 @@ cd backend && .venv/bin/pytest tests/api/ -v
 
 When ready to begin Phase 3, run:
 ```bash
-cd backend && uv run podman-compose up -d postgres
+cd backend && podman-compose up -d postgres
 cd backend && .venv/bin/python -m uvicorn src.app.main:app --reload
 ```
 
