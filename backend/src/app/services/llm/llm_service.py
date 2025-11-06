@@ -19,12 +19,7 @@ from ...core.logging import get_logger
 from ...schemas.trading_decision import DecisionResult, TradingContext, TradingDecision
 from .ab_testing import get_ab_test_manager
 from .circuit_breaker import CircuitBreaker
-from .llm_exceptions import (
-    InsufficientDataError,
-    LLMAPIError,
-    ModelSwitchError,
-    ValidationError,
-)
+from .llm_exceptions import InsufficientDataError, LLMAPIError, ModelSwitchError, ValidationError
 from .llm_metrics import HealthStatus, UsageMetrics, get_metrics_tracker
 
 logger = get_logger(__name__)
@@ -249,11 +244,11 @@ class LLMService:
         prompt = f"""
 Analyze the following market data for {symbol}:
 
-Current Price: ${market_data.get('close', 0):.2f}
-24h High: ${market_data.get('high', 0):.2f}
-24h Low: ${market_data.get('low', 0):.2f}
-Volume: {market_data.get('volume', 0):.2f}
-Open: ${market_data.get('open', 0):.2f}
+Current Price: ${market_data.get("close", 0):.2f}
+24h High: ${market_data.get("high", 0):.2f}
+24h Low: ${market_data.get("low", 0):.2f}
+Volume: {market_data.get("volume", 0):.2f}
+Open: ${market_data.get("open", 0):.2f}
 
 {f"Additional Context: {additional_context}" if additional_context else ""}
 
@@ -276,11 +271,11 @@ Provide:
         prompt = f"""
 Generate a trading signal for {symbol} based on:
 
-Price: ${market_data.get('close', 0):.2f}
-24h Change: {market_data.get('change_percent', 0):.2f}%
-Volume: {market_data.get('volume', 0):.2f}
-RSI: {market_data.get('rsi', 50):.2f}
-MACD: {market_data.get('macd', 0):.4f}
+Price: ${market_data.get("close", 0):.2f}
+24h Change: {market_data.get("change_percent", 0):.2f}%
+Volume: {market_data.get("volume", 0):.2f}
+RSI: {market_data.get("rsi", 50):.2f}
+MACD: {market_data.get("macd", 0):.4f}
 
 {f"Account Balance: ${account_info.get('balance', 0):.2f}" if account_info else ""}
 
@@ -683,20 +678,22 @@ Provide:
 
         # Format technical indicators
         indicators = market_data.technical_indicators
-        ema_20 = indicators.ema_20 if indicators.ema_20 is not None else 'N/A'
-        ema_50 = indicators.ema_50 if indicators.ema_50 is not None else 'N/A'
-        macd = indicators.macd if indicators.macd is not None else 'N/A'
-        macd_signal = indicators.macd_signal if indicators.macd_signal is not None else 'N/A'
-        rsi = indicators.rsi if indicators.rsi is not None else 'N/A'
-        bb_upper = indicators.bb_upper if indicators.bb_upper is not None else 'N/A'
-        bb_middle = indicators.bb_middle if indicators.bb_middle is not None else 'N/A'
-        bb_lower = indicators.bb_lower if indicators.bb_lower is not None else 'N/A'
-        atr = indicators.atr if indicators.atr is not None else 'N/A'
+        ema_20 = indicators.ema_20 if indicators.ema_20 is not None else "N/A"
+        ema_50 = indicators.ema_50 if indicators.ema_50 is not None else "N/A"
+        macd = indicators.macd if indicators.macd is not None else "N/A"
+        macd_signal = indicators.macd_signal if indicators.macd_signal is not None else "N/A"
+        rsi = indicators.rsi if indicators.rsi is not None else "N/A"
+        bb_upper = indicators.bb_upper if indicators.bb_upper is not None else "N/A"
+        bb_middle = indicators.bb_middle if indicators.bb_middle is not None else "N/A"
+        bb_lower = indicators.bb_lower if indicators.bb_lower is not None else "N/A"
+        atr = indicators.atr if indicators.atr is not None else "N/A"
 
         # Format price history
         price_history_text = "\n".join(
-            [f"- {ph.timestamp}: ${ph.price:.2f} (Vol: {ph.volume:.2f})"
-             for ph in market_data.price_history[-10:]]  # Last 10 price points
+            [
+                f"- {ph.timestamp}: ${ph.price:.2f} (Vol: {ph.volume:.2f})"
+                for ph in market_data.price_history[-10:]
+            ]  # Last 10 price points
         )
 
         # Format account performance
@@ -711,8 +708,8 @@ Max Drawdown: {perf.max_drawdown:.1f}%
         risk_metrics = f"""
 Value at Risk (95%): ${context.risk_metrics.var_95:.2f}
 Max Drawdown: ${context.risk_metrics.max_drawdown:.2f}
-Correlation Risk: {context.risk_metrics.correlation_risk*100:.1f}%
-Concentration Risk: {context.risk_metrics.concentration_risk*100:.1f}%
+Correlation Risk: {context.risk_metrics.correlation_risk * 100:.1f}%
+Concentration Risk: {context.risk_metrics.concentration_risk * 100:.1f}%
 """
 
         # Format indicators
@@ -891,7 +888,7 @@ Rules:
             sl_price=None,
             exit_plan="Hold position due to analysis failure. Will reassess when conditions improve.",
             rationale="LLM analysis failed, defaulting to conservative hold position. "
-                    "This is a safety measure to prevent unintended trades when the analysis service is unavailable.",
+            "This is a safety measure to prevent unintended trades when the analysis service is unavailable.",
             confidence=0,
             risk_level="low",
         )

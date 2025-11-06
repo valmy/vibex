@@ -67,6 +67,7 @@ class MarketDataRepository:
                     existing.taker_buy_quote_asset_volume = (
                         float(candle[10]) if len(candle) > 10 else 0.0
                     )
+                    existing.funding_rate = float(candle[11]) if len(candle) > 11 else None
                     logger.debug(f"Updated existing market data for {symbol} at {candle_time}")
                 else:
                     # Create new record
@@ -83,6 +84,7 @@ class MarketDataRepository:
                         number_of_trades=float(candle[8]) if len(candle) > 8 else 0.0,
                         taker_buy_base_asset_volume=float(candle[9]) if len(candle) > 9 else 0.0,
                         taker_buy_quote_asset_volume=float(candle[10]) if len(candle) > 10 else 0.0,
+                        funding_rate=float(candle[11]) if len(candle) > 11 else None,
                     )
                     db.add(market_data)
                     logger.debug(f"Added new market data for {symbol} at {candle_time}")

@@ -101,6 +101,7 @@ from .client import AsterClient
 
 client = AsterClient(api_key, api_secret, base_url)
 candles = await client.fetch_klines("BTCUSDT", "1h", limit=100)
+funding_rates = await client.fetch_funding_rate("BTCUSDT", limit=10)
 ```
 
 ---
@@ -112,7 +113,7 @@ candles = await client.fetch_klines("BTCUSDT", "1h", limit=100)
 - `MarketDataRepository` - Repository for market data CRUD operations
 
 **Methods:**
-- `store_candles(db, symbol, interval, data)` - Store candles with upsert logic
+- `store_candles(db, symbol, interval, data)` - Store candles (including funding rate) with upsert logic
 - `get_latest(db, symbol, interval, limit)` - Get latest market data
 - `get_range(db, symbol, interval, start_time, end_time)` - Get data in time range
 
@@ -174,7 +175,9 @@ service.register_event_handler(EventType.CANDLE_CLOSE, handler)
 
 # Data operations
 candles = await service.fetch_market_data("BTCUSDT", "1h", limit=100)
-count = await service.store_market_data(db, "BTCUSDT", "1h", candles)
+funding_rates = await service.fetch_funding_rate("BTCUSDT", limit=10)
+correlated_candles = service.correlate_funding_rates_with_candles(candles, funding_rates, "BTCUSDT")
+count = await service.store_market_data(db, "BTCUSDT", "1h", correlated_candles)
 data = await service.get_latest_market_data(db, "BTCUSDT", "1h", limit=100)
 data = await service.get_market_data_range(db, "BTCUSDT", "1h", start, end)
 results = await service.sync_market_data(db, symbol="BTCUSDT")
@@ -228,6 +231,7 @@ client = AsterClient(
     base_url=config.ASTERDEX_BASE_URL
 )
 candles = await client.fetch_klines("BTCUSDT", "1h", limit=100)
+funding_rates = await client.fetch_funding_rate("BTCUSDT", limit=10)
 
 # Use repository directly
 repo = MarketDataRepository()

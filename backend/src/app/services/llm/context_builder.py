@@ -30,12 +30,11 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from statistics import stdev
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...db.session import AsyncSessionLocal
 from ...models.account import Account
 from ...models.market_data import MarketData
 from ...models.position import Position
@@ -56,9 +55,7 @@ from ...services.market_data.service import get_market_data_service
 from ...services.technical_analysis.exceptions import (
     InsufficientDataError as TAInsufficientDataError,
 )
-from ...services.technical_analysis.schemas import (
-    TechnicalIndicators as TATechnicalIndicators,
-)
+from ...services.technical_analysis.schemas import TechnicalIndicators as TATechnicalIndicators
 from ...services.technical_analysis.service import TechnicalAnalysisService
 
 logger = logging.getLogger(__name__)
@@ -120,7 +117,9 @@ class ContextBuilderService:
         if expired_keys:
             logger.info(f"Cleaned up {len(expired_keys)} expired cache entries.")
 
-    def validate_data_freshness(self, timestamp: datetime, max_age_minutes: int = None) -> Tuple[bool, float]:
+    def validate_data_freshness(
+        self, timestamp: datetime, max_age_minutes: int = None
+    ) -> Tuple[bool, float]:
         """Validate that data is fresh enough for trading decisions.
 
         Args:
@@ -156,14 +155,26 @@ class ContextBuilderService:
             TechnicalIndicators with flat structure for LLM service
         """
         return TechnicalIndicators(
-            ema_20=indicators.ema.ema if indicators.ema and indicators.ema.ema is not None else None,
+            ema_20=indicators.ema.ema
+            if indicators.ema and indicators.ema.ema is not None
+            else None,
             ema_50=None,  # TODO: Calculate EMA-50 separately if needed
-            macd=indicators.macd.macd if indicators.macd and indicators.macd.macd is not None else None,
-            macd_signal=indicators.macd.signal if indicators.macd and indicators.macd.signal is not None else None,
+            macd=indicators.macd.macd
+            if indicators.macd and indicators.macd.macd is not None
+            else None,
+            macd_signal=indicators.macd.signal
+            if indicators.macd and indicators.macd.signal is not None
+            else None,
             rsi=indicators.rsi.rsi if indicators.rsi and indicators.rsi.rsi is not None else None,
-            bb_upper=indicators.bollinger_bands.upper if indicators.bollinger_bands and indicators.bollinger_bands.upper is not None else None,
-            bb_middle=indicators.bollinger_bands.middle if indicators.bollinger_bands and indicators.bollinger_bands.middle is not None else None,
-            bb_lower=indicators.bollinger_bands.lower if indicators.bollinger_bands and indicators.bollinger_bands.lower is not None else None,
+            bb_upper=indicators.bollinger_bands.upper
+            if indicators.bollinger_bands and indicators.bollinger_bands.upper is not None
+            else None,
+            bb_middle=indicators.bollinger_bands.middle
+            if indicators.bollinger_bands and indicators.bollinger_bands.middle is not None
+            else None,
+            bb_lower=indicators.bollinger_bands.lower
+            if indicators.bollinger_bands and indicators.bollinger_bands.lower is not None
+            else None,
             atr=indicators.atr.atr if indicators.atr and indicators.atr.atr is not None else None,
         )
 
@@ -180,9 +191,7 @@ class ContextBuilderService:
             RiskMetrics with calculated values
         """
         # Calculate total exposure from open positions
-        total_exposure = sum(
-            pos.size * pos.current_price for pos in account_context.open_positions
-        )
+        total_exposure = sum(pos.size * pos.current_price for pos in account_context.open_positions)
 
         # Calculate Value at Risk (95%) - simplified calculation
         # VaR = Position Value * Volatility * Z-score (1.65 for 95%)
@@ -197,7 +206,9 @@ class ContextBuilderService:
             long_positions = sum(1 for pos in account_context.open_positions if pos.side == "long")
             short_positions = len(account_context.open_positions) - long_positions
             # Higher correlation risk if all positions are in the same direction
-            correlation_risk = max(long_positions, short_positions) / len(account_context.open_positions) * 100
+            correlation_risk = (
+                max(long_positions, short_positions) / len(account_context.open_positions) * 100
+            )
 
         # Calculate concentration risk (largest position as % of total)
         concentration_risk = 0.0
@@ -214,7 +225,9 @@ class ContextBuilderService:
             concentration_risk=concentration_risk,
         )
 
-    def _validate_context(self, market_context: MarketContext, account_context: AccountContext) -> dict:
+    def _validate_context(
+        self, market_context: MarketContext, account_context: AccountContext
+    ) -> dict:
         """Validate the built context for completeness and freshness.
 
         Args:
@@ -238,7 +251,9 @@ class ContextBuilderService:
                 warnings.append("No technical indicators available")
 
             # Check data freshness using the market context's method
-            if not market_context.validate_data_freshness(max_age_minutes=self.MAX_DATA_AGE_MINUTES):
+            if not market_context.validate_data_freshness(
+                max_age_minutes=self.MAX_DATA_AGE_MINUTES
+            ):
                 # Calculate age from price history
                 if market_context.price_history:
                     latest_data = max(market_context.price_history, key=lambda x: x.timestamp)
@@ -247,7 +262,7 @@ class ContextBuilderService:
                     if latest_timestamp.tzinfo is None:
                         latest_timestamp = latest_timestamp.replace(tzinfo=timezone.utc)
                     data_age = (datetime.now(timezone.utc) - latest_timestamp).total_seconds()
-                    stale_data.append(f"Market data is {data_age/60:.1f} minutes old")
+                    stale_data.append(f"Market data is {data_age / 60:.1f} minutes old")
 
         # Check account context
         if account_context is None:
@@ -376,7 +391,7 @@ class ContextBuilderService:
             )
 
             logger.info(
-                f"Successfully built trading context for {symbol} (data age: {validation_result['data_age_seconds']/60:.1f}min)"
+                f"Successfully built trading context for {symbol} (data age: {validation_result['data_age_seconds'] / 60:.1f}min)"
             )
             return context
 
@@ -389,7 +404,7 @@ class ContextBuilderService:
         symbol: str,
         timeframes: List[str],
         force_refresh: bool = False,
-        db_session: AsyncSession = None
+        db_session: AsyncSession = None,
     ) -> MarketContext:
         """
         Build market context with price data and technical indicators.
@@ -484,9 +499,16 @@ class ContextBuilderService:
                 # Try to create basic indicators with available data
                 technical_indicators = self._create_partial_indicators(market_data)
 
-            # Get funding rate and open interest (mock data for now)
-            # TODO: Implement actual funding rate and open interest fetching
+            # Get funding rate from stored market data
             funding_rate = None
+            if market_data:
+                # Get the most recent candle that has funding rate data
+                for candle in reversed(market_data):
+                    if hasattr(candle, "funding_rate") and candle.funding_rate is not None:
+                        funding_rate = float(candle.funding_rate)
+                        break
+
+            # TODO: Implement open interest fetching
             open_interest = None
 
             # Calculate 24h volume
@@ -766,7 +788,9 @@ class ContextBuilderService:
             sharpe_ratio=sharpe_ratio,
         )
 
-    def _create_partial_indicators(self, market_data: List[MarketData]) -> Optional[TechnicalIndicators]:
+    def _create_partial_indicators(
+        self, market_data: List[MarketData]
+    ) -> Optional[TechnicalIndicators]:
         """
         Create partial technical indicators with available data.
 
@@ -825,9 +849,7 @@ class ContextBuilderService:
             logger.error(f"Failed to create partial indicators: {e}")
             return None
 
-    async def validate_context_data_availability(
-        self, symbol: str, account_id: int
-    ) -> dict:
+    async def validate_context_data_availability(self, symbol: str, account_id: int) -> dict:
         """
         Validate data availability before building context.
 
@@ -877,9 +899,7 @@ class ContextBuilderService:
                 data_age_seconds = age_minutes * 60
 
                 if not is_fresh:
-                    warnings.append(
-                        f"Market data for {symbol} is {age_minutes:.1f} minutes old"
-                    )
+                    warnings.append(f"Market data for {symbol} is {age_minutes:.1f} minutes old")
 
             is_valid = len(missing_data) == 0
 
@@ -916,12 +936,16 @@ class ContextBuilderService:
             Degraded TradingContext or None if critical data missing
         """
         if not validation_result["is_valid"]:
-            logger.warning(f"Cannot create context for {symbol}: {validation_result['missing_data']}")
+            logger.warning(
+                f"Cannot create context for {symbol}: {validation_result['missing_data']}"
+            )
             return None
 
         # If we have warnings but data is valid, we can create a degraded context
         if validation_result["warnings"]:
-            logger.warning(f"Creating degraded context for {symbol}: {validation_result['warnings']}")
+            logger.warning(
+                f"Creating degraded context for {symbol}: {validation_result['warnings']}"
+            )
 
             # Create minimal context with available data
             # This would be implemented based on specific degradation strategies
@@ -951,7 +975,9 @@ class ContextBuilderService:
 _context_builder_service: Optional[ContextBuilderService] = None
 
 
-def get_context_builder_service(db_session: Optional[AsyncSession] = None) -> 'ContextBuilderService':
+def get_context_builder_service(
+    db_session: Optional[AsyncSession] = None,
+) -> "ContextBuilderService":
     """Get or create the context builder service instance.
 
     Args:

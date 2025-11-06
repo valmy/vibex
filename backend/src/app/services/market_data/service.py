@@ -12,7 +12,11 @@ from .client import AsterClient
 from .events import CandleCloseEvent, EventManager, EventType
 from .repository import MarketDataRepository
 from .scheduler import CandleScheduler
-from .utils import calculate_previous_candle_close, format_symbol, validate_interval
+from .utils import (
+    calculate_previous_candle_close,
+    format_symbol,
+    validate_interval,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +130,11 @@ class MarketDataService:
                         # Add a small delay to ensure the candle is closed
                         await asyncio.sleep(1)
 
+                        # Log entry point to the function for debugging
+                        logger.info(
+                            f"Funding rate debug: Starting fetch for {symbol} at {datetime.now(timezone.utc)}"
+                        )
+
                         # Use the existing fetch_market_data method to get the latest candles
                         candles = await self.fetch_market_data(
                             symbol=symbol,
@@ -151,12 +160,60 @@ class MarketDataService:
                                 f"Received stale candle data for {symbol}. Expected close at {expected_close}, got {candle_time}"
                             )
 
-                        # Store the candle data
+                        # Log that we're about to fetch funding rates
+                        logger.info(f"About to fetch funding rates for {symbol}")
+
+                        # Fetch funding rate data for correlation
+                        # Get funding rates for a time range up to the candle close time
+                        # Funding rates are typically published every 8 hours, so look back much further than the candle interval
+                        # to find the most recent funding rate that was active during the candle period
+                        candle_timestamp = latest_candle[6]  # close_time (index 6), not open time
+                        # Look back up to 12 hours to find the most recent funding rate
+                        # (funding rates are typically every 8 hours but we'll use 12h to be safe)
+                        funding_rate_window_ms = 12 * 60 * 60 * 1000  # 12 hours in milliseconds
+                        start_time = candle_timestamp - funding_rate_window_ms
+                        end_time = candle_timestamp  # Don't fetch future rates
+
+                        try:
+                            # Log the API call details at INFO level
+                            logger.info(
+                                f"Fetching funding rates for {symbol} in time range: {datetime.fromtimestamp(start_time / 1000)} to {datetime.fromtimestamp(end_time / 1000)}"
+                            )
+
+                            funding_rates = await self.fetch_funding_rate(
+                                symbol=symbol, startTime=start_time, endTime=end_time, limit=100
+                            )
+
+                            # Log the API response at INFO level
+                            logger.info(
+                                f"Fetched {len(funding_rates)} funding rate(s) for {symbol}"
+                            )
+
+                            # Correlate funding rates with candle data
+                            correlated_candles = self.correlate_funding_rates_with_candles(
+                                [latest_candle], funding_rates, symbol
+                            )
+                            candle_with_funding = correlated_candles[0]
+
+                            # Log the result at INFO level
+                            funding_rate_value = candle_with_funding[
+                                -1
+                            ]  # funding rate is the last element
+                            logger.info(
+                                f"Funding rate for {symbol} at {datetime.fromtimestamp(latest_candle[6] / 1000)}: {funding_rate_value}"
+                            )
+
+                        except Exception as e:
+                            logger.warning(f"Failed to fetch funding rates for {symbol}: {e}")
+                            # Continue with candle data without funding rate
+                            candle_with_funding = latest_candle + [None]
+
+                        # Store the candle data with funding rate
                         await self.store_market_data(
                             db=db,
                             symbol=symbol,
                             interval=interval,
-                            data=[latest_candle],
+                            data=[candle_with_funding],
                         )
 
                         # Commit the transaction
@@ -214,6 +271,70 @@ class MarketDataService:
             List of candle data dictionaries
         """
         return await self.client.fetch_klines(symbol, interval, limit)
+
+    async def fetch_funding_rate(
+        self,
+        symbol: Optional[str] = None,
+        startTime: Optional[int] = None,
+        endTime: Optional[int] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch funding rate data from Aster DEX.
+
+        Args:
+            symbol: Trading pair symbol (e.g., "BTCUSDT"). If None, fetches for all symbols.
+            startTime: Start time in milliseconds
+            endTime: End time in milliseconds
+            limit: Number of funding rate records to fetch
+
+        Returns:
+            List of funding rate data dictionaries
+        """
+        return await self.client.fetch_funding_rate(symbol, startTime, endTime, limit)
+
+    def correlate_funding_rates_with_candles(
+        self, candles: List[List], funding_rates: List[Dict[str, Any]], symbol: str
+    ) -> List[List]:
+        """
+        Correlate funding rates with candle data based on timestamps.
+
+        For each candle, finds the funding rate with timestamp closest to the candle's close time.
+
+        Args:
+            candles: List of candle data (API format)
+            funding_rates: List of funding rate data
+            symbol: Symbol to filter funding rates (if needed)
+
+        Returns:
+            List of candle data with funding rates appended
+        """
+        if not funding_rates:
+            # If no funding rates available, append None to all candles
+            return [candle + [None] for candle in candles]
+
+        # Convert funding rates to list of (timestamp, rate) tuples for efficient lookup
+        funding_data = [
+            (rate["fundingTime"], float(rate["fundingRate"]))
+            for rate in funding_rates
+            if rate.get("symbol") == symbol or symbol is None
+        ]
+
+        if not funding_data:
+            # No funding rates for this symbol
+            return [candle + [None] for candle in candles]
+
+        correlated_candles = []
+        for candle in candles:
+            candle_close_time = candle[6]  # close_time is at index 6
+
+            # Find funding rate with closest timestamp
+            closest_rate = min(funding_data, key=lambda x: abs(x[0] - candle_close_time))[1]
+
+            # Append funding rate to candle data
+            correlated_candles.append(candle + [closest_rate])
+
+        return correlated_candles
 
     async def store_market_data(
         self, db: AsyncSession, symbol: str, interval: str, data: List[List]
@@ -294,6 +415,49 @@ class MarketDataService:
                 for intv in intervals:
                     try:
                         data = await self.fetch_market_data(formatted_symbol, intv)
+
+                        # Get funding rates that may be relevant for this data range
+                        # For sync operations, we'll correlate funding rates with the market data
+                        if data and len(data) > 0:
+                            # Determine the time range for the fetched market data
+                            min_time = min(candle[0] for candle in data)  # open_time
+                            max_time = max(candle[6] for candle in data)  # close_time
+
+                            # Fetch funding rates for the time period, looking back by funding rate window (12 hours)
+                            # since funding rates are typically published every 8 hours, not per candle
+                            funding_rate_window_ms = 12 * 60 * 60 * 1000  # 12 hours in milliseconds
+                            start_time = min_time - funding_rate_window_ms
+                            end_time = max_time
+
+                            try:
+                                # Log the API call details at INFO level
+                                logger.info(
+                                    f"Sync: Fetching funding rates for {formatted_symbol} in time range: {datetime.fromtimestamp(start_time / 1000)} to {datetime.fromtimestamp(end_time / 1000)}"
+                                )
+
+                                funding_rates = await self.fetch_funding_rate(
+                                    symbol=formatted_symbol,
+                                    startTime=start_time,
+                                    endTime=end_time,
+                                    limit=1000,  # Higher limit for sync operations
+                                )
+
+                                # Log the API response at INFO level
+                                logger.info(
+                                    f"Sync: Fetched {len(funding_rates)} funding rate(s) for {formatted_symbol}"
+                                )
+
+                                # Correlate funding rates with the candle data
+                                data = self.correlate_funding_rates_with_candles(
+                                    data, funding_rates, formatted_symbol
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to fetch funding rates during sync for {formatted_symbol}: {e}"
+                                )
+                                # Continue with original data without funding rates
+                                data = [candle + [None] for candle in data]
+
                         count = await self.store_market_data(db, formatted_symbol, intv, data)
                         results[f"{formatted_symbol}_{intv}"] = count
                         logger.info(f"Synced {count} records for {formatted_symbol} ({intv})")

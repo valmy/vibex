@@ -93,7 +93,9 @@ class TestContextBuilderService:
         assert is_fresh is True
 
         # With custom max age of 5 minutes, should be stale
-        is_fresh, age_minutes = context_builder.validate_data_freshness(timestamp, max_age_minutes=5)
+        is_fresh, age_minutes = context_builder.validate_data_freshness(
+            timestamp, max_age_minutes=5
+        )
         assert is_fresh is False
 
     def test_cache_operations(self, context_builder):
@@ -172,8 +174,8 @@ class TestContextBuilderService:
         # Should return flat TechnicalIndicators structure
         assert result is not None
         # Check for flat structure fields
-        assert hasattr(result, 'ema_20')
-        assert hasattr(result, 'rsi')
+        assert hasattr(result, "ema_20")
+        assert hasattr(result, "rsi")
 
     def test_validate_indicator_freshness_no_indicators(self, context_builder):
         """Test indicator freshness validation with no indicators."""
