@@ -436,9 +436,9 @@ class TestDecisionAccuracyRegression:
 
         # Validate we got results for most patterns
         successful_patterns = [k for k, v in pattern_results.items() if "error" not in v]
-        assert (
-            len(successful_patterns) >= 2
-        ), f"At least 2 patterns should succeed, got {len(successful_patterns)}"
+        assert len(successful_patterns) >= 2, (
+            f"At least 2 patterns should succeed, got {len(successful_patterns)}"
+        )
 
         # Log summary
         logger.info("Pattern recognition summary:")

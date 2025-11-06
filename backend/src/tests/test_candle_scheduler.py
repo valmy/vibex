@@ -13,8 +13,9 @@ from pathlib import Path
 # Add the project root to the Python path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from app.core.config import settings
 from app.services.market_data_service import CandleCloseEvent, EventType, MarketDataService
+
+from app.core.config import settings
 
 # Configure logging
 logging.basicConfig(

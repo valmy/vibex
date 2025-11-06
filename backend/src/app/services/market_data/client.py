@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -92,4 +92,55 @@ class AsterClient:
         except Exception as e:
             # This will catch errors from the thread and log them.
             logger.error(f"Error in fetch_klines task: {e}", exc_info=True)
+            raise
+
+    async def fetch_funding_rate(
+        self,
+        symbol: Optional[str] = None,
+        startTime: Optional[int] = None,
+        endTime: Optional[int] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch funding rate history from Aster DEX.
+
+        Args:
+            symbol: Trading pair symbol (e.g., "BTCUSDT"). If None, fetches for all symbols.
+            startTime: Start time in milliseconds
+            endTime: End time in milliseconds
+            limit: Number of funding rate records to fetch (default 100, max 1000)
+
+        Returns:
+            List of funding rate data dictionaries
+
+        Raises:
+            Exception: If the API call fails
+        """
+        try:
+
+            def _fetch_in_thread():
+                try:
+                    client = self._client
+                    # Build kwargs dynamically to handle None values
+                    kwargs = {"limit": limit}
+                    if symbol is not None:
+                        kwargs["symbol"] = symbol
+                    if startTime is not None:
+                        kwargs["startTime"] = startTime
+                    if endTime is not None:
+                        kwargs["endTime"] = endTime
+
+                    result = client.funding_rate(**kwargs)
+                    return result
+                except Exception as e:
+                    logger.error(f"Error fetching funding rate in thread: {e}", exc_info=True)
+                    raise
+
+            loop = asyncio.get_event_loop()
+            data = await loop.run_in_executor(None, _fetch_in_thread)
+
+            logger.debug(f"Successfully fetched {len(data)} funding rate records")
+            return data
+        except Exception as e:
+            logger.error(f"Error in fetch_funding_rate task: {e}", exc_info=True)
             raise

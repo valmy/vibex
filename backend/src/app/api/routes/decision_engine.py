@@ -200,17 +200,20 @@ async def validate_decision(decision: TradingDecision):
     without generating a full decision through the LLM.
     """
     try:
-        from ...schemas.trading_decision import (
-            AccountContext, MarketContext, TradingContext,
-            PerformanceMetrics, RiskMetrics, TechnicalIndicators
-        )
-        from ...services.llm.decision_validator import get_decision_validator
-
         # Create minimal context for validation
         # In a real implementation, this would use actual account/market data
         from ...schemas.trading_decision import (
-            PricePoint, StrategyRiskParameters, TradingStrategy, RiskMetrics
+            AccountContext,
+            MarketContext,
+            PerformanceMetrics,
+            PricePoint,
+            RiskMetrics,
+            StrategyRiskParameters,
+            TechnicalIndicators,
+            TradingContext,
+            TradingStrategy,
         )
+        from ...services.llm.decision_validator import get_decision_validator
 
         # Create a minimal trading strategy
         strategy = TradingStrategy(
@@ -237,9 +240,7 @@ async def validate_decision(decision: TradingDecision):
                 price_change_24h=0.0,
                 volume_24h=1000000.0,
                 volatility=2.5,
-                price_history=[
-                    PricePoint(timestamp=datetime.now(timezone.utc), price=50000.0)
-                ],
+                price_history=[PricePoint(timestamp=datetime.now(timezone.utc), price=50000.0)],
                 technical_indicators=TechnicalIndicators(),
             ),
             account_state=AccountContext(

@@ -55,7 +55,9 @@ async def get_current_user(
 ) -> User:
     token = credentials.credentials
     token_data = verify_token(token, credentials_exception)
-    result = await db.execute(select(User).where(func.lower(User.address) == func.lower(token_data.username)))
+    result = await db.execute(
+        select(User).where(func.lower(User.address) == func.lower(token_data.username))
+    )
     user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception

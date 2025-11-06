@@ -18,6 +18,7 @@ class MarketDataRead(BaseSchema):
     close_price: float
     volume: float
     timestamp: Optional[str] = None
+    funding_rate: Optional[float] = None
 
 
 class MarketDataListResponse(BaseSchema):

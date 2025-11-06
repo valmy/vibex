@@ -7,17 +7,16 @@ technical indicators, and validates decision quality and consistency.
 
 from __future__ import annotations
 
+import asyncio
+import json
+import logging
 import os
 import sys
-import asyncio
-import logging
-import json
-from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Any, Optional
+from datetime import datetime, timedelta, timezone
+from typing import List
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.market_data import MarketData
 from app.schemas.trading_decision import (
@@ -26,19 +25,14 @@ from app.schemas.trading_decision import (
     MarketContext,
     PerformanceMetrics,
     RiskMetrics,
-    TechnicalIndicators,
-    TradeHistory,
     TradingContext,
     TradingDecision,
 )
-from app.schemas.market_data import MarketDataRead
 from app.services import get_technical_analysis_service
+from app.services.llm.context_builder import ContextBuilderService
 from app.services.llm.decision_engine import get_decision_engine
 from app.services.llm.llm_service import LLMService
-from app.services.llm.context_builder import ContextBuilderService
 from app.services.market_data.service import MarketDataService, get_market_data_service
-from app.services.market_data.repository import MarketDataRepository
-from app.services.technical_analysis import TechnicalAnalysisService
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +51,9 @@ class TestLLMDecisionEngineE2E:
         return get_decision_engine(db_session=db_session)
 
     @pytest.fixture
-    async def real_market_data(self, db_session: AsyncSession, market_data_service: MarketDataService):
+    async def real_market_data(
+        self, db_session: AsyncSession, market_data_service: MarketDataService
+    ):
         """Fetch real market data from the database."""
         # Fetch 100 latest 5m candles for BTCUSDT
         data = await market_data_service.get_latest_market_data(db_session, "BTCUSDT", "5m", 100)
@@ -77,7 +73,7 @@ class TestLLMDecisionEngineE2E:
 
         # The method is async
         async def mock_generate_decision(*args, **kwargs):
-            context = kwargs.get('context')
+            context = kwargs.get("context")
             mock_decision = TradingDecision(
                 asset="BTCUSDT",
                 action="buy",
@@ -105,6 +101,7 @@ class TestLLMDecisionEngineE2E:
 
         # Mock the decision validator to always pass validation
         from app.schemas.trading_decision import ValidationResult
+
         mock_validation_result = ValidationResult(
             is_valid=True,
             errors=[],
@@ -112,10 +109,12 @@ class TestLLMDecisionEngineE2E:
             validation_time_ms=10.0,
             rules_checked=["mock_rule"],
         )
-        decision_engine.decision_validator.validate_decision = mocker.AsyncMock(return_value=mock_validation_result)
+        decision_engine.decision_validator.validate_decision = mocker.AsyncMock(
+            return_value=mock_validation_result
+        )
 
         # Mock the account context to avoid database account lookup
-        from app.schemas.trading_decision import TradingStrategy, StrategyRiskParameters
+        from app.schemas.trading_decision import StrategyRiskParameters, TradingStrategy
 
         mock_strategy = TradingStrategy(
             strategy_id="test_strategy",
@@ -156,7 +155,9 @@ class TestLLMDecisionEngineE2E:
         )
 
         # Mock the get_account_context method
-        decision_engine.context_builder.get_account_context = mocker.AsyncMock(return_value=mock_account_context)
+        decision_engine.context_builder.get_account_context = mocker.AsyncMock(
+            return_value=mock_account_context
+        )
 
         # Mock the _validate_context method to return dict
         mock_validation_result = {
@@ -166,7 +167,9 @@ class TestLLMDecisionEngineE2E:
             "warnings": [],
             "data_age_seconds": 0,
         }
-        decision_engine.context_builder._validate_context = mocker.Mock(return_value=mock_validation_result)
+        decision_engine.context_builder._validate_context = mocker.Mock(
+            return_value=mock_validation_result
+        )
 
         # The context_builder is real and should use the db_session from the DI container
         # The decision_engine fixture should be correctly wired
@@ -203,11 +206,9 @@ class TestLLMDecisionEngineE2E:
     @pytest.mark.asyncio
     @pytest.mark.skipif(
         os.getenv("RUN_REAL_LLM_TESTS") != "1",
-        reason="Requires RUN_REAL_LLM_TESTS=1 environment variable to run real LLM API tests"
+        reason="Requires RUN_REAL_LLM_TESTS=1 environment variable to run real LLM API tests",
     )
-    async def test_llm_integration_with_real_data(
-        self, db_session, real_market_data, mocker
-    ):
+    async def test_llm_integration_with_real_data(self, db_session, real_market_data, mocker):
         """Test LLM integration with real market data and database.
 
         This test verifies that we can connect to the LLM API and get a response
@@ -216,14 +217,13 @@ class TestLLMDecisionEngineE2E:
 
         Requires RUN_REAL_LLM_TESTS=1 environment variable to run.
         """
-        from app.services.llm.llm_service import LLMService
-        from app.services.llm.context_builder import ContextBuilderService
-        from app.services.market_data.service import MarketDataService
-        from app.services.technical_analysis import TechnicalAnalysisService
         from app.schemas.trading_decision import (
-            AccountContext, PerformanceMetrics, RiskMetrics,
-            TradingStrategy, StrategyRiskParameters
+            AccountContext,
+            PerformanceMetrics,
+            StrategyRiskParameters,
+            TradingStrategy,
         )
+        from app.services.llm.llm_service import LLMService
 
         logger.info("Starting LLM integration test with real market data...")
 
@@ -293,29 +293,36 @@ class TestLLMDecisionEngineE2E:
         logger.info("Sending request to real LLM API...")
 
         try:
-            result = await llm_service.generate_trading_decision(
-                symbol=symbol,
-                context=context
-            )
+            result = await llm_service.generate_trading_decision(symbol=symbol, context=context)
 
             # Basic validation of the response
             assert result is not None, "No result returned from LLM service"
-            assert hasattr(result, 'decision'), "Response missing 'decision' attribute"
-            assert hasattr(result.decision, 'action'), "Decision missing 'action' attribute"
-            assert hasattr(result.decision, 'allocation_usd'), "Decision missing 'allocation_usd' attribute"
+            assert hasattr(result, "decision"), "Response missing 'decision' attribute"
+            assert hasattr(result.decision, "action"), "Decision missing 'action' attribute"
+            assert hasattr(result.decision, "allocation_usd"), (
+                "Decision missing 'allocation_usd' attribute"
+            )
 
-            logger.info(f"✓ Received decision from LLM: {result.decision.action} with allocation ${result.decision.allocation_usd}")
+            logger.info(
+                f"✓ Received decision from LLM: {result.decision.action} with allocation ${result.decision.allocation_usd}"
+            )
             logger.info(f"✓ Model used: {getattr(result, 'model_used', 'N/A')}")
             logger.info(f"✓ Processing time: {getattr(result, 'processing_time_ms', 'N/A')}ms")
 
             # Check if we have a rationale in the decision or the result
-            rationale = getattr(result.decision, 'rationale', getattr(result, 'rationale', None))
+            rationale = getattr(result.decision, "rationale", getattr(result, "rationale", None))
             if rationale:
                 logger.info(f"✓ Rationale: {rationale[:200]}...")  # Log first 200 chars
 
             # Additional validation based on action
-            assert result.decision.action in ["buy", "sell", "hold", "adjust_position", "close_position", "adjust_orders"], \
-                f"Invalid action: {result.decision.action}"
+            assert result.decision.action in [
+                "buy",
+                "sell",
+                "hold",
+                "adjust_position",
+                "close_position",
+                "adjust_orders",
+            ], f"Invalid action: {result.decision.action}"
 
             # Validate decision structure
             assert result.decision.asset == symbol
@@ -326,20 +333,16 @@ class TestLLMDecisionEngineE2E:
 
         except Exception as e:
             logger.error(f"LLM integration test failed: {str(e)}")
-            if hasattr(e, 'response') and hasattr(e.response, 'text'):
+            if hasattr(e, "response") and hasattr(e.response, "text"):
                 logger.error(f"Response content: {e.response.text}")
             raise
 
-
-
     def _debug_print_context(self, context):
         """Helper method to print context information for debugging."""
-        import sys
-        import json
 
-        print("\n" + "="*80, file=sys.stderr)
+        print("\n" + "=" * 80, file=sys.stderr)
         print("DEBUG: _debug_print_context called", file=sys.stderr)
-        print("="*80, file=sys.stderr)
+        print("=" * 80, file=sys.stderr)
 
         if context is None:
             print("Context is None", file=sys.stderr)
@@ -351,7 +354,7 @@ class TestLLMDecisionEngineE2E:
         # Print all attributes of the context object
         print("\nAttributes:", file=sys.stderr)
         for attr in dir(context):
-            if not attr.startswith('_'):
+            if not attr.startswith("_"):
                 try:
                     value = getattr(context, attr)
                     print(f"  {attr}: {type(value).__name__} = {value}", file=sys.stderr)
@@ -359,7 +362,7 @@ class TestLLMDecisionEngineE2E:
                     print(f"  {attr}: <error: {str(e)}>", file=sys.stderr)
 
         # If it has model_dump, print that too
-        if hasattr(context, 'model_dump'):
+        if hasattr(context, "model_dump"):
             print("\nModel dump:", file=sys.stderr)
             try:
                 print(json.dumps(context.model_dump(), indent=2, default=str), file=sys.stderr)
@@ -376,17 +379,12 @@ class TestLLMDecisionEngineE2E:
         without relying on the database.
         """
         print("\n=== Starting test_llm_integration_without_db ===\n")
-        from app.services.llm.llm_service import LLMService
         from app.schemas.trading_decision import (
-            TradingContext,
-            MarketContext,
             AccountContext,
-            PositionSummary,
             PerformanceMetrics,
-            RiskMetrics,
             PricePoint,
-            TechnicalIndicators
         )
+        from app.services.llm.llm_service import LLMService
 
         logger.info("Starting basic LLM integration test...")
 
@@ -398,13 +396,6 @@ class TestLLMDecisionEngineE2E:
             from app.schemas.trading_decision import TechnicalIndicators
 
             # Import indicator output classes from technical_analysis.schemas
-            from app.services.technical_analysis.schemas import (
-                EMAOutput,
-                MACDOutput,
-                RSIOutput,
-                BollingerBandsOutput,
-                ATROutput
-            )
 
             # Create technical indicators with simple float values as expected by the schema
             technical_indicators = TechnicalIndicators(
@@ -416,7 +407,7 @@ class TestLLMDecisionEngineE2E:
                 bb_upper=51000.0,
                 bb_middle=50000.0,
                 bb_lower=49000.0,
-                atr=500.0
+                atr=500.0,
             )
 
             # Create market context (no symbol field in new schema)
@@ -430,11 +421,12 @@ class TestLLMDecisionEngineE2E:
                     PricePoint(
                         timestamp=datetime.now(timezone.utc) - timedelta(minutes=i),
                         price=50000.0 - (i * 100) + (i % 2 * 200),  # Some price movement
-                        volume=1000.0
-                    ) for i in range(10, 0, -1)
+                        volume=1000.0,
+                    )
+                    for i in range(10, 0, -1)
                 ],
                 volatility=1.5,
-                technical_indicators=technical_indicators
+                technical_indicators=technical_indicators,
             )
 
             # Create a default trading strategy
@@ -451,12 +443,12 @@ class TestLLMDecisionEngineE2E:
                     stop_loss_percentage=2.0,
                     take_profit_ratio=2.0,
                     max_leverage=5.0,
-                    cooldown_period=300
+                    cooldown_period=300,
                 ),
                 timeframe_preference=["1h", "4h"],
                 max_positions=5,
                 position_sizing="percentage",
-                is_active=True
+                is_active=True,
             )
 
             # Create account context (new schema has different PerformanceMetrics fields)
@@ -484,7 +476,7 @@ class TestLLMDecisionEngineE2E:
                 var_95=1000.0,  # Value at Risk (95%)
                 max_drawdown=-500.0,  # Maximum drawdown (negative value)
                 correlation_risk=20.0,  # Correlation risk (percentage)
-                concentration_risk=10.0  # Concentration risk (percentage)
+                concentration_risk=10.0,  # Concentration risk (percentage)
             )
 
             # Create trading context with all required fields
@@ -494,46 +486,56 @@ class TestLLMDecisionEngineE2E:
                 market_data=market_context,
                 account_state=account_context,
                 recent_trades=[],
-                risk_metrics=risk_metrics
+                risk_metrics=risk_metrics,
             )
 
             # Test LLM service with the context
             logger.info("Sending request to LLM service...")
 
-            result = await llm_service.generate_trading_decision(
-                symbol="BTCUSDT",
-                context=context
-            )
+            result = await llm_service.generate_trading_decision(symbol="BTCUSDT", context=context)
 
             # Basic validation of the response
             assert result is not None
-            assert hasattr(result, 'decision'), "Response missing 'decision' attribute"
-            assert hasattr(result.decision, 'action'), "Decision missing 'action' attribute"
-            assert hasattr(result.decision, 'allocation_usd'), "Decision missing 'allocation_usd' attribute"
+            assert hasattr(result, "decision"), "Response missing 'decision' attribute"
+            assert hasattr(result.decision, "action"), "Decision missing 'action' attribute"
+            assert hasattr(result.decision, "allocation_usd"), (
+                "Decision missing 'allocation_usd' attribute"
+            )
 
-            logger.info(f"Received decision from LLM: {result.decision.action} with allocation ${result.decision.allocation_usd}")
+            logger.info(
+                f"Received decision from LLM: {result.decision.action} with allocation ${result.decision.allocation_usd}"
+            )
             logger.info(f"Model used: {getattr(result, 'model_used', 'N/A')}")
             logger.info(f"Processing time: {getattr(result, 'processing_time_ms', 'N/A')}ms")
 
             # Check if we have a rationale in the decision or the result
-            rationale = getattr(result.decision, 'rationale', getattr(result, 'rationale', None))
+            rationale = getattr(result.decision, "rationale", getattr(result, "rationale", None))
             if rationale:
                 logger.info(f"Rationale: {rationale}")
 
             # Additional validation based on action
-            assert result.decision.action in ["buy", "sell", "hold"], f"Invalid action: {result.decision.action}"
+            assert result.decision.action in ["buy", "sell", "hold"], (
+                f"Invalid action: {result.decision.action}"
+            )
             if result.decision.action in ["buy", "sell"]:
-                assert result.decision.allocation_usd > 0, "Allocation should be positive for buy/sell actions"
+                assert result.decision.allocation_usd > 0, (
+                    "Allocation should be positive for buy/sell actions"
+                )
 
         except Exception as e:
             logger.error(f"LLM integration test failed: {str(e)}")
-            if hasattr(e, 'response') and hasattr(e.response, 'text'):
+            if hasattr(e, "response") and hasattr(e.response, "text"):
                 logger.error(f"Response content: {e.response.text}")
             raise
 
     @pytest.mark.asyncio
     async def test_decision_consistency_over_time(
-        self, decision_engine, real_market_data, mock_context_builder, mock_llm_service, db_session: AsyncSession
+        self,
+        decision_engine,
+        real_market_data,
+        mock_context_builder,
+        mock_llm_service,
+        db_session: AsyncSession,
     ):
         """Test decision consistency when called multiple times with same data."""
         logger.info("Testing decision consistency over time")
@@ -570,9 +572,9 @@ class TestLLMDecisionEngineE2E:
         else:
             # If actions differ, confidence should be relatively low (indicating uncertainty)
             avg_confidence = sum(confidences) / len(confidences)
-            assert (
-                avg_confidence < 80
-            ), f"High confidence ({avg_confidence}%) with inconsistent actions: {actions}"
+            assert avg_confidence < 80, (
+                f"High confidence ({avg_confidence}%) with inconsistent actions: {actions}"
+            )
             logger.info(f"Acceptable inconsistency with low confidence: {avg_confidence}%")
 
     @pytest.mark.asyncio
@@ -616,18 +618,18 @@ class TestLLMDecisionEngineE2E:
             has_atr = indicators_result.atr.atr is not None
 
             indicators_calculated = sum([has_ema, has_rsi, has_macd, has_bb, has_atr])
-            assert (
-                indicators_calculated >= 2
-            ), f"At least 2 indicators should be calculated, got {indicators_calculated}"
+            assert indicators_calculated >= 2, (
+                f"At least 2 indicators should be calculated, got {indicators_calculated}"
+            )
 
             # Validate indicator values are reasonable
             if has_ema:
                 assert indicators_result.ema.ema > 0, "EMA should be positive"
 
             if has_rsi:
-                assert (
-                    0 <= indicators_result.rsi.rsi <= 100
-                ), f"RSI should be 0-100, got {indicators_result.rsi.rsi}"
+                assert 0 <= indicators_result.rsi.rsi <= 100, (
+                    f"RSI should be 0-100, got {indicators_result.rsi.rsi}"
+                )
 
             if has_atr:
                 assert indicators_result.atr.atr >= 0, "ATR should be non-negative"
@@ -656,7 +658,7 @@ class TestLLMDecisionEngineE2E:
             logger.info("Sample market data points:")
             for i, candle in enumerate(market_data[:3]):  # Log first 3 data points
                 logger.info(
-                    f"  Candle {i+1}: Time={candle.time}, Open={candle.open}, High={candle.high}, Low={candle.low}, Close={candle.close}, Volume={candle.volume}"
+                    f"  Candle {i + 1}: Time={candle.time}, Open={candle.open}, High={candle.high}, Low={candle.low}, Close={candle.close}, Volume={candle.volume}"
                 )
 
         except Exception as e:
@@ -749,7 +751,9 @@ class TestLLMDecisionEngineE2E:
         logger.info("Testing decision engine performance metrics")
 
         # Skip this test for now to avoid circular import issues
-        pytest.skip("Skipping test_decision_engine_performance_metrics due to circular import issues")
+        pytest.skip(
+            "Skipping test_decision_engine_performance_metrics due to circular import issues"
+        )
 
         # The rest of the test is kept for reference but won't be executed due to the skip above
 
@@ -823,7 +827,7 @@ class TestLLMDecisionEngineE2E:
             exit_plan="No action needed",
             reasoning="Market conditions are neutral",
             confidence=50,
-            risk_level="low"
+            risk_level="low",
         )
 
         # Update mock result with proper context and decision

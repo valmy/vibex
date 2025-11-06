@@ -3,6 +3,7 @@ E2E tests for context builder integration with real market data.
 
 Tests building complete trading context using real market data from database.
 """
+
 import logging
 from unittest.mock import AsyncMock, Mock
 
@@ -169,13 +170,14 @@ class TestContextBuilderE2E:
             # Note: symbol field is in TradingContext, not MarketContext
             assert market_context.current_price > 0
             # Note: data_freshness is not a field, use validate_data_freshness() method instead
-            assert market_context.validate_data_freshness(max_age_minutes=60), "Market data should be fresh"
+            assert market_context.validate_data_freshness(max_age_minutes=60), (
+                "Market data should be fresh"
+            )
 
             # Validate context data availability
             # Use account_id=1 for testing (may not exist, which is acceptable)
             validation_result = await context_builder_service.validate_context_data_availability(
-                symbol="BTCUSDT",
-                account_id=1
+                symbol="BTCUSDT", account_id=1
             )
 
             assert validation_result is not None, "Should return validation result"
@@ -210,7 +212,9 @@ class TestContextBuilderE2E:
             # Note: symbol field is in TradingContext, not MarketContext
 
             # Build context with force_refresh (should bypass cache)
-            context3 = await context_builder_service.get_market_context("BTCUSDT", ["5m"], force_refresh=True)
+            context3 = await context_builder_service.get_market_context(
+                "BTCUSDT", ["5m"], force_refresh=True
+            )
             assert context3 is not None, "Should build fresh market context"
             # Note: symbol field is in TradingContext, not MarketContext
 

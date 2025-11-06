@@ -45,6 +45,9 @@ class MarketData(TimescaleBase):
     taker_buy_base_asset_volume = Column(Float, nullable=True)
     taker_buy_quote_asset_volume = Column(Float, nullable=True)
 
+    # Funding rate data
+    funding_rate = Column(Float, nullable=True)
+
     # Properties to match the expected schema field names
     @hybrid_property
     def timeframe(self):

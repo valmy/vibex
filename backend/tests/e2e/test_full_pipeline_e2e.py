@@ -17,10 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_session_factory, init_db
 from app.schemas.trading_decision import DecisionResult, TradingContext, TradingDecision
+from app.services import get_technical_analysis_service
 from app.services.llm.context_builder import ContextBuilderService
 from app.services.llm.decision_engine import get_decision_engine
 from app.services.market_data.repository import MarketDataRepository
-from app.services import get_technical_analysis_service
 
 logger = logging.getLogger(__name__)
 
@@ -119,10 +119,7 @@ class TestFullPipelineE2E:
         try:
             # 1. Build trading context
             context = await context_builder.build_trading_context(
-                symbol="BTCUSDT",
-                account_id=test_account_id,
-                timeframes=["5m"],
-                force_refresh=True
+                symbol="BTCUSDT", account_id=test_account_id, timeframes=["5m"], force_refresh=True
             )
 
             for _ in range(5):
@@ -139,14 +136,14 @@ class TestFullPipelineE2E:
             assert decision.symbol == "BTCUSDT"
 
             # Verify technical indicators were calculated
-            assert hasattr(context.market_context, 'technical_indicators')
+            assert hasattr(context.market_context, "technical_indicators")
             indicators = context.market_context.technical_indicators
             assert indicators is not None
 
             # Check that we have some indicator data
-            assert hasattr(indicators, 'rsi')
-            assert hasattr(indicators, 'macd')
-            assert hasattr(indicators, 'bollinger_bands')
+            assert hasattr(indicators, "rsi")
+            assert hasattr(indicators, "macd")
+            assert hasattr(indicators, "bollinger_bands")
 
             # Check that the decision has reasoning
             assert decision.reasoning is not None
@@ -158,11 +155,7 @@ class TestFullPipelineE2E:
 
     @pytest.mark.asyncio
     async def test_complete_pipeline_with_real_data(
-        self,
-        decision_engine,
-        context_builder_service,
-        real_market_data,
-        mock_llm_service
+        self, decision_engine, context_builder_service, real_market_data, mock_llm_service
     ):
         """Test complete pipeline with real market data."""
         # Validate we have data
@@ -183,10 +176,18 @@ class TestFullPipelineE2E:
             # Create mock market context with real data
             mock_market_context = Mock()
             mock_market_context.symbol = symbol
-            mock_market_context.current_price = real_market_data[-1].close if real_market_data else 0
-            mock_market_context.volume_24h = sum(candle.volume for candle in real_market_data[-24:]) if len(real_market_data) >= 24 else 0
+            mock_market_context.current_price = (
+                real_market_data[-1].close if real_market_data else 0
+            )
+            mock_market_context.volume_24h = (
+                sum(candle.volume for candle in real_market_data[-24:])
+                if len(real_market_data) >= 24
+                else 0
+            )
             mock_market_context.technical_indicators = technical_indicators
-            mock_market_context.data_freshness = real_market_data[-1].time if real_market_data else None
+            mock_market_context.data_freshness = (
+                real_market_data[-1].time if real_market_data else None
+            )
 
             return mock_market_context
 
@@ -224,15 +225,13 @@ class TestFullPipelineE2E:
     @pytest.fixture
     def mock_market_context(self):
         """Create a mock market context."""
-        from app.schemas.trading_decision import MarketContext, TechnicalIndicators, PricePoint
+        from app.schemas.trading_decision import MarketContext, PricePoint, TechnicalIndicators
 
         return MarketContext(
             symbol="BTCUSDT",
             timeframes=["5m"],
             latest_data=PricePoint(
-                timestamp=datetime.now(timezone.utc),
-                price=50000.0,
-                volume=100.0
+                timestamp=datetime.now(timezone.utc), price=50000.0, volume=100.0
             ),
             current_price=50000.0,
             price_change_24h=2.5,
@@ -243,7 +242,7 @@ class TestFullPipelineE2E:
                 PricePoint(
                     timestamp=datetime.now(timezone.utc) - timedelta(minutes=5),
                     price=49900.0,
-                    volume=10.0
+                    volume=10.0,
                 )
             ],
             volatility=1.2,
@@ -256,8 +255,8 @@ class TestFullPipelineE2E:
                 bb_upper=50500.0,
                 bb_lower=49500.0,
                 bb_middle=50000.0,
-                atr=200.0
-            )
+                atr=200.0,
+            ),
         )
 
     @pytest.fixture
@@ -266,8 +265,8 @@ class TestFullPipelineE2E:
         from app.schemas.trading_decision import (
             AccountContext,
             PerformanceMetrics,
+            StrategyRiskParameters,
             TradingStrategy,
-            StrategyRiskParameters
         )
 
         return AccountContext(
@@ -282,7 +281,7 @@ class TestFullPipelineE2E:
                 avg_win=0.0,
                 avg_loss=0.0,
                 max_drawdown=0.0,
-                sharpe_ratio=0.0
+                sharpe_ratio=0.0,
             ),
             risk_exposure=0.0,
             max_position_size=2000.0,
@@ -297,13 +296,13 @@ class TestFullPipelineE2E:
                     stop_loss_percentage=1.0,
                     take_profit_ratio=2.0,
                     max_leverage=2.0,
-                    cooldown_period=300
+                    cooldown_period=300,
                 ),
                 timeframe_preference=["1h", "4h"],
                 max_positions=3,
                 position_sizing="percentage",
-                is_active=True
-            )
+                is_active=True,
+            ),
         )
 
     @pytest.fixture
@@ -312,16 +311,16 @@ class TestFullPipelineE2E:
         from app.schemas.trading_decision import RiskMetrics
 
         return RiskMetrics(
-            var_95=2.5,
-            max_drawdown=5.0,
-            correlation_risk=25.0,
-            concentration_risk=30.0
+            var_95=2.5, max_drawdown=5.0, correlation_risk=25.0, concentration_risk=30.0
         )
 
     @pytest.fixture
     def mock_trading_context(self, mock_market_context, mock_account_context, mock_risk_metrics):
         """Create a mock trading context."""
-        from app.schemas.trading_decision import TradingContext, PricePoint, TechnicalIndicators, TradeHistory
+        from app.schemas.trading_decision import (
+            TradeHistory,
+            TradingContext,
+        )
 
         # Create a valid TradingContext object
         return TradingContext(
@@ -336,11 +335,11 @@ class TestFullPipelineE2E:
                     size=0.1,
                     price=49000.0,
                     timestamp=datetime.now(timezone.utc) - timedelta(hours=1),
-                    pnl=100.0
+                    pnl=100.0,
                 )
             ],
             risk_metrics=mock_risk_metrics,
-            timestamp=datetime.now(timezone.utc)
+            timestamp=datetime.now(timezone.utc),
         )
 
     @pytest.fixture
@@ -362,7 +361,7 @@ class TestFullPipelineE2E:
             exit_plan="No action needed",
             rationale="Market conditions are neutral",
             confidence=50.0,
-            risk_level="low"
+            risk_level="low",
         )
 
     @pytest.fixture
@@ -374,7 +373,7 @@ class TestFullPipelineE2E:
             validation_passed=True,
             validation_errors=[],
             processing_time_ms=100.0,
-            model_used="mock-model"
+            model_used="mock-model",
         )
 
     @pytest.mark.asyncio
@@ -388,7 +387,7 @@ class TestFullPipelineE2E:
         mock_market_context,
         mock_account_context,
         mock_trading_context,
-        monkeypatch
+        monkeypatch,
     ):
         """Test the pipeline with different market conditions using mock data."""
         logger.info("Testing different market conditions with mock data")
@@ -405,7 +404,9 @@ class TestFullPipelineE2E:
             def __init__(self, mock_result):
                 self.mock_result = mock_result
 
-            async def generate_trading_decision(self, symbol, context, strategy_override=None, ab_test_name=None):
+            async def generate_trading_decision(
+                self, symbol, context, strategy_override=None, ab_test_name=None
+            ):
                 return self.mock_result
 
             def get_available_models(self):
@@ -415,50 +416,49 @@ class TestFullPipelineE2E:
                 return "mock-model"
 
         # Replace the LLM service with our mock
-        monkeypatch.setattr(decision_engine, 'llm_service', MockLLMService(mock_decision_result))
+        monkeypatch.setattr(decision_engine, "llm_service", MockLLMService(mock_decision_result))
 
         # Test with force refresh to ensure fresh data
-        result = await decision_engine.make_trading_decision(
-            "BTCUSDT", 1, force_refresh=True
-        )
+        result = await decision_engine.make_trading_decision("BTCUSDT", 1, force_refresh=True)
 
         # Validate the result
         assert isinstance(result, DecisionResult), "Should return DecisionResult"
-        assert result.decision.asset == "BTCUSDT", f"Asset should be BTCUSDT, got {result.decision.asset if hasattr(result, 'decision') and hasattr(result.decision, 'asset') else 'no decision'}"
+        assert result.decision.asset == "BTCUSDT", (
+            f"Asset should be BTCUSDT, got {result.decision.asset if hasattr(result, 'decision') and hasattr(result.decision, 'asset') else 'no decision'}"
+        )
         assert result.validation_passed is True, "Decision should pass validation"
-        assert result.decision.action in ["buy", "sell", "hold"], f"Action should be valid, got {result.decision.action}"
+        assert result.decision.action in ["buy", "sell", "hold"], (
+            f"Action should be valid, got {result.decision.action}"
+        )
         assert result.model_used == "mock-model", f"Should use mock model, got {result.model_used}"
 
     @pytest.mark.asyncio
     async def test_pipeline_error_handling(
-        self,
-        decision_engine,
-        context_builder_service,
-        mock_llm_service
+        self, decision_engine, context_builder_service, mock_llm_service
     ):
         """Test pipeline error handling."""
         # Inject mock LLM service
         decision_engine.llm_service = mock_llm_service
 
         # Mock LLM service to raise an exception
-        mock_llm_service.generate_trading_decision.side_effect = Exception("LLM service unavailable")
+        mock_llm_service.generate_trading_decision.side_effect = Exception(
+            "LLM service unavailable"
+        )
 
         try:
             # Execute decision generation - should handle error gracefully
             result = await decision_engine.make_trading_decision("BTCUSDT", 1)
             # If we get here, it means the error was handled gracefully
-            assert isinstance(result, DecisionResult), "Should return DecisionResult even with errors"
+            assert isinstance(result, DecisionResult), (
+                "Should return DecisionResult even with errors"
+            )
         except Exception:  # noqa: BLE001
             # Some errors might not be caught, which is acceptable for this test
             pass
 
     @pytest.mark.asyncio
     async def test_performance_under_load(
-        self,
-        decision_engine,
-        context_builder_service,
-        real_market_data,
-        mock_llm_service
+        self, decision_engine, context_builder_service, real_market_data, mock_llm_service
     ):
         """Test pipeline performance under load."""
         # Inject mock LLM service

@@ -30,7 +30,11 @@ class AdminOnlyMiddleware(BaseHTTPMiddleware):
                 engine = get_sync_engine()
                 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
                 db = SessionLocal()
-                user = db.query(User).filter(func.lower(User.address) == func.lower(token_data.username)).first()
+                user = (
+                    db.query(User)
+                    .filter(func.lower(User.address) == func.lower(token_data.username))
+                    .first()
+                )
                 db.close()
                 if not user or not user.is_admin:
                     return JSONResponse(

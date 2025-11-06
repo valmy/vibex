@@ -29,14 +29,14 @@ cd backend && uv run pytest tests/integration/
 
 ### Linting and Formatting
 ```bash
+# Format code
+cd backend && uv run ruff format .
+
 # Run linter
 cd backend && uv run ruff check .
 
 # Auto-fix linting issues
 cd backend && uv run ruff check . --fix
-
-# Format code
-cd backend && uv run black .
 
 # Type checking
 cd backend && uv run mypy src/
@@ -77,13 +77,17 @@ cd backend && podman-compose down -v
 
 ### With podman-compose (Recommended for Development)
 
-This method uses the `podman-compose.override.yml` to provide a hot-reloading development server while managing all services (backend, database, cache) in containers.
+This method uses the `compose.override.yml` to provide a hot-reloading development server while managing all services (backend, database, cache) in containers.
 
 ```bash
 # Copy the example override file for local development
-cd backend && cp podman-compose.override.yml.example podman-compose.override.yml
-# Start all services in the background
+cd backend && cp compose.override.yml.example compose.override.yml
+
+# Start all services in the background (--build is required if there are package changes)
 cd backend && podman-compose up -d --build
+
+# or for normal code changes:
+cd backend && podman-compose up -d
 
 # View logs
 cd backend && podman-compose logs -f backend
