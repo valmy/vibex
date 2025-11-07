@@ -13,7 +13,11 @@ class AdminOnlyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if request.method in ["POST", "PUT", "DELETE"]:
             # A list of routes that are exempt from the admin check
-            exempt_routes = ["/api/v1/auth/login", "/api/v1/auth/challenge"]
+            exempt_routes = [
+                "/api/v1/auth/login",
+                "/api/v1/auth/challenge",
+                "/api/v1/decisions/generate",  # Allow authenticated users to generate decisions
+            ]
             if request.url.path in exempt_routes:
                 return await call_next(request)
 

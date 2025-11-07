@@ -6,15 +6,28 @@ Provides common fixtures and setup for all tests.
 
 import asyncio
 import os
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
+from dotenv import load_dotenv
+
+# Load .env.local if it exists (for local testing with localhost database)
+env_local = Path(__file__).parent.parent / ".env.local"
+if env_local.exists():
+    load_dotenv(env_local, override=True)
+else:
+    load_dotenv()
 
 # Set testing environment before importing app modules
 os.environ["ENVIRONMENT"] = "testing"
 
 from app.db.session import close_db, get_async_engine, get_session_factory, init_db
+from httpx import ASGITransport, AsyncClient
+from eth_account import Account
+from eth_account.messages import encode_defunct
+from app.main import app
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -116,6 +129,9 @@ def create_mock_context():
         account_id=1,
         balance_usd=10000.0,
         available_balance=8000.0,
+        total_position_value_usd=2000.0,
+        leverage=1.0,
+        margin_ratio=0.2,
         total_pnl=1000.0,
         recent_performance=performance,
         risk_exposure=20.0,
@@ -192,3 +208,51 @@ def mock_context_builder():
     mock_context = create_mock_context()
     mock_builder.build_trading_context.return_value = mock_context
     return mock_builder
+
+
+@pytest.fixture
+def test_wallet():
+    """Create a test wallet for authentication."""
+    # Create a new test wallet (DO NOT use in production!)
+    account = Account.create()
+    return {
+        "address": account.address,
+        "private_key": account.key.hex(),
+    }
+
+
+@pytest_asyncio.fixture
+async def async_client():
+    """Create async HTTP client for testing."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def authenticated_client(async_client, test_wallet):
+    """Create authenticated HTTP client with JWT token."""
+    # Step 1: Request challenge
+    challenge_response = await async_client.post(
+        f"/api/v1/auth/challenge?address={test_wallet['address']}"
+    )
+    assert challenge_response.status_code == 200
+    challenge = challenge_response.json()["challenge"]
+
+    # Step 2: Sign challenge
+    message = encode_defunct(text=challenge)
+    signed_message = Account.sign_message(message, private_key=test_wallet["private_key"])
+    signature = signed_message.signature.hex()
+    if not signature.startswith("0x"):
+        signature = f"0x{signature}"
+
+    # Step 3: Login to get JWT
+    login_response = await async_client.post(
+        f"/api/v1/auth/login?challenge={challenge}&signature={signature}&address={test_wallet['address']}"
+    )
+    assert login_response.status_code == 200
+    token = login_response.json()["access_token"]
+
+    # Step 4: Add token to client headers
+    async_client.headers["Authorization"] = f"Bearer {token}"
+    return async_client
