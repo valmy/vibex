@@ -602,8 +602,9 @@ class ContextBuilderService:
             # Get recent performance metrics
             performance_metrics = await self._calculate_performance_metrics(db, account_id)
 
-            # Calculate balance
-            balance_usd = float(account.balance_usd)
+            # Calculate balance - use max_position_size_usd as a proxy for account balance
+            # In a real system, this would come from the exchange API or wallet
+            balance_usd = account.max_position_size_usd * 5  # Assume 5x the max position size
             used_margin = sum(pos.entry_value / pos.leverage for pos in positions)
             available_balance = balance_usd - used_margin
 
@@ -721,8 +722,8 @@ class ContextBuilderService:
         self, db: AsyncSession, account_id: int
     ) -> PerformanceMetrics:
         """Calculate performance metrics for the account."""
-        # Get trades from the last 30 days
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.PERFORMANCE_LOOKBACK_DAYS)
+        # Get trades from the last 30 days (use naive datetime for database)
+        cutoff_date = datetime.now() - timedelta(days=self.PERFORMANCE_LOOKBACK_DAYS)
 
         result = await db.execute(
             select(Trade).where(
@@ -881,9 +882,9 @@ class ContextBuilderService:
             if not account:
                 missing_data.append(f"Account {account_id} not found")
 
-            # Check market data availability
+            # Check market data availability (use 5m as default timeframe)
             market_data = await self.market_data_service.get_latest_market_data(
-                db, symbol, "1h", 10
+                db, symbol, "5m", 10
             )
 
             if not market_data:
@@ -894,8 +895,8 @@ class ContextBuilderService:
             # Check data freshness
             data_age_seconds = 0
             if market_data:
-                latest_candle = max(market_data, key=lambda x: x.timestamp)
-                is_fresh, age_minutes = self.validate_data_freshness(latest_candle.timestamp)
+                latest_candle = max(market_data, key=lambda x: x.time)
+                is_fresh, age_minutes = self.validate_data_freshness(latest_candle.time)
                 data_age_seconds = age_minutes * 60
 
                 if not is_fresh:

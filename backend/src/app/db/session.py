@@ -4,10 +4,12 @@ Database session management for SQLAlchemy.
 Provides engine creation, session factory, and async session support.
 """
 
+import os
 from typing import AsyncGenerator
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from ..core.config import config
 from ..core.logging import get_logger
@@ -75,16 +77,28 @@ async def _create_async_engine():
     if not database_url.startswith("postgresql+asyncpg://"):
         database_url = database_url.replace("postgresql://", "postgresql+asyncpg://")
 
-    engine = create_async_engine(
-        database_url,
-        echo=config.DATABASE_ECHO,
-        pool_size=config.DATABASE_POOL_SIZE,
-        max_overflow=config.DATABASE_MAX_OVERFLOW,
-        pool_pre_ping=True,
-        pool_recycle=3600,  # Recycle connections after 1 hour
-    )
+    # Use NullPool for testing to avoid event loop issues on Windows
+    is_testing = os.getenv("ENVIRONMENT") == "testing"
 
-    logger.info(f"Created async engine: {database_url}")
+    if is_testing:
+        # NullPool doesn't accept pool_size/max_overflow
+        engine = create_async_engine(
+            database_url,
+            echo=config.DATABASE_ECHO,
+            pool_pre_ping=True,
+            poolclass=NullPool,
+        )
+    else:
+        engine = create_async_engine(
+            database_url,
+            echo=config.DATABASE_ECHO,
+            pool_size=config.DATABASE_POOL_SIZE,
+            max_overflow=config.DATABASE_MAX_OVERFLOW,
+            pool_pre_ping=True,
+            pool_recycle=3600,  # Recycle connections after 1 hour
+        )
+
+    logger.info(f"Created async engine: {database_url} (testing={is_testing})")
     return engine
 
 

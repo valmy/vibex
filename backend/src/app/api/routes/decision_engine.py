@@ -9,9 +9,13 @@ import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...models.account import User
+from ...core.security import get_current_user
+from ...db.session import get_db
 from ...schemas.trading_decision import DecisionResult, HealthStatus, TradingDecision, UsageMetrics
 from ...services.llm.decision_engine import (
     DecisionEngineError,
@@ -77,7 +81,11 @@ class CacheStats(BaseModel):
 
 # API Endpoints
 @router.post("/generate", response_model=DecisionResult)
-async def generate_decision(request: DecisionRequest):
+async def generate_decision(
+    request: DecisionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """
     Generate a trading decision for a specific symbol and account.
 
@@ -89,9 +97,11 @@ async def generate_decision(request: DecisionRequest):
 
     Rate limiting: 60 requests per minute per account.
     Caching: Results cached for 3-10 minutes depending on decision type.
+
+    Authentication: Requires valid JWT token from wallet-based authentication.
     """
     try:
-        decision_engine = get_decision_engine()
+        decision_engine = get_decision_engine(db_session=db)
 
         result = await decision_engine.make_trading_decision(
             symbol=request.symbol,
