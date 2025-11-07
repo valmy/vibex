@@ -27,7 +27,9 @@ class TestTechnicalAnalysisE2E:
         return data
 
     @pytest.mark.asyncio
-    async def test_real_data_indicator_calculation(self, technical_analysis_service, real_market_data):
+    async def test_real_data_indicator_calculation(
+        self, technical_analysis_service, real_market_data
+    ):
         """Test technical indicator calculation with real market data."""
         # Validate we have enough data
         assert len(real_market_data) >= 50, "Should have sufficient data for indicators"
@@ -71,7 +73,9 @@ class TestTechnicalAnalysisE2E:
             assert result.atr.atr >= 0, "ATR should be non-negative"
 
     @pytest.mark.asyncio
-    async def test_indicator_accuracy_with_volatile_data(self, technical_analysis_service, real_market_data):
+    async def test_indicator_accuracy_with_volatile_data(
+        self, technical_analysis_service, real_market_data
+    ):
         """Test indicator accuracy with volatile market data."""
         # Filter to ensure we have volatile data (significant price movements)
         if len(real_market_data) >= 50:
@@ -83,18 +87,23 @@ class TestTechnicalAnalysisE2E:
                 assert result.atr.atr >= 0, "ATR should be calculated"
 
             # Validate indicator relationships make sense
-            if all([
-                result.ema.ema is not None,
-                result.bollinger_bands.upper is not None,
-                result.bollinger_bands.middle is not None,
-                result.bollinger_bands.lower is not None
-            ]):
+            if all(
+                [
+                    result.ema.ema is not None,
+                    result.bollinger_bands.upper is not None,
+                    result.bollinger_bands.middle is not None,
+                    result.bollinger_bands.lower is not None,
+                ]
+            ):
                 # EMA should be between BB upper and lower
-                assert result.bollinger_bands.lower <= result.ema.ema <= result.bollinger_bands.upper, \
-                    "EMA should be within Bollinger Bands"
+                assert (
+                    result.bollinger_bands.lower <= result.ema.ema <= result.bollinger_bands.upper
+                ), "EMA should be within Bollinger Bands"
 
     @pytest.mark.asyncio
-    async def test_indicator_with_trending_markets(self, technical_analysis_service, real_market_data):
+    async def test_indicator_with_trending_markets(
+        self, technical_analysis_service, real_market_data
+    ):
         """Test indicators with trending market data."""
         if len(real_market_data) >= 50:
             # Calculate indicators
@@ -120,4 +129,6 @@ class TestTechnicalAnalysisE2E:
                 assert result.candle_count == 20, "Should reflect actual candle count"
             except Exception as e:
                 # May raise InsufficientDataError which is acceptable
-                assert "InsufficientDataError" in str(type(e)), f"Should handle insufficient data gracefully: {e}"
+                assert "InsufficientDataError" in str(type(e)), (
+                    f"Should handle insufficient data gracefully: {e}"
+                )

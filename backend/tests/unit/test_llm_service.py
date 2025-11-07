@@ -22,11 +22,7 @@ from app.schemas.trading_decision import (
     TradingDecision,
     TradingStrategy,
 )
-from app.services.llm.llm_exceptions import (
-    LLMAPIError,
-    ModelSwitchError,
-    ValidationError,
-)
+from app.services.llm.llm_exceptions import LLMAPIError, ModelSwitchError, ValidationError
 from app.services.llm.llm_service import LLMService, get_llm_service
 
 
@@ -209,9 +205,9 @@ class TestLLMService:
     ):
         """Test trading signal generation with JSON response."""
         json_response = '{"signal": "BUY", "confidence": 85, "reason": "Strong bullish momentum"}'
-        mock_openai_client.chat.completions.create.return_value.choices[0].message.content = (
-            json_response
-        )
+        mock_openai_client.chat.completions.create.return_value.choices[
+            0
+        ].message.content = json_response
 
         llm_service._client = mock_openai_client
         result = await llm_service.get_trading_signal("BTCUSDT", sample_market_data)
@@ -228,9 +224,9 @@ class TestLLMService:
     ):
         """Test trading signal generation with non-JSON response."""
         text_response = "I recommend buying BTC due to strong momentum"
-        mock_openai_client.chat.completions.create.return_value.choices[0].message.content = (
-            text_response
-        )
+        mock_openai_client.chat.completions.create.return_value.choices[
+            0
+        ].message.content = text_response
 
         llm_service._client = mock_openai_client
         result = await llm_service.get_trading_signal("BTCUSDT", sample_market_data)
@@ -281,9 +277,9 @@ class TestLLMService:
             "risk_level": "medium",
         }
 
-        mock_openai_client.chat.completions.create.return_value.choices[0].message.content = (
-            json.dumps(decision_json)
-        )
+        mock_openai_client.chat.completions.create.return_value.choices[
+            0
+        ].message.content = json.dumps(decision_json)
 
         llm_service._client = mock_openai_client
         with patch.object(llm_service.metrics_tracker, "record_api_call"):
@@ -344,9 +340,9 @@ class TestLLMService:
         self, llm_service, mock_openai_client, sample_trading_context
     ):
         """Test decision generation with invalid JSON response."""
-        mock_openai_client.chat.completions.create.return_value.choices[0].message.content = (
-            "Invalid JSON response"
-        )
+        mock_openai_client.chat.completions.create.return_value.choices[
+            0
+        ].message.content = "Invalid JSON response"
 
         llm_service._client = mock_openai_client
         with patch.object(llm_service.metrics_tracker, "record_api_call"):
@@ -486,9 +482,9 @@ class TestLLMService:
             "risk_level": "medium",
         }
 
-        mock_openai_client.chat.completions.create.return_value.choices[0].message.content = (
-            json.dumps(decision_json)
-        )
+        mock_openai_client.chat.completions.create.return_value.choices[
+            0
+        ].message.content = json.dumps(decision_json)
 
         llm_service._client = mock_openai_client
         with patch.object(llm_service, "get_ab_test_model", return_value="gpt-4"):

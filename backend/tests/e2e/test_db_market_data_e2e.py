@@ -14,6 +14,7 @@ from app.services.market_data.repository import MarketDataRepository
 
 logger = logging.getLogger(__name__)
 
+
 class TestDatabaseMarketDataE2E:
     """E2E tests for database market data integration."""
 
@@ -56,7 +57,7 @@ class TestDatabaseMarketDataE2E:
 
         # Validate data ordering (ascending by time)
         for i in range(1, len(data)):
-            assert data[i-1].time < data[i].time, "Data should be ordered by time ascending"
+            assert data[i - 1].time < data[i].time, "Data should be ordered by time ascending"
 
         # Validate we got reasonable amount of data
         assert len(data) <= 100, "Should respect limit parameter"
@@ -91,7 +92,7 @@ class TestDatabaseMarketDataE2E:
                 if len(data) > 0:
                     for candle in data:
                         assert candle.interval == interval, f"Interval should match {interval}"
-            except Exception as e:
+            except Exception:
                 # Some intervals might not be available, which is acceptable
                 pass
 

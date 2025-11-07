@@ -32,7 +32,7 @@ LLM-powered cryptocurrency trading agent for AsterDEX.
 4. **Start development environment**
    ```bash
    # Copy the example override file for local development
-   cp podman-compose.override.yml.example podman-compose.override.yml
+   cp compose.override.yml.example compose.override.yml
    # This single command starts the database, cache, and the backend service with hot-reloading.
    podman-compose up -d --build
    ```
@@ -109,10 +109,10 @@ uv sync --all-extras
 
 ```bash
 # Format code
-uv run black src tests
+uv run ruff format src tests
 
 # Lint code
-uv run ruff check src tests
+uv run ruff check --fix src tests
 
 # Type checking
 uv run mypy src
@@ -293,4 +293,3 @@ MIT License - See LICENSE file for details
 ## Support
 
 For issues and questions, please open an issue on GitHub.
-
