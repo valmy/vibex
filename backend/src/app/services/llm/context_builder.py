@@ -148,34 +148,32 @@ class ContextBuilderService:
     ) -> TechnicalIndicators:
         """Convert technical analysis indicators from nested to flat structure.
 
+        This now takes the most recent value (the last in the series) from the
+        technical analysis service output.
+
         Args:
             indicators: Technical indicators from technical analysis service
 
         Returns:
             TechnicalIndicators with flat structure for LLM service
         """
+
+        def get_last_value(series: Optional[List[Optional[float]]]) -> Optional[float]:
+            """Safely get the last value from a series."""
+            if series and len(series) > 0:
+                return series[-1]
+            return None
+
         return TechnicalIndicators(
-            ema_20=indicators.ema.ema
-            if indicators.ema and indicators.ema.ema is not None
-            else None,
+            ema_20=get_last_value(indicators.ema.ema),
             ema_50=None,  # TODO: Calculate EMA-50 separately if needed
-            macd=indicators.macd.macd
-            if indicators.macd and indicators.macd.macd is not None
-            else None,
-            macd_signal=indicators.macd.signal
-            if indicators.macd and indicators.macd.signal is not None
-            else None,
-            rsi=indicators.rsi.rsi if indicators.rsi and indicators.rsi.rsi is not None else None,
-            bb_upper=indicators.bollinger_bands.upper
-            if indicators.bollinger_bands and indicators.bollinger_bands.upper is not None
-            else None,
-            bb_middle=indicators.bollinger_bands.middle
-            if indicators.bollinger_bands and indicators.bollinger_bands.middle is not None
-            else None,
-            bb_lower=indicators.bollinger_bands.lower
-            if indicators.bollinger_bands and indicators.bollinger_bands.lower is not None
-            else None,
-            atr=indicators.atr.atr if indicators.atr and indicators.atr.atr is not None else None,
+            macd=get_last_value(indicators.macd.macd),
+            macd_signal=get_last_value(indicators.macd.signal),
+            rsi=get_last_value(indicators.rsi.rsi),
+            bb_upper=get_last_value(indicators.bollinger_bands.upper),
+            bb_middle=get_last_value(indicators.bollinger_bands.middle),
+            bb_lower=get_last_value(indicators.bollinger_bands.lower),
+            atr=get_last_value(indicators.atr.atr),
         )
 
     def _calculate_risk_metrics(

@@ -167,11 +167,21 @@ class TestFullPipelineE2E:
         # Mock the context builder's market context method to use real data
         async def mock_get_market_context(symbol, timeframes, force_refresh=False):
             technical_service = get_technical_analysis_service()
+            context_builder = ContextBuilderService()  # For access to the converter
 
             # Calculate technical indicators with real data
-            technical_indicators = None
+            technical_indicators_raw = None
             if len(real_market_data) >= 50:
-                technical_indicators = technical_service.calculate_all_indicators(real_market_data)
+                technical_indicators_raw = technical_service.calculate_all_indicators(
+                    real_market_data
+                )
+
+            # Convert to the flat structure expected by MarketContext
+            technical_indicators_flat = None
+            if technical_indicators_raw:
+                technical_indicators_flat = context_builder._convert_technical_indicators(
+                    technical_indicators_raw
+                )
 
             # Create mock market context with real data
             mock_market_context = Mock()
@@ -184,7 +194,7 @@ class TestFullPipelineE2E:
                 if len(real_market_data) >= 24
                 else 0
             )
-            mock_market_context.technical_indicators = technical_indicators
+            mock_market_context.technical_indicators = technical_indicators_flat
             mock_market_context.data_freshness = (
                 real_market_data[-1].time if real_market_data else None
             )

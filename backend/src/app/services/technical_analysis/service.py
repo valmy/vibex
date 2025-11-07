@@ -21,6 +21,7 @@ class TechnicalAnalysisService:
     """Service for calculating technical analysis indicators."""
 
     MIN_CANDLES = 50
+    SERIES_LENGTH = 10
 
     def __init__(self):
         """Initialize the Technical Analysis Service."""
@@ -65,6 +66,7 @@ class TechnicalAnalysisService:
             bollinger_bands=bollinger_bands,
             atr=atr,
             candle_count=len(candles),
+            series_length=self.SERIES_LENGTH,
         )
 
         logger.info(f"Indicators calculated successfully for {len(candles)} candles")

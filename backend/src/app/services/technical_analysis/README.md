@@ -4,7 +4,7 @@ A comprehensive technical analysis service for calculating financial indicators 
 
 ## Overview
 
-The Technical Analysis Service provides calculations for 5 key technical indicators:
+The Technical Analysis Service provides calculations for 5 key technical indicators, returning a series of the last 10 values for each.
 
 1. **EMA (Exponential Moving Average)** - Trend following indicator with 12-period default
 2. **MACD (Moving Average Convergence Divergence)** - Momentum indicator with MACD line, signal line, and histogram
@@ -47,12 +47,12 @@ candles = [...]  # List of MarketData objects
 # Calculate all indicators
 indicators = ta_service.calculate_all_indicators(candles)
 
-# Access individual indicators
-print(f"EMA: {indicators.ema.ema}")
-print(f"RSI: {indicators.rsi.rsi}")
-print(f"MACD: {indicators.macd.macd}")
-print(f"Bollinger Bands: {indicators.bollinger_bands.upper}")
-print(f"ATR: {indicators.atr.atr}")
+# Access individual indicators (last value in the series)
+print(f"Last EMA: {indicators.ema.ema[-1]}")
+print(f"Last RSI: {indicators.rsi.rsi[-1]}")
+print(f"Last MACD: {indicators.macd.macd[-1]}")
+print(f"Last Bollinger Bands Upper: {indicators.bollinger_bands.upper[-1]}")
+print(f"Last ATR: {indicators.atr.atr[-1]}")
 ```
 
 ### Error Handling
@@ -76,36 +76,37 @@ except CalculationError as e:
 
 ### Output Format
 
-The service returns a `TechnicalIndicators` object:
+The service returns a `TechnicalIndicators` object containing a series of the last 10 values for each indicator.
 
 ```python
 {
     "ema": {
-        "ema": 45000.5,
+        "ema": [44998.1, 44999.5, 45000.5, 45001.2, 45002.8, 45003.4, 45004.1, 45005.0, 45005.3, 45005.5],
         "period": 12
     },
     "macd": {
-        "macd": 100.5,
-        "signal": 95.2,
-        "histogram": 5.3
+        "macd": [98.1, 99.2, 100.5, 101.1, 101.5, 101.0, 100.8, 100.9, 100.7, 100.6],
+        "signal": [94.1, 94.5, 95.2, 96.0, 96.8, 97.5, 98.1, 98.6, 99.0, 99.3],
+        "histogram": [4.0, 4.7, 5.3, 5.1, 4.7, 3.5, 2.7, 2.3, 1.7, 1.3]
     },
     "rsi": {
-        "rsi": 65.5,
+        "rsi": [64.1, 64.5, 65.5, 66.2, 66.8, 65.9, 65.2, 64.8, 64.5, 64.2],
         "period": 14
     },
     "bollinger_bands": {
-        "upper": 46000.0,
-        "middle": 45000.0,
-        "lower": 44000.0,
+        "upper": [45900.0, 45950.0, 46000.0, 46050.0, 46100.0, 46150.0, 46200.0, 46250.0, 46300.0, 46350.0],
+        "middle": [44900.0, 44950.0, 45000.0, 45050.0, 45100.0, 45150.0, 45200.0, 45250.0, 45300.0, 45350.0],
+        "lower": [43900.0, 43950.0, 44000.0, 44050.0, 44100.0, 44150.0, 44200.0, 44250.0, 44300.0, 44350.0],
         "period": 20,
         "std_dev": 2.0
     },
     "atr": {
-        "atr": 500.0,
+        "atr": [490.0, 492.1, 500.0, 501.2, 503.4, 505.1, 504.8, 506.3, 507.0, 508.1],
         "period": 14
     },
     "timestamp": "2024-01-01T12:00:00",
-    "candle_count": 100
+    "candle_count": 100,
+    "series_length": 10
 }
 ```
 
@@ -133,7 +134,7 @@ Calculate all technical indicators from a list of market data candles.
 - `candles`: List of MarketData objects ordered from oldest to newest. Requires at least 50 candles.
 
 **Returns:**
-- `TechnicalIndicators`: Object containing all calculated indicators
+- `TechnicalIndicators`: Object containing a series of the last 10 values for each calculated indicator.
 
 **Raises:**
 - `InsufficientDataError`: If fewer than 50 candles provided
