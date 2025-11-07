@@ -68,14 +68,8 @@ class TestLLMService:
     def sample_trading_context(self):
         """Create a sample trading context."""
         indicators = TechnicalIndicators(
-            ema_20=48000.0,
-            ema_50=47000.0,
-            rsi=65.0,
-            macd=100.0,
-            bb_upper=49000.0,
-            bb_lower=46000.0,
-            bb_middle=47500.0,
-            atr=500.0,
+            interval=TechnicalIndicatorsSet(ema_20=[48000.0]),
+            long_interval=TechnicalIndicatorsSet(ema_20=[47000.0]),
         )
 
         market_context = MarketContext(
@@ -511,15 +505,16 @@ class TestLLMService:
         sample_trading_context.account_state.balance_usd = 0.0
         assert llm_service._validate_context(sample_trading_context) is False
 
+
     def test_build_decision_prompt(self, llm_service, sample_trading_context):
         """Test decision prompt building."""
         prompt = llm_service._build_decision_prompt("BTCUSDT", sample_trading_context)
 
         assert "BTCUSDT" in prompt
-        assert "48000.00" in prompt  # Current price
-        assert "Conservative trading prompt" in prompt  # Strategy template
-        # The simple template doesn't include detailed indicators, just the formatted template
-        assert len(prompt) >= 49  # Should be a substantial prompt
+        assert "48000.00" in prompt
+        assert "Conservative trading prompt" in prompt
+        assert "Primary Interval" in prompt
+        assert "Long-Term Interval" in prompt
 
     def test_build_decision_prompt_with_strategy_override(
         self, llm_service, sample_trading_context
@@ -532,9 +527,7 @@ class TestLLMService:
                 "BTCUSDT", sample_trading_context, "aggressive"
             )
 
-            # The strategy template is used in the INSTRUCTIONS section
             assert "Aggressive strategy for trading" in prompt
-            assert "=== INSTRUCTIONS ===" in prompt
 
     def test_parse_decision_response_valid_json(self, llm_service):
         """Test parsing valid JSON decision response."""

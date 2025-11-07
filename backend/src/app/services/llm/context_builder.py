@@ -47,6 +47,7 @@ from ...schemas.trading_decision import (
     PricePoint,
     RiskMetrics,
     TechnicalIndicators,
+    TechnicalIndicatorsSet,
     TradeHistory,
     TradingContext,
     TradingStrategy,
@@ -145,35 +146,30 @@ class ContextBuilderService:
 
     def _convert_technical_indicators(
         self, indicators: TATechnicalIndicators
-    ) -> TechnicalIndicators:
-        """Convert technical analysis indicators from nested to flat structure.
+    ) -> TechnicalIndicatorsSet:
+        """Convert TA indicators to a TechnicalIndicatorsSet with the last 10 data points."""
 
-        This now takes the most recent value (the last in the series) from the
-        technical analysis service output.
+        def get_last_10(
+            series: Optional[List[Optional[float]]],
+        ) -> Optional[List[float]]:
+            """Safely get the last 10 non-null values from a series."""
+            if not series:
+                return None
 
-        Args:
-            indicators: Technical indicators from technical analysis service
+            # Filter out None values and get the last 10
+            non_null_series = [v for v in series if v is not None]
+            return non_null_series[-10:]
 
-        Returns:
-            TechnicalIndicators with flat structure for LLM service
-        """
-
-        def get_last_value(series: Optional[List[Optional[float]]]) -> Optional[float]:
-            """Safely get the last value from a series."""
-            if series and len(series) > 0:
-                return series[-1]
-            return None
-
-        return TechnicalIndicators(
-            ema_20=get_last_value(indicators.ema.ema),
-            ema_50=None,  # TODO: Calculate EMA-50 separately if needed
-            macd=get_last_value(indicators.macd.macd),
-            macd_signal=get_last_value(indicators.macd.signal),
-            rsi=get_last_value(indicators.rsi.rsi),
-            bb_upper=get_last_value(indicators.bollinger_bands.upper),
-            bb_middle=get_last_value(indicators.bollinger_bands.middle),
-            bb_lower=get_last_value(indicators.bollinger_bands.lower),
-            atr=get_last_value(indicators.atr.atr),
+        return TechnicalIndicatorsSet(
+            ema_20=get_last_10(indicators.ema.ema),
+            ema_50=get_last_10(indicators.ema_50.ema if indicators.ema_50 else None),
+            macd=get_last_10(indicators.macd.macd),
+            macd_signal=get_last_10(indicators.macd.signal),
+            rsi=get_last_10(indicators.rsi.rsi),
+            bb_upper=get_last_10(indicators.bollinger_bands.upper),
+            bb_middle=get_last_10(indicators.bollinger_bands.middle),
+            bb_lower=get_last_10(indicators.bollinger_bands.lower),
+            atr=get_last_10(indicators.atr.atr),
         )
 
     def _calculate_risk_metrics(
@@ -295,16 +291,15 @@ class ContextBuilderService:
         self,
         symbol: str,
         account_id: int,
-        timeframes: Optional[List[str]] = None,
+        timeframes: List[str],
         force_refresh: bool = False,
     ) -> TradingContext:
-        """
-        Build complete trading context for decision making.
+        """Build complete trading context for decision making.
 
         Args:
             symbol: Trading pair symbol (e.g., "BTCUSDT")
             account_id: Account ID
-            timeframes: List of timeframes to analyze (defaults to ["1h", "4h"])
+            timeframes: List of two timeframes to analyze (e.g., ["5m", "1h"])
             force_refresh: Force refresh of cached data
 
         Returns:
@@ -315,10 +310,12 @@ class ContextBuilderService:
             InsufficientMarketDataError: If insufficient market data
             StaleDataError: If data is too stale
         """
-        if timeframes is None:
-            timeframes = ["5m"]
+        if len(timeframes) != 2:
+            raise ValueError("build_trading_context requires exactly two timeframes.")
 
-        logger.info(f"Building trading context for {symbol}, account {account_id}")
+        logger.info(
+            f"Building trading context for {symbol}, account {account_id} with timeframes {timeframes}"
+        )
 
         try:
             # Clean up expired cache entries
@@ -404,21 +401,11 @@ class ContextBuilderService:
         force_refresh: bool = False,
         db_session: AsyncSession = None,
     ) -> MarketContext:
-        """
-        Build market context with price data and technical indicators.
+        """Build market context with price data and technical indicators for multiple timeframes."""
+        if len(timeframes) != 2:
+            raise ValueError("get_market_context expects exactly two timeframes.")
 
-        Args:
-            symbol: Trading pair symbol
-            timeframes: List of timeframes to analyze
-            force_refresh: Force refresh of cached data
-            db_session: Optional database session to use
-
-        Returns:
-            MarketContext object
-        """
         cache_key = f"market_context_{symbol}_{'-'.join(timeframes)}"
-
-        # Check cache first
         if not force_refresh and cache_key in self._cache:
             cached_time, cached_data = self._cache[cache_key]
             if (datetime.now(timezone.utc) - cached_time).total_seconds() < self._cache_ttl_seconds:
@@ -428,113 +415,95 @@ class ContextBuilderService:
         db = db_session or self._db_session
         if db is None:
             raise ContextBuilderError("No database session provided.")
-        should_close = False
 
-        try:
-            # Get market data for primary timeframe (first in list)
-            primary_timeframe = timeframes[0]
+        # Primary timeframe (for price, volume, etc.) is the shorter one
+        primary_timeframe, long_timeframe = timeframes
+
+        async def _get_indicator_set(timeframe: str) -> TechnicalIndicatorsSet:
             market_data = await self.market_data_service.get_latest_market_data(
-                db, symbol, primary_timeframe, self.DEFAULT_PRICE_HISTORY_LIMIT
+                db, symbol, timeframe, self.DEFAULT_PRICE_HISTORY_LIMIT
             )
-
-            if not market_data or len(market_data) < 10:
-                raise InsufficientMarketDataError(f"Insufficient market data for {symbol}")
-
-            # Sort by time (oldest first for technical analysis)
-            market_data.sort(key=lambda x: x.time)
-
-            # Get current price and calculate metrics
-            latest_candle = market_data[-1]
-            current_price = latest_candle.close
-
-            # Calculate 24h price change
-            price_24h_ago = (
-                market_data[-24].close if len(market_data) >= 24 else market_data[0].close
-            )
-            price_change_24h = ((current_price - price_24h_ago) / price_24h_ago) * 100
-
-            # Calculate volatility (standard deviation of returns)
-            if len(market_data) >= 20:
-                returns = []
-                for i in range(1, min(21, len(market_data))):
-                    prev_price = market_data[-i - 1].close
-                    curr_price = market_data[-i].close
-                    returns.append((curr_price - prev_price) / prev_price)
-                volatility = stdev(returns) * 100 if len(returns) > 1 else 0.0
-            else:
-                volatility = 0.0
-
-            # Build price history
-            price_history = [
-                PricePoint(timestamp=candle.time, price=candle.close, volume=candle.volume)
-                for candle in market_data[-50:]  # Last 50 points
-            ]
-
-            # Calculate technical indicators if we have enough data
-            technical_indicators = None
-            if len(market_data) >= self.MIN_CANDLES_FOR_INDICATORS:
-                try:
-                    ta_indicators = self.technical_analysis_service.calculate_all_indicators(
-                        market_data
-                    )
-                    # Convert from nested structure to flat structure
-                    technical_indicators = self._convert_technical_indicators(ta_indicators)
-                    logger.debug(
-                        f"Calculated technical indicators for {symbol} with {len(market_data)} candles"
-                    )
-                except TAInsufficientDataError as e:
-                    logger.warning(f"Insufficient data for technical indicators on {symbol}: {e}")
-                    # Create partial indicators with available data
-                    technical_indicators = self._create_partial_indicators(market_data)
-                except Exception as e:
-                    logger.error(f"Failed to calculate technical indicators for {symbol}: {e}")
-                    # Graceful degradation - continue without indicators
-                    technical_indicators = None
-            else:
+            if not market_data or len(market_data) < self.MIN_CANDLES_FOR_INDICATORS:
                 logger.warning(
-                    f"Not enough candles for technical indicators on {symbol}: {len(market_data)} < {self.MIN_CANDLES_FOR_INDICATORS}"
+                    f"Insufficient data for TA on {symbol} ({timeframe}): {len(market_data) if market_data else 0} candles"
                 )
-                # Try to create basic indicators with available data
-                technical_indicators = self._create_partial_indicators(market_data)
+                return self._create_partial_indicators(market_data or [])
+            try:
+                market_data.sort(key=lambda x: x.time)
+                ta_indicators = self.technical_analysis_service.calculate_all_indicators(market_data)
+                return self._convert_technical_indicators(ta_indicators)
+            except TAInsufficientDataError as e:
+                logger.warning(f"TA InsufficientDataError for {symbol} ({timeframe}): {e}")
+                return self._create_partial_indicators(market_data)
+            except Exception as e:
+                logger.error(f"Failed to calculate indicators for {symbol} ({timeframe}): {e}")
+                return TechnicalIndicatorsSet()
 
-            # Get funding rate from stored market data
-            funding_rate = None
-            if market_data:
-                # Get the most recent candle that has funding rate data
-                for candle in reversed(market_data):
-                    if hasattr(candle, "funding_rate") and candle.funding_rate is not None:
-                        funding_rate = float(candle.funding_rate)
-                        break
+        # Fetch indicators for both timeframes concurrently
+        interval_indicators, long_interval_indicators = await asyncio.gather(
+            _get_indicator_set(primary_timeframe),
+            _get_indicator_set(long_timeframe),
+        )
 
-            # TODO: Implement open interest fetching
-            open_interest = None
+        technical_indicators = TechnicalIndicators(
+            interval=interval_indicators,
+            long_interval=long_interval_indicators,
+        )
 
-            # Calculate 24h volume
-            volume_24h = (
-                sum(candle.volume for candle in market_data[-24:])
-                if len(market_data) >= 24
-                else latest_candle.volume
-            )
+        # Get primary market data for main context fields
+        primary_market_data = await self.market_data_service.get_latest_market_data(
+            db, symbol, primary_timeframe, self.DEFAULT_PRICE_HISTORY_LIMIT
+        )
+        if not primary_market_data or len(primary_market_data) < 10:
+            raise InsufficientMarketDataError(f"Insufficient primary market data for {symbol}")
 
-            market_context = MarketContext(
-                current_price=current_price,
-                price_change_24h=price_change_24h,
-                volume_24h=volume_24h,
-                funding_rate=funding_rate,
-                open_interest=open_interest,
-                price_history=price_history,
-                volatility=volatility,
-                technical_indicators=technical_indicators,
-            )
+        primary_market_data.sort(key=lambda x: x.time)
+        latest_candle = primary_market_data[-1]
+        current_price = latest_candle.close
+        price_24h_ago = (
+            primary_market_data[-24].close if len(primary_market_data) >= 24 else primary_market_data[0].close
+        )
+        price_change_24h = ((current_price - price_24h_ago) / price_24h_ago) * 100
+        volume_24h = (
+            sum(c.volume for c in primary_market_data[-24:]) if len(primary_market_data) >= 24 else latest_candle.volume
+        )
 
-            # Cache the result
-            self._cache[cache_key] = (datetime.now(timezone.utc), market_context)
+        # Calculate volatility
+        volatility = 0.0
+        if len(primary_market_data) >= 20:
+            returns = [
+                (primary_market_data[-i].close - primary_market_data[-i-1].close) / primary_market_data[-i-1].close
+                for i in range(1, min(21, len(primary_market_data)))
+            ]
+            if len(returns) > 1:
+                volatility = stdev(returns) * 100
 
-            return market_context
+        price_history = [
+            PricePoint(timestamp=c.time, price=c.close, volume=c.volume) for c in primary_market_data[-50:]
+        ]
 
-        finally:
-            if should_close:
-                await db.close()
+        funding_rate = next(
+            (
+                float(c.funding_rate)
+                for c in reversed(primary_market_data)
+                if hasattr(c, "funding_rate") and c.funding_rate is not None
+            ),
+            None,
+        )
+
+        market_context = MarketContext(
+            current_price=current_price,
+            price_change_24h=price_change_24h,
+            volume_24h=volume_24h,
+            funding_rate=funding_rate,
+            open_interest=None, # TODO
+            price_history=price_history,
+            volatility=volatility,
+            technical_indicators=technical_indicators,
+        )
+
+        self._cache[cache_key] = (datetime.now(timezone.utc), market_context)
+        return market_context
 
     async def get_account_context(
         self, account_id: int, force_refresh: bool = False, db_session: AsyncSession = None
@@ -788,64 +757,42 @@ class ContextBuilderService:
 
     def _create_partial_indicators(
         self, market_data: List[MarketData]
-    ) -> Optional[TechnicalIndicators]:
-        """
-        Create partial technical indicators with available data.
-
-        Args:
-            market_data: Available market data
-
-        Returns:
-            Partial TechnicalIndicators object (flat structure) or None
-        """
+    ) -> TechnicalIndicatorsSet:
+        """Create partial technical indicators with available data, returning a set."""
         try:
-            # Only create indicators if we have at least 20 candles
             if len(market_data) < 20:
-                return None
+                return TechnicalIndicatorsSet()
 
-            # Create basic indicators with reduced requirements
             close_prices = [candle.close for candle in market_data]
 
-            # Simple moving average as EMA approximation
+            # Calculate SMA as a fallback for EMA
             ema_20 = None
             if len(close_prices) >= 20:
-                ema_20 = sum(close_prices[-20:]) / 20
+                ema_20 = [sum(close_prices[i-20:i]) / 20 for i in range(20, len(close_prices) + 1)]
+                ema_20 = ema_20[-10:] # Last 10 points
 
-            # Basic RSI calculation if we have enough data
             rsi = None
-            if len(close_prices) >= 14:
-                gains = []
-                losses = []
-                for i in range(1, min(15, len(close_prices))):
-                    change = close_prices[i] - close_prices[i - 1]
-                    if change > 0:
-                        gains.append(change)
-                        losses.append(0)
-                    else:
-                        gains.append(0)
-                        losses.append(abs(change))
+            if len(close_prices) >= 15:
+                # Simplified RSI calculation for the last 10 points
+                rsi_values = []
+                for i in range(len(close_prices) - 14, len(close_prices)):
+                    period_prices = close_prices[i-14:i+1]
+                    gains = sum(c2 - c1 for c1, c2 in zip(period_prices, period_prices[1:]) if c2 > c1)
+                    losses = sum(abs(c2 - c1) for c1, c2 in zip(period_prices, period_prices[1:]) if c2 < c1)
+                    avg_gain = gains / 14
+                    avg_loss = losses / 14 if losses > 0 else 1
+                    rs = avg_gain / avg_loss if avg_loss > 0 else 0
+                    rsi_val = 100 - (100 / (1 + rs))
+                    rsi_values.append(rsi_val)
+                rsi = rsi_values[-10:]
 
-                avg_gain = sum(gains) / len(gains) if gains else 0
-                avg_loss = sum(losses) / len(losses) if losses else 1
-                rs = avg_gain / avg_loss if avg_loss > 0 else 0
-                rsi = 100 - (100 / (1 + rs)) if rs > 0 else 50
-
-            # Return flat structure TechnicalIndicators
-            return TechnicalIndicators(
+            return TechnicalIndicatorsSet(
                 ema_20=ema_20,
-                ema_50=None,
-                macd=None,
-                macd_signal=None,
                 rsi=rsi,
-                bb_upper=None,
-                bb_middle=None,
-                bb_lower=None,
-                atr=None,
             )
-
         except Exception as e:
             logger.error(f"Failed to create partial indicators: {e}")
-            return None
+            return TechnicalIndicatorsSet()
 
     async def validate_context_data_availability(self, symbol: str, account_id: int) -> dict:
         """

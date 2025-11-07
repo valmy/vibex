@@ -9,9 +9,11 @@ The LLM Decision Engine Integration feature enables the AI Trading Agent to leve
 - **LLM_Service**: The service component responsible for LLM API communication and decision processing
 - **OpenRouter_API**: Third-party service providing access to multiple LLM models (GPT-5, Grok-4, DeepSeek R1, etc.)
 - **Decision_Engine**: The core component that orchestrates market analysis and trading decision generation
-- **Context_Builder**: Component that aggregates market data, account state, and trading history for LLM prompts
+- **Context_Builder**: Component that aggregates market data, account state, and trading history for LLM prompts. It provides two sets of technical indicators for the `interval` and `long_interval`.
 - **Decision_Validator**: Component that validates and sanitizes LLM outputs against predefined schemas
 - **Trading_Decision**: Structured output containing asset, action, allocation, take-profit, stop-loss, and rationale
+- **interval**: The shorter timeframe for technical analysis.
+- **long_interval**: The longer timeframe for technical analysis.
 - **Fallback_Mechanism**: System that handles malformed or invalid LLM responses gracefully
 
 ## Requirements
@@ -24,9 +26,10 @@ The LLM Decision Engine Integration feature enables the AI Trading Agent to leve
 
 1. WHEN market data is available, THE LLM_Service SHALL generate trading decisions using OpenRouter_API
 2. THE LLM_Service SHALL support multiple LLM models including GPT-5, Grok-4, and DeepSeek R1
-3. THE LLM_Service SHALL process market indicators, account state, and trading history as input context
-4. THE LLM_Service SHALL generate structured Trading_Decision outputs with required fields including buy, sell, hold, adjust_position, close_position, and adjust_orders actions
-5. THE LLM_Service SHALL validate all Trading_Decision outputs against JSON schema before processing
+3. THE Context_Builder SHALL provide two sets of technical indicators for the `interval` and `long_interval`.
+4. THE LLM_Service SHALL process market indicators, account state, and trading history as input context
+5. THE LLM_Service SHALL generate structured Trading_Decision outputs with required fields including buy, sell, hold, adjust_position, close_position, and adjust_orders actions
+6. THE LLM_Service SHALL validate all Trading_Decision outputs against JSON schema before processing
 
 ### Requirement 2
 

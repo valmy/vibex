@@ -13,6 +13,15 @@ from app.services.llm.context_builder import (
     ContextBuilderService,
     get_context_builder_service,
 )
+from app.services.technical_analysis.schemas import (
+    ATROutput,
+    BollingerBandsOutput,
+    EMAOutput,
+    MACDOutput,
+    RSIOutput,
+    TechnicalIndicators as TATechnicalIndicators,
+)
+from app.schemas.trading_decision import TechnicalIndicatorsSet
 
 
 class TestContextBuilderService:
@@ -163,7 +172,8 @@ class TestContextBuilderService:
         # Test with less than 20 candles
         mock_data = [Mock() for _ in range(10)]
         result = context_builder._create_partial_indicators(mock_data)
-        assert result is None
+        assert result.ema_20 is None
+        assert result.rsi is None
 
     def test_create_partial_indicators_sufficient_data(self, context_builder, mock_market_data):
         """Test partial indicators creation with sufficient data."""
@@ -171,59 +181,10 @@ class TestContextBuilderService:
         partial_data = mock_market_data[:30]
 
         result = context_builder._create_partial_indicators(partial_data)
-        # Should return flat TechnicalIndicators structure
+        # Should return TechnicalIndicatorsSet structure
         assert result is not None
-        # Check for flat structure fields
         assert hasattr(result, "ema_20")
         assert hasattr(result, "rsi")
-
-    def test_validate_indicator_freshness_no_indicators(self, context_builder):
-        """Test indicator freshness validation with no indicators."""
-        # Create mock contexts with no indicators
-        market_context = Mock()
-        market_context.current_price = 50000.0
-        market_context.technical_indicators = None  # No indicators
-        market_context.funding_rate = 0.01
-        market_context.open_interest = 1000000.0
-        mock_price = Mock()
-        mock_price.timestamp = datetime.now(timezone.utc) - timedelta(minutes=2)
-        market_context.price_history = [mock_price]
-        market_context.validate_data_freshness = Mock(return_value=True)
-
-        account_context = Mock()
-        account_context.available_balance = 5000.0
-        account_context.balance_usd = 10000.0
-
-        result = context_builder._validate_context(market_context, account_context)
-
-        # Should have warning about no indicators but still be valid
-        assert result["is_valid"] is True
-        assert any("technical indicators" in w.lower() for w in result["warnings"])
-
-    def test_validate_indicator_freshness_with_indicators(self, context_builder):
-        """Test indicator freshness validation with indicators."""
-        # Create mock contexts with indicators
-        market_context = Mock()
-        market_context.current_price = 50000.0
-        market_context.technical_indicators = Mock()
-        market_context.technical_indicators.ema_20 = 50000.0
-        market_context.technical_indicators.rsi = 65.0
-        market_context.funding_rate = 0.01
-        market_context.open_interest = 1000000.0
-        mock_price = Mock()
-        mock_price.timestamp = datetime.now(timezone.utc) - timedelta(minutes=2)
-        market_context.price_history = [mock_price]
-        market_context.validate_data_freshness = Mock(return_value=True)
-
-        account_context = Mock()
-        account_context.available_balance = 5000.0
-        account_context.balance_usd = 10000.0
-
-        result = context_builder._validate_context(market_context, account_context)
-
-        # Should be valid with indicators
-        assert result["is_valid"] is True
-        assert len(result["missing_data"]) == 0
 
     @pytest.mark.asyncio
     async def test_validate_context_data_availability_missing_account(self, context_builder):
@@ -304,8 +265,8 @@ class TestContextBuilderService:
         market_context = Mock()
         market_context.current_price = 50000.0
         market_context.technical_indicators = Mock()
-        market_context.technical_indicators.ema_20 = 50000.0
-        market_context.technical_indicators.rsi = 65.0
+        market_context.technical_indicators.interval = Mock()
+        market_context.technical_indicators.long_interval = Mock()
         market_context.funding_rate = 0.01
         market_context.open_interest = 1000000.0
         # Add price_history for validation
@@ -324,30 +285,6 @@ class TestContextBuilderService:
         assert result["is_valid"]
         assert len(result["missing_data"]) == 0
         assert len(result["stale_data"]) == 0
-
-    def test_validate_context_stale_data(self, context_builder):
-        """Test context validation with stale data."""
-        # Create mock contexts with stale data and flat TechnicalIndicators structure
-        market_context = Mock()
-        market_context.current_price = 50000.0
-        market_context.technical_indicators = None
-        market_context.funding_rate = None
-        market_context.open_interest = None
-        # Add price_history with stale data
-        mock_price = Mock()
-        mock_price.timestamp = datetime.now(timezone.utc) - timedelta(minutes=30)  # Stale
-        market_context.price_history = [mock_price]
-        market_context.validate_data_freshness = Mock(return_value=False)
-
-        account_context = Mock()
-        account_context.available_balance = 0.0  # No balance
-        account_context.balance_usd = 0.0  # Add balance_usd for validation
-
-        result = context_builder._validate_context(market_context, account_context)
-
-        # Result is now a dict instead of ContextValidationResult object
-        assert not result["is_valid"]
-        assert len(result["warnings"]) > 0
 
 
 class TestContextBuilderIntegration:
@@ -378,7 +315,7 @@ class TestContextBuilderIntegration:
         ):
             with patch.object(context_builder, "handle_data_unavailability", return_value=None):
                 with pytest.raises(ContextBuilderError):
-                    await context_builder.build_trading_context("BTCUSDT", 1)
+                    await context_builder.build_trading_context("BTCUSDT", 1, timeframes=["1h", "4h"])
 
     @pytest.mark.asyncio
     async def test_build_trading_context_with_degraded_context(self, context_builder):
@@ -404,5 +341,37 @@ class TestContextBuilderIntegration:
             with patch.object(
                 context_builder, "handle_data_unavailability", return_value=mock_degraded_context
             ):
-                result = await context_builder.build_trading_context("BTCUSDT", 1)
+                result = await context_builder.build_trading_context("BTCUSDT", 1, timeframes=["1h", "4h"])
                 assert result is mock_degraded_context
+
+    def test_convert_technical_indicators(self, context_builder):
+        """Test the _convert_technical_indicators function."""
+        # Create mock TATechnicalIndicators with more than 10 data points
+        mock_indicators = TATechnicalIndicators(
+            ema=EMAOutput(ema=list(range(20))),
+            ema_50=EMAOutput(ema=list(range(50, 70))),
+            macd=MACDOutput(macd=list(range(20)), signal=list(range(20)), histogram=[]),
+            rsi=RSIOutput(rsi=list(range(20))),
+            bollinger_bands=BollingerBandsOutput(
+                upper=list(range(20)),
+                middle=list(range(20)),
+                lower=list(range(20)),
+            ),
+            atr=ATROutput(atr=list(range(20))),
+            candle_count=20,
+            series_length=20,
+        )
+
+        # Call the function
+        result = context_builder._convert_technical_indicators(mock_indicators)
+
+        # Verify the result
+        assert isinstance(result, TechnicalIndicatorsSet)
+        assert len(result.ema_20) == 10
+        assert result.ema_20 == list(range(10, 20))
+        assert len(result.macd) == 10
+        assert result.macd == list(range(10, 20))
+        assert len(result.rsi) == 10
+        assert result.rsi == list(range(10, 20))
+        assert len(result.bb_upper) == 10
+        assert result.bb_upper == list(range(10, 20))

@@ -677,17 +677,20 @@ Provide:
         account_state = context.account_state
 
         # Format technical indicators
-        indicators = market_data.technical_indicators
-        ema_20 = indicators.ema_20 if indicators.ema_20 is not None else "N/A"
-        ema_50 = indicators.ema_50 if indicators.ema_50 is not None else "N/A"
-        macd = indicators.macd if indicators.macd is not None else "N/A"
-        macd_signal = indicators.macd_signal if indicators.macd_signal is not None else "N/A"
-        rsi = indicators.rsi if indicators.rsi is not None else "N/A"
-        bb_upper = indicators.bb_upper if indicators.bb_upper is not None else "N/A"
-        bb_middle = indicators.bb_middle if indicators.bb_middle is not None else "N/A"
-        bb_lower = indicators.bb_lower if indicators.bb_lower is not None else "N/A"
-        atr = indicators.atr if indicators.atr is not None else "N/A"
+        def format_indicator_set(indicator_set, name):
+            lines = [f"--- {name} ---"]
+            for key, value in indicator_set.dict().items():
+                if value is not None:
+                    # Format list of floats to 2 decimal places
+                    formatted_values = [f"{v:.2f}" for v in value]
+                    lines.append(f"{key.upper()}: {', '.join(formatted_values)}")
+            return "\n".join(lines)
 
+        indicators = market_data.technical_indicators
+        indicators_text = f"""
+{format_indicator_set(indicators.interval, "Primary Interval")}
+{format_indicator_set(indicators.long_interval, "Long-Term Interval")}
+"""
         # Format price history
         price_history_text = "\n".join(
             [
@@ -710,16 +713,6 @@ Value at Risk (95%): ${context.risk_metrics.var_95:.2f}
 Max Drawdown: ${context.risk_metrics.max_drawdown:.2f}
 Correlation Risk: {context.risk_metrics.correlation_risk * 100:.1f}%
 Concentration Risk: {context.risk_metrics.concentration_risk * 100:.1f}%
-"""
-
-        # Format indicators
-        indicators_text = f"""
-=== TECHNICAL INDICATORS ===
-EMA: 20-period: {ema_20}, 50-period: {ema_50}
-MACD: {macd} (Signal: {macd_signal})
-RSI: {rsi}
-Bollinger Bands: Upper {bb_upper}, Middle {bb_middle}, Lower {bb_lower}
-ATR: {atr}
 """
 
         # Format positions

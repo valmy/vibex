@@ -349,23 +349,6 @@ class MarketContext(BaseModel):
     price_history: List[PricePoint]
     volatility: float
     technical_indicators: TechnicalIndicators
-
-class TechnicalIndicatorsSet(BaseModel):
-    """Set of technical indicators for a specific timeframe."""
-    ema_20: Optional[List[float]]
-    ema_50: Optional[List[float]]
-    macd: Optional[List[float]]
-    macd_signal: Optional[List[float]]
-    rsi: Optional[List[float]]
-    bb_upper: Optional[List[float]]
-    bb_middle: Optional[List[float]]
-    bb_lower: Optional[List[float]]
-    atr: Optional[List[float]]
-
-class TechnicalIndicators(BaseModel):
-    """Technical indicators for market analysis."""
-    interval: TechnicalIndicatorsSet
-    long_interval: TechnicalIndicatorsSet
 ```
 
 ### Account Context Schema

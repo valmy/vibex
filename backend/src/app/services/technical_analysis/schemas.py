@@ -120,6 +120,7 @@ class TechnicalIndicators(BaseModel):
     )
 
     ema: EMAOutput = Field(description="EMA indicator")
+    ema_50: EMAOutput = Field(description="EMA 50 indicator")
     macd: MACDOutput = Field(description="MACD indicator")
     rsi: RSIOutput = Field(description="RSI indicator")
     bollinger_bands: BollingerBandsOutput = Field(description="Bollinger Bands indicator")

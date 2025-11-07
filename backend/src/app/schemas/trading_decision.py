@@ -123,27 +123,33 @@ class TradingDecision(BaseModel):
         return errors
 
 
+class TechnicalIndicatorsSet(BaseModel):
+    """Set of technical indicators for a specific timeframe."""
+
+    ema_20: Optional[List[float]] = Field(None, description="20-period EMA")
+    ema_50: Optional[List[float]] = Field(None, description="50-period EMA")
+    macd: Optional[List[float]] = Field(None, description="MACD value")
+    macd_signal: Optional[List[float]] = Field(None, description="MACD signal line")
+    rsi: Optional[List[float]] = Field(None, description="RSI values")
+    bb_upper: Optional[List[float]] = Field(None, description="Bollinger Bands upper")
+    bb_lower: Optional[List[float]] = Field(None, description="Bollinger Bands lower")
+    bb_middle: Optional[List[float]] = Field(None, description="Bollinger Bands middle")
+    atr: Optional[List[float]] = Field(None, description="Average True Range")
+
+
 class TechnicalIndicators(BaseModel):
     """Technical indicators for market analysis.
 
-    Uses a FLAT structure where all indicators are direct fields on this model.
-    This is the canonical representation used throughout the system.
-
-    Previously, indicators were nested in separate output objects (EMAOutput, MACDOutput, etc.)
-    but have been flattened for simplicity and consistency.
-
-    All fields are optional to support partial indicator availability.
+    Contains two sets of indicators: one for the primary trading interval
+    and one for a longer-term interval for trend analysis.
     """
 
-    ema_20: Optional[float] = Field(None, description="20-period EMA")
-    ema_50: Optional[float] = Field(None, description="50-period EMA")
-    macd: Optional[float] = Field(None, description="MACD value")
-    macd_signal: Optional[float] = Field(None, description="MACD signal line")
-    rsi: Optional[float] = Field(None, ge=0, le=100, description="RSI value")
-    bb_upper: Optional[float] = Field(None, description="Bollinger Bands upper")
-    bb_lower: Optional[float] = Field(None, description="Bollinger Bands lower")
-    bb_middle: Optional[float] = Field(None, description="Bollinger Bands middle")
-    atr: Optional[float] = Field(None, ge=0, description="Average True Range")
+    interval: TechnicalIndicatorsSet = Field(
+        ..., description="Indicators for the primary trading interval"
+    )
+    long_interval: TechnicalIndicatorsSet = Field(
+        ..., description="Indicators for the longer-term trend interval"
+    )
 
 
 class PricePoint(BaseModel):
@@ -206,7 +212,7 @@ class MarketContext(BaseModel):
 
     def has_sufficient_indicators(self) -> bool:
         """Check if sufficient technical indicators are available."""
-        indicators = self.technical_indicators
+        indicators = self.technical_indicators.interval
         required_indicators = [
             indicators.ema_20,
             indicators.ema_50,
