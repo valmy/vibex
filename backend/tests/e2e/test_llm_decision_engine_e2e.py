@@ -611,53 +611,50 @@ class TestLLMDecisionEngineE2E:
             assert indicators_result.candle_count == len(market_data)
 
             # Check that at least some indicators have values
-            has_ema = indicators_result.ema.ema and indicators_result.ema.ema[-1] is not None
-            has_rsi = indicators_result.rsi.rsi and indicators_result.rsi.rsi[-1] is not None
-            has_macd = indicators_result.macd.macd and indicators_result.macd.macd[-1] is not None
+            has_ema_20 = indicators_result.ema_20 and indicators_result.ema_20[-1] is not None
+            has_ema_50 = indicators_result.ema_50 and indicators_result.ema_50[-1] is not None
+            has_rsi = indicators_result.rsi and indicators_result.rsi[-1] is not None
+            has_macd = indicators_result.macd and indicators_result.macd[-1] is not None
             has_bb = (
-                indicators_result.bollinger_bands.upper
-                and indicators_result.bollinger_bands.upper[-1] is not None
+                indicators_result.bb_upper
+                and indicators_result.bb_upper[-1] is not None
             )
-            has_atr = indicators_result.atr.atr and indicators_result.atr.atr[-1] is not None
+            has_atr = indicators_result.atr and indicators_result.atr[-1] is not None
 
-            indicators_calculated = sum([has_ema, has_rsi, has_macd, has_bb, has_atr])
+            indicators_calculated = sum([has_ema_20, has_ema_50, has_rsi, has_macd, has_bb, has_atr])
             assert indicators_calculated >= 2, (
                 f"At least 2 indicators should be calculated, got {indicators_calculated}"
             )
 
             # Validate indicator values are reasonable
-            if has_ema:
-                assert indicators_result.ema.ema[-1] > 0, (
-                    f"EMA should be positive, got {indicators_result.ema.ema[-1]}"
+            if has_ema_20:
+                assert indicators_result.ema_20[-1] > 0, (
+                    f"EMA20 should be positive, got {indicators_result.ema_20[-1]}"
                 )
 
             if has_rsi:
-                assert 0 <= indicators_result.rsi.rsi[-1] <= 100, (
-                    f"RSI should be 0-100, got {indicators_result.rsi.rsi[-1]}"
+                assert 0 <= indicators_result.rsi[-1] <= 100, (
+                    f"RSI should be 0-100, got {indicators_result.rsi[-1]}"
                 )
 
             if has_atr:
-                assert indicators_result.atr.atr[-1] >= 0, (
-                    f"ATR should be non-negative, got {indicators_result.atr.atr[-1]}"
+                assert indicators_result.atr[-1] >= 0, (
+                    f"ATR should be non-negative, got {indicators_result.atr[-1]}"
                 )
 
             # Log the complete technical analysis data
             logger.info(
                 f"Technical indicators calculated successfully for {len(market_data)} candles:"
             )
-            logger.info(f"  EMA: {indicators_result.ema.ema[-1]}")
-            logger.info(f"  EMA Period: {indicators_result.ema.period}")
-            logger.info(f"  RSI: {indicators_result.rsi.rsi[-1]}")
-            logger.info(f"  RSI Period: {indicators_result.rsi.period}")
-            logger.info(f"  MACD: {indicators_result.macd.macd[-1]}")
-            logger.info(f"  MACD Signal: {indicators_result.macd.signal[-1]}")
-            logger.info(f"  MACD Histogram: {indicators_result.macd.histogram[-1]}")
-            logger.info(f"  BB Upper: {indicators_result.bollinger_bands.upper[-1]}")
-            logger.info(f"  BB Middle: {indicators_result.bollinger_bands.middle[-1]}")
-            logger.info(f"  BB Lower: {indicators_result.bollinger_bands.lower[-1]}")
-            logger.info(f"  BB Period: {indicators_result.bollinger_bands.period}")
-            logger.info(f"  ATR: {indicators_result.atr.atr[-1]}")
-            logger.info(f"  ATR Period: {indicators_result.atr.period}")
+            logger.info(f"  EMA 20: {indicators_result.ema_20[-1]}")
+            logger.info(f"  EMA 50: {indicators_result.ema_50[-1]}")
+            logger.info(f"  RSI: {indicators_result.rsi[-1]}")
+            logger.info(f"  MACD: {indicators_result.macd[-1]}")
+            logger.info(f"  MACD Signal: {indicators_result.macd_signal[-1]}")
+            logger.info(f"  BB Upper: {indicators_result.bb_upper[-1]}")
+            logger.info(f"  BB Middle: {indicators_result.bb_middle[-1]}")
+            logger.info(f"  BB Lower: {indicators_result.bb_lower[-1]}")
+            logger.info(f"  ATR: {indicators_result.atr[-1]}")
             logger.info(f"  Candle Count: {indicators_result.candle_count}")
             logger.info(f"  Timestamp: {indicators_result.timestamp}")
 
@@ -732,11 +729,11 @@ class TestLLMDecisionEngineE2E:
                     "confidence": result.decision.confidence,
                     "risk_level": result.decision.risk_level,
                     "indicators": {
-                        "rsi": indicators_result.rsi.rsi[-1]
-                        if indicators_result.rsi.rsi and indicators_result.rsi.rsi[-1] is not None
+                        "rsi": indicators_result.rsi[-1]
+                        if indicators_result.rsi and indicators_result.rsi[-1] is not None
                         else None,
-                        "ema": indicators_result.ema.ema[-1]
-                        if indicators_result.ema.ema and indicators_result.ema.ema[-1] is not None
+                        "ema_20": indicators_result.ema_20[-1]
+                        if indicators_result.ema_20 and indicators_result.ema_20[-1] is not None
                         else None,
                         "current_price": market_data[-1].close,
                     },

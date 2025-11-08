@@ -143,7 +143,7 @@ class TestFullPipelineE2E:
             # Check that we have some indicator data
             assert hasattr(indicators, "rsi")
             assert hasattr(indicators, "macd")
-            assert hasattr(indicators, "bollinger_bands")
+            assert hasattr(indicators, "bb_upper")
 
             # Check that the decision has reasoning
             assert decision.reasoning is not None
@@ -235,7 +235,12 @@ class TestFullPipelineE2E:
     @pytest.fixture
     def mock_market_context(self):
         """Create a mock market context."""
-        from app.schemas.trading_decision import MarketContext, PricePoint, TechnicalIndicators
+        from app.schemas.trading_decision import (
+            MarketContext,
+            PricePoint,
+            TechnicalIndicators,
+            TechnicalIndicatorsSet,
+        )
 
         return MarketContext(
             symbol="BTCUSDT",
@@ -257,15 +262,28 @@ class TestFullPipelineE2E:
             ],
             volatility=1.2,
             technical_indicators=TechnicalIndicators(
-                ema_20=49800.0,
-                ema_50=49500.0,
-                macd=100.0,
-                macd_signal=90.0,
-                rsi=55.0,
-                bb_upper=50500.0,
-                bb_lower=49500.0,
-                bb_middle=50000.0,
-                atr=200.0,
+                interval=TechnicalIndicatorsSet(
+                    ema_20=[49800.0] * 10,
+                    ema_50=[49500.0] * 10,
+                    macd=[100.0] * 10,
+                    macd_signal=[90.0] * 10,
+                    rsi=[55.0] * 10,
+                    bb_upper=[50500.0] * 10,
+                    bb_lower=[49500.0] * 10,
+                    bb_middle=[50000.0] * 10,
+                    atr=[200.0] * 10,
+                ),
+                long_interval=TechnicalIndicatorsSet(
+                    ema_20=[49800.0] * 10,
+                    ema_50=[49500.0] * 10,
+                    macd=[100.0] * 10,
+                    macd_signal=[90.0] * 10,
+                    rsi=[55.0] * 10,
+                    bb_upper=[50500.0] * 10,
+                    bb_lower=[49500.0] * 10,
+                    bb_middle=[50000.0] * 10,
+                    atr=[200.0] * 10,
+                ),
             ),
         )
 

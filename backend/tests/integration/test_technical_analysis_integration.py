@@ -54,11 +54,12 @@ class TestTechnicalAnalysisIntegration:
         result = service.calculate_all_indicators(market_data_candles)
 
         # Verify all indicators are calculated
-        assert isinstance(result.ema.ema, list)
-        assert isinstance(result.macd.macd, list)
-        assert isinstance(result.rsi.rsi, list)
-        assert isinstance(result.bollinger_bands.upper, list)
-        assert isinstance(result.atr.atr, list)
+        assert isinstance(result.ema_20, list)
+        assert isinstance(result.ema_50, list)
+        assert isinstance(result.macd, list)
+        assert isinstance(result.rsi, list)
+        assert isinstance(result.bb_upper, list)
+        assert isinstance(result.atr, list)
 
         # Verify metadata
         assert result.candle_count == 100
@@ -106,10 +107,10 @@ class TestTechnicalAnalysisIntegration:
         result2 = service.calculate_all_indicators(candles2)
 
         # Results should be different
-        assert result1.ema.ema[-1] != result2.ema.ema[-1]
+        assert result1.ema_20[-1] != result2.ema_20[-1]
         # RSI should be different (uptrend vs downtrend)
-        if result1.rsi.rsi[-1] is not None and result2.rsi.rsi[-1] is not None:
-            assert result1.rsi.rsi[-1] > result2.rsi.rsi[-1]
+        if result1.rsi[-1] is not None and result2.rsi[-1] is not None:
+            assert result1.rsi[-1] > result2.rsi[-1]
 
     def test_service_handles_edge_case_prices(self):
         """Test service with edge case price values."""
@@ -133,8 +134,8 @@ class TestTechnicalAnalysisIntegration:
             )
 
         result = service.calculate_all_indicators(candles)
-        assert isinstance(result.ema.ema, list)
-        assert isinstance(result.rsi.rsi, list)
+        assert isinstance(result.ema_20, list)
+        assert isinstance(result.rsi, list)
 
     def test_service_with_volatile_market_data(self):
         """Test service with highly volatile market data."""
@@ -162,9 +163,9 @@ class TestTechnicalAnalysisIntegration:
         result = service.calculate_all_indicators(candles)
 
         # Verify ATR is higher due to volatility
-        assert isinstance(result.atr.atr, list)
-        if result.atr.atr[-1] is not None:
-            assert result.atr.atr[-1] > 100  # Should be significant
+        assert isinstance(result.atr, list)
+        if result.atr[-1] is not None:
+            assert result.atr[-1] > 100  # Should be significant
 
     def test_service_with_trending_market(self):
         """Test service with strong uptrend."""
@@ -191,8 +192,8 @@ class TestTechnicalAnalysisIntegration:
         result = service.calculate_all_indicators(candles)
 
         # In uptrend, RSI should be elevated
-        if result.rsi.rsi[-1] is not None:
-            assert result.rsi.rsi[-1] > 50
+        if result.rsi[-1] is not None:
+            assert result.rsi[-1] > 50
 
     def test_service_with_downtrend_market(self):
         """Test service with strong downtrend."""
@@ -219,8 +220,8 @@ class TestTechnicalAnalysisIntegration:
         result = service.calculate_all_indicators(candles)
 
         # In downtrend, RSI should be depressed
-        if result.rsi.rsi[-1] is not None:
-            assert result.rsi.rsi[-1] < 50
+        if result.rsi[-1] is not None:
+            assert result.rsi[-1] < 50
 
     def test_service_output_serialization(self, market_data_candles):
         """Test that service output can be serialized to JSON."""
@@ -230,10 +231,11 @@ class TestTechnicalAnalysisIntegration:
         # Should be able to convert to dict
         result_dict = result.model_dump()
         assert isinstance(result_dict, dict)
-        assert "ema" in result_dict
+        assert "ema_20" in result_dict
+        assert "ema_50" in result_dict
         assert "macd" in result_dict
         assert "rsi" in result_dict
-        assert "bollinger_bands" in result_dict
+        assert "bb_upper" in result_dict
         assert "atr" in result_dict
         assert result_dict["series_length"] == 10
 
@@ -266,5 +268,5 @@ class TestTechnicalAnalysisIntegration:
         # Should complete without error
         result = service.calculate_all_indicators(candles)
         assert result.candle_count == 500
-        assert isinstance(result.ema.ema, list)
-        assert len(result.ema.ema) == 10
+        assert isinstance(result.ema_20, list)
+        assert len(result.ema_20) == 10

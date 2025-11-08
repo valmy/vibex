@@ -56,7 +56,7 @@ from ...services.market_data.service import get_market_data_service
 from ...services.technical_analysis.exceptions import (
     InsufficientDataError as TAInsufficientDataError,
 )
-from ...services.technical_analysis.schemas import TechnicalIndicators as TATechnicalIndicators
+from ...services.technical_analysis.schemas import TATechnicalIndicators
 from ...services.technical_analysis.service import TechnicalAnalysisService
 
 logger = logging.getLogger(__name__)
@@ -161,15 +161,15 @@ class ContextBuilderService:
             return non_null_series[-10:]
 
         return TechnicalIndicatorsSet(
-            ema_20=get_last_10(indicators.ema.ema),
-            ema_50=get_last_10(indicators.ema_50.ema if indicators.ema_50 else None),
-            macd=get_last_10(indicators.macd.macd),
-            macd_signal=get_last_10(indicators.macd.signal),
-            rsi=get_last_10(indicators.rsi.rsi),
-            bb_upper=get_last_10(indicators.bollinger_bands.upper),
-            bb_middle=get_last_10(indicators.bollinger_bands.middle),
-            bb_lower=get_last_10(indicators.bollinger_bands.lower),
-            atr=get_last_10(indicators.atr.atr),
+            ema_20=get_last_10(indicators.ema_20),
+            ema_50=get_last_10(indicators.ema_50),
+            macd=get_last_10(indicators.macd),
+            macd_signal=get_last_10(indicators.macd_signal),
+            rsi=get_last_10(indicators.rsi),
+            bb_upper=get_last_10(indicators.bb_upper),
+            bb_middle=get_last_10(indicators.bb_middle),
+            bb_lower=get_last_10(indicators.bb_lower),
+            atr=get_last_10(indicators.atr),
         )
 
     def _calculate_risk_metrics(
@@ -430,7 +430,9 @@ class ContextBuilderService:
                 return self._create_partial_indicators(market_data or [])
             try:
                 market_data.sort(key=lambda x: x.time)
-                ta_indicators = self.technical_analysis_service.calculate_all_indicators(market_data)
+                ta_indicators = self.technical_analysis_service.calculate_all_indicators(
+                    market_data
+                )
                 return self._convert_technical_indicators(ta_indicators)
             except TAInsufficientDataError as e:
                 logger.warning(f"TA InsufficientDataError for {symbol} ({timeframe}): {e}")
@@ -461,25 +463,31 @@ class ContextBuilderService:
         latest_candle = primary_market_data[-1]
         current_price = latest_candle.close
         price_24h_ago = (
-            primary_market_data[-24].close if len(primary_market_data) >= 24 else primary_market_data[0].close
+            primary_market_data[-24].close
+            if len(primary_market_data) >= 24
+            else primary_market_data[0].close
         )
         price_change_24h = ((current_price - price_24h_ago) / price_24h_ago) * 100
         volume_24h = (
-            sum(c.volume for c in primary_market_data[-24:]) if len(primary_market_data) >= 24 else latest_candle.volume
+            sum(c.volume for c in primary_market_data[-24:])
+            if len(primary_market_data) >= 24
+            else latest_candle.volume
         )
 
         # Calculate volatility
         volatility = 0.0
         if len(primary_market_data) >= 20:
             returns = [
-                (primary_market_data[-i].close - primary_market_data[-i-1].close) / primary_market_data[-i-1].close
+                (primary_market_data[-i].close - primary_market_data[-i - 1].close)
+                / primary_market_data[-i - 1].close
                 for i in range(1, min(21, len(primary_market_data)))
             ]
             if len(returns) > 1:
                 volatility = stdev(returns) * 100
 
         price_history = [
-            PricePoint(timestamp=c.time, price=c.close, volume=c.volume) for c in primary_market_data[-50:]
+            PricePoint(timestamp=c.time, price=c.close, volume=c.volume)
+            for c in primary_market_data[-50:]
         ]
 
         funding_rate = next(
@@ -496,7 +504,7 @@ class ContextBuilderService:
             price_change_24h=price_change_24h,
             volume_24h=volume_24h,
             funding_rate=funding_rate,
-            open_interest=None, # TODO
+            open_interest=None,  # TODO
             price_history=price_history,
             volatility=volatility,
             technical_indicators=technical_indicators,
@@ -755,9 +763,7 @@ class ContextBuilderService:
             sharpe_ratio=sharpe_ratio,
         )
 
-    def _create_partial_indicators(
-        self, market_data: List[MarketData]
-    ) -> TechnicalIndicatorsSet:
+    def _create_partial_indicators(self, market_data: List[MarketData]) -> TechnicalIndicatorsSet:
         """Create partial technical indicators with available data, returning a set."""
         try:
             if len(market_data) < 20:
@@ -768,17 +774,23 @@ class ContextBuilderService:
             # Calculate SMA as a fallback for EMA
             ema_20 = None
             if len(close_prices) >= 20:
-                ema_20 = [sum(close_prices[i-20:i]) / 20 for i in range(20, len(close_prices) + 1)]
-                ema_20 = ema_20[-10:] # Last 10 points
+                ema_20 = [
+                    sum(close_prices[i - 20 : i]) / 20 for i in range(20, len(close_prices) + 1)
+                ]
+                ema_20 = ema_20[-10:]  # Last 10 points
 
             rsi = None
             if len(close_prices) >= 15:
                 # Simplified RSI calculation for the last 10 points
                 rsi_values = []
                 for i in range(len(close_prices) - 14, len(close_prices)):
-                    period_prices = close_prices[i-14:i+1]
-                    gains = sum(c2 - c1 for c1, c2 in zip(period_prices, period_prices[1:]) if c2 > c1)
-                    losses = sum(abs(c2 - c1) for c1, c2 in zip(period_prices, period_prices[1:]) if c2 < c1)
+                    period_prices = close_prices[i - 14 : i + 1]
+                    gains = sum(
+                        c2 - c1 for c1, c2 in zip(period_prices, period_prices[1:], strict=False) if c2 > c1
+                    )
+                    losses = sum(
+                        abs(c2 - c1) for c1, c2 in zip(period_prices, period_prices[1:], strict=False) if c2 < c1
+                    )
                     avg_gain = gains / 14
                     avg_loss = losses / 14 if losses > 0 else 1
                     rs = avg_gain / avg_loss if avg_loss > 0 else 0

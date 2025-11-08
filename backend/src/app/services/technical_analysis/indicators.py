@@ -5,13 +5,12 @@ Provides pure functions for calculating technical indicators using TA-Lib and Nu
 """
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import numpy as np
 import talib
 
 from .exceptions import CalculationError, InsufficientDataError
-from .schemas import ATROutput, BollingerBandsOutput, EMAOutput, MACDOutput, RSIOutput
 
 logger = logging.getLogger(__name__)
 
@@ -51,15 +50,16 @@ def _handle_calculation_error(indicator_name: str, error: Exception) -> Calculat
     return CalculationError(indicator_name, error)
 
 
-def calculate_ema(close_prices: np.ndarray) -> EMAOutput:
+def calculate_ema(close_prices: np.ndarray, period: int = 12) -> List[Optional[float]]:
     """
     Calculate Exponential Moving Average (EMA).
 
     Args:
         close_prices: NumPy array of close prices
+        period: The period to use for the EMA calculation
 
     Returns:
-        EMAOutput with calculated EMA value series
+        List of calculated EMA values
 
     Raises:
         InsufficientDataError: If insufficient data
@@ -67,10 +67,10 @@ def calculate_ema(close_prices: np.ndarray) -> EMAOutput:
     """
     try:
         _validate_array_length(close_prices)
-        ema_values = talib.EMA(close_prices, timeperiod=12)
+        ema_values = talib.EMA(close_prices, timeperiod=period)
         ema_series = _get_last_n_values(ema_values)
         logger.debug(f"EMA series calculated. Last value: {ema_series[-1]}")
-        return EMAOutput(ema=ema_series, period=12)
+        return ema_series
     except InsufficientDataError:
         raise
     except Exception as e:
@@ -78,7 +78,9 @@ def calculate_ema(close_prices: np.ndarray) -> EMAOutput:
         raise _handle_calculation_error("EMA", e)
 
 
-def calculate_macd(close_prices: np.ndarray) -> MACDOutput:
+def calculate_macd(
+    close_prices: np.ndarray,
+) -> Tuple[List[Optional[float]], List[Optional[float]], List[Optional[float]]]:
     """
     Calculate Moving Average Convergence Divergence (MACD).
 
@@ -86,7 +88,7 @@ def calculate_macd(close_prices: np.ndarray) -> MACDOutput:
         close_prices: NumPy array of close prices
 
     Returns:
-        MACDOutput with MACD, signal, and histogram value series
+        Tuple of (MACD, signal, histogram) value series
 
     Raises:
         InsufficientDataError: If insufficient data
@@ -101,7 +103,7 @@ def calculate_macd(close_prices: np.ndarray) -> MACDOutput:
         histogram_series = _get_last_n_values(histogram_values)
 
         logger.debug(f"MACD series calculated. Last macd: {macd_series[-1]}")
-        return MACDOutput(macd=macd_series, signal=signal_series, histogram=histogram_series)
+        return macd_series, signal_series, histogram_series
     except InsufficientDataError:
         raise
     except Exception as e:
@@ -109,7 +111,7 @@ def calculate_macd(close_prices: np.ndarray) -> MACDOutput:
         raise _handle_calculation_error("MACD", e)
 
 
-def calculate_rsi(close_prices: np.ndarray) -> RSIOutput:
+def calculate_rsi(close_prices: np.ndarray) -> List[Optional[float]]:
     """
     Calculate Relative Strength Index (RSI).
 
@@ -117,7 +119,7 @@ def calculate_rsi(close_prices: np.ndarray) -> RSIOutput:
         close_prices: NumPy array of close prices
 
     Returns:
-        RSIOutput with RSI value series (0-100)
+        List of RSI values (0-100)
 
     Raises:
         InsufficientDataError: If insufficient data
@@ -128,7 +130,7 @@ def calculate_rsi(close_prices: np.ndarray) -> RSIOutput:
         rsi_values = talib.RSI(close_prices, timeperiod=14)
         rsi_series = _get_last_n_values(rsi_values)
         logger.debug(f"RSI series calculated. Last value: {rsi_series[-1]}")
-        return RSIOutput(rsi=rsi_series, period=14)
+        return rsi_series
     except InsufficientDataError:
         raise
     except Exception as e:
@@ -136,7 +138,9 @@ def calculate_rsi(close_prices: np.ndarray) -> RSIOutput:
         raise _handle_calculation_error("RSI", e)
 
 
-def calculate_bollinger_bands(close_prices: np.ndarray) -> BollingerBandsOutput:
+def calculate_bollinger_bands(
+    close_prices: np.ndarray,
+) -> Tuple[List[Optional[float]], List[Optional[float]], List[Optional[float]]]:
     """
     Calculate Bollinger Bands.
 
@@ -144,7 +148,7 @@ def calculate_bollinger_bands(close_prices: np.ndarray) -> BollingerBandsOutput:
         close_prices: NumPy array of close prices
 
     Returns:
-        BollingerBandsOutput with upper, middle, lower band value series
+        Tuple of (upper, middle, lower) band value series
 
     Raises:
         InsufficientDataError: If insufficient data
@@ -161,9 +165,7 @@ def calculate_bollinger_bands(close_prices: np.ndarray) -> BollingerBandsOutput:
         lower_series = _get_last_n_values(lower_values)
 
         logger.debug(f"Bollinger Bands series calculated. Last middle: {middle_series[-1]}")
-        return BollingerBandsOutput(
-            upper=upper_series, middle=middle_series, lower=lower_series, period=20, std_dev=2.0
-        )
+        return upper_series, middle_series, lower_series
     except InsufficientDataError:
         raise
     except Exception as e:
@@ -173,7 +175,7 @@ def calculate_bollinger_bands(close_prices: np.ndarray) -> BollingerBandsOutput:
 
 def calculate_atr(
     high_prices: np.ndarray, low_prices: np.ndarray, close_prices: np.ndarray
-) -> ATROutput:
+) -> List[Optional[float]]:
     """
     Calculate Average True Range (ATR).
 
@@ -183,7 +185,7 @@ def calculate_atr(
         close_prices: NumPy array of close prices
 
     Returns:
-        ATROutput with ATR value series
+        List of ATR values
 
     Raises:
         InsufficientDataError: If insufficient data
@@ -194,7 +196,7 @@ def calculate_atr(
         atr_values = talib.ATR(high_prices, low_prices, close_prices, timeperiod=14)
         atr_series = _get_last_n_values(atr_values)
         logger.debug(f"ATR series calculated. Last value: {atr_series[-1]}")
-        return ATROutput(atr=atr_series, period=14)
+        return atr_series
     except InsufficientDataError:
         raise
     except Exception as e:

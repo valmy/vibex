@@ -13,14 +13,7 @@ from app.services.llm.context_builder import (
     ContextBuilderService,
     get_context_builder_service,
 )
-from app.services.technical_analysis.schemas import (
-    ATROutput,
-    BollingerBandsOutput,
-    EMAOutput,
-    MACDOutput,
-    RSIOutput,
-    TechnicalIndicators as TATechnicalIndicators,
-)
+from app.services.technical_analysis.schemas import TATechnicalIndicators
 from app.schemas.trading_decision import TechnicalIndicatorsSet
 
 
@@ -348,16 +341,15 @@ class TestContextBuilderIntegration:
         """Test the _convert_technical_indicators function."""
         # Create mock TATechnicalIndicators with more than 10 data points
         mock_indicators = TATechnicalIndicators(
-            ema=EMAOutput(ema=list(range(20))),
-            ema_50=EMAOutput(ema=list(range(50, 70))),
-            macd=MACDOutput(macd=list(range(20)), signal=list(range(20)), histogram=[]),
-            rsi=RSIOutput(rsi=list(range(20))),
-            bollinger_bands=BollingerBandsOutput(
-                upper=list(range(20)),
-                middle=list(range(20)),
-                lower=list(range(20)),
-            ),
-            atr=ATROutput(atr=list(range(20))),
+            ema_20=list(range(20)),
+            ema_50=list(range(50, 70)),
+            macd=list(range(20)),
+            macd_signal=list(range(20)),
+            rsi=list(range(20)),
+            bb_upper=list(range(20)),
+            bb_middle=list(range(20)),
+            bb_lower=list(range(20)),
+            atr=list(range(20)),
             candle_count=20,
             series_length=20,
         )

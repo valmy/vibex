@@ -23,6 +23,8 @@ class ConfigValidator:
         "ASTERDEX_API_SECRET",
         "OPENROUTER_API_KEY",
         "DATABASE_URL",
+        "SECRET_KEY",
+        "ALGORITHM",
     }
 
     # Field type expectations
@@ -57,10 +59,12 @@ class ConfigValidator:
         "MAX_POSITION_SIZE_USD": float,
         "MULTI_ACCOUNT_MODE": bool,
         "ACCOUNT_IDS": str,
+        "SECRET_KEY": str,
+        "ALGORITHM": str,
     }
 
     # Valid values for specific fields
-    VALID_INTERVALS = {"1m", "3m", "5m", "15m", "1h", "4h", "1d"}
+    VALID_INTERVALS = {"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "1d"}
     VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
     VALID_ENVIRONMENTS = {"development", "testing", "production"}
     VALID_NETWORKS = {"mainnet", "testnet"}
@@ -115,6 +119,7 @@ class ConfigValidator:
                 continue
 
             value = getattr(config, field_name)
+            print(f"Validating {field_name}: {value}")
             if not value or (isinstance(value, str) and not value.strip()):
                 errors.append(f"Required field '{field_name}' is empty")
 
@@ -222,6 +227,11 @@ class ConfigValidator:
         if hasattr(config, "OPENROUTER_API_KEY"):
             if not config.OPENROUTER_API_KEY or not isinstance(config.OPENROUTER_API_KEY, str):
                 errors.append("OPENROUTER_API_KEY must be a non-empty string")
+
+        # Validate SECRET_KEY
+        if hasattr(config, "SECRET_KEY"):
+            if not config.SECRET_KEY or not isinstance(config.SECRET_KEY, str):
+                errors.append("SECRET_KEY must be a non-empty string")
 
         return errors
 
