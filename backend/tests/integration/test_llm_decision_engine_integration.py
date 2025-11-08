@@ -18,6 +18,7 @@ from app.schemas.trading_decision import (
     RiskMetrics,
     StrategyRiskParameters,
     TechnicalIndicators,
+    TechnicalIndicatorsSet,
     TradingContext,
     TradingDecision,
     TradingStrategy,
@@ -80,15 +81,28 @@ class TestLLMDecisionEngineIntegration:
             open_interest=50000000.0,
             volatility=0.05,
             technical_indicators=TechnicalIndicators(
-                rsi=65.0,
-                macd=100.0,
-                macd_signal=90.0,
-                ema_20=47500.0,
-                ema_50=47000.0,
-                bb_upper=49000.0,
-                bb_lower=46000.0,
-                bb_middle=47500.0,
-                atr=500.0,
+                interval=TechnicalIndicatorsSet(
+                    rsi=[65.0] * 10,
+                    macd=[100.0] * 10,
+                    macd_signal=[90.0] * 10,
+                    ema_20=[47500.0] * 10,
+                    ema_50=[47000.0] * 10,
+                    bb_upper=[49000.0] * 10,
+                    bb_lower=[46000.0] * 10,
+                    bb_middle=[47500.0] * 10,
+                    atr=[500.0] * 10,
+                ),
+                long_interval=TechnicalIndicatorsSet(
+                    rsi=[60.0] * 10,
+                    macd=[110.0] * 10,
+                    macd_signal=[95.0] * 10,
+                    ema_20=[47000.0] * 10,
+                    ema_50=[46500.0] * 10,
+                    bb_upper=[49500.0] * 10,
+                    bb_lower=[45500.0] * 10,
+                    bb_middle=[47000.0] * 10,
+                    atr=[600.0] * 10,
+                ),
             ),
             price_history=[],
         )
@@ -160,15 +174,28 @@ class TestLLMDecisionEngineIntegration:
 
         # Create mock trading context
         indicators = TechnicalIndicators(
-            ema_20=48000.0,
-            ema_50=47000.0,
-            rsi=65.0,
-            macd=100.0,
-            macd_signal=90.0,
-            bb_upper=49000.0,
-            bb_lower=46000.0,
-            bb_middle=47500.0,
-            atr=500.0,
+            interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0] * 10,
+                ema_50=[47000.0] * 10,
+                rsi=[65.0] * 10,
+                macd=[100.0] * 10,
+                macd_signal=[90.0] * 10,
+                bb_upper=[49000.0] * 10,
+                bb_lower=[46000.0] * 10,
+                bb_middle=[47500.0] * 10,
+                atr=[500.0] * 10,
+            ),
+            long_interval=TechnicalIndicatorsSet(
+                ema_20=[47000.0] * 10,
+                ema_50=[46000.0] * 10,
+                rsi=[60.0] * 10,
+                macd=[110.0] * 10,
+                macd_signal=[95.0] * 10,
+                bb_upper=[49500.0] * 10,
+                bb_lower=[45500.0] * 10,
+                bb_middle=[47000.0] * 10,
+                atr=[600.0] * 10,
+            ),
         )
 
         market_context = MarketContext(
@@ -312,7 +339,7 @@ class TestLLMDecisionEngineIntegration:
 
         # Verify all services were called
         mock_context_builder.build_trading_context.assert_called_once_with(
-            symbol="BTCUSDT", account_id=1, force_refresh=False
+            symbol="BTCUSDT", account_id=1, timeframes=["4h", "1d"], force_refresh=False
         )
         mock_llm_service.generate_trading_decision.assert_called_once()
         mock_decision_validator.validate_decision.assert_called_once()
@@ -388,7 +415,7 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Mock different contexts for different accounts
-        def mock_build_context(symbol, account_id, force_refresh=False):
+        def mock_build_context(symbol, account_id, timeframes, force_refresh=False):
             context = mock_context_builder.build_trading_context.return_value
             context.account_id = account_id
             return context
@@ -467,7 +494,7 @@ class TestLLMDecisionEngineIntegration:
         """Test error handling and recovery scenarios."""
 
         # Mock context building failure
-        def mock_build_context_failure(symbol, account_id, force_refresh=False):
+        def mock_build_context_failure(symbol, account_id, timeframes, force_refresh=False):
             raise Exception("Context building failed")
 
         mock_context_builder.build_trading_context.side_effect = mock_build_context_failure
@@ -666,7 +693,7 @@ class TestLLMDecisionEngineIntegration:
             ),
         ]
 
-        for i, validation_result in enumerate(validation_scenarios):
+        for _, validation_result in enumerate(validation_scenarios):
             mock_decision_validator.validate_decision.return_value = validation_result
 
             # Mock fallback for invalid decisions
@@ -745,7 +772,7 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Mock context builder to fail for one symbol
-        def mock_build_context_with_failure(symbol, account_id, force_refresh=False):
+        def mock_build_context_with_failure(symbol, account_id, timeframes, force_refresh=False):
             if symbol == "ETHUSDT":
                 raise Exception("Market data unavailable for ETHUSDT")
             return mock_context_builder.build_trading_context.return_value

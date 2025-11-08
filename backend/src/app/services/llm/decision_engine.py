@@ -549,6 +549,7 @@ class DecisionEngine:
                     PerformanceMetrics,
                     RiskMetrics,
                     TechnicalIndicators,
+                    TechnicalIndicatorsSet,
                     TradingContext,
                 )
 
@@ -563,15 +564,28 @@ class DecisionEngine:
                         open_interest=0.0,
                         volatility=0.0,
                         technical_indicators=TechnicalIndicators(
-                            ema_20=1.0,  # Provide at least some indicators
-                            ema_50=1.0,
-                            rsi=50.0,
-                            macd=0.0,
-                            macd_signal=0.0,
-                            bb_upper=1.0,
-                            bb_lower=1.0,
-                            bb_middle=1.0,
-                            atr=0.0,
+                            interval=TechnicalIndicatorsSet(
+                                ema_20=[1.0] * 10,
+                                ema_50=[1.0] * 10,
+                                rsi=[50.0] * 10,
+                                macd=[0.0] * 10,
+                                macd_signal=[0.0] * 10,
+                                bb_upper=[1.0] * 10,
+                                bb_lower=[1.0] * 10,
+                                bb_middle=[1.0] * 10,
+                                atr=[0.0] * 10,
+                            ),
+                            long_interval=TechnicalIndicatorsSet(
+                                ema_20=[1.0] * 10,
+                                ema_50=[1.0] * 10,
+                                rsi=[50.0] * 10,
+                                macd=[0.0] * 10,
+                                macd_signal=[0.0] * 10,
+                                bb_upper=[1.0] * 10,
+                                bb_lower=[1.0] * 10,
+                                bb_middle=[1.0] * 10,
+                                atr=[0.0] * 10,
+                            ),
                         ),
                     ),
                     account_state=AccountContext(
@@ -686,7 +700,7 @@ class DecisionEngine:
             DecisionEngineError: If switch fails
         """
         try:
-            assignment = await self.strategy_manager.switch_account_strategy(
+            await self.strategy_manager.switch_account_strategy(
                 account_id=account_id,
                 new_strategy_id=strategy_id,
                 switch_reason=switch_reason,
