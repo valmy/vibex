@@ -18,6 +18,8 @@ from app.schemas.trading_decision import (
     RiskMetrics,
     StrategyRiskParameters,
     TechnicalIndicators,
+    TechnicalIndicatorsSet,
+    TechnicalIndicatorsSet,
     TradingContext,
     TradingDecision,
     TradingStrategy,
