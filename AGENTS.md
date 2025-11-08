@@ -105,9 +105,9 @@ cd backend && podman-compose down
 - Place imports at the top of the file
 
 ### Formatting
-- Line length: 100 characters (Black + Ruff)
+- Line length: 100 characters (Ruff)
 - Indentation: 4 spaces (no tabs)
-- Use Black for automatic formatting
+- Use Ruff for automatic formatting
 - Use Ruff for linting
 
 ### Types and Naming

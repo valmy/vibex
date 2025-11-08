@@ -22,6 +22,9 @@ LLM-powered cryptocurrency trading agent for AsterDEX.
    ```bash
    cp .env.example .env
    # Edit .env with your API keys and configuration
+
+   cp .env.example .env.testing
+   # Edit .env with your API keys and configuration for running tests
    ```
 
 3. **Install dependencies**
