@@ -37,6 +37,30 @@ else
     exit 1
 fi
 
+# Setup Python virtual environment with uv
+if [ -d "backend" ]; then
+    echo "Setting up Python virtual environment..."
+    cd backend && uv sync
+    echo "✓ Python virtual environment set up successfully"
+
+    echo "Installing development and test dependencies..."
+    uv pip install -e .[dev,test]
+    echo "✓ Development and test dependencies installed"
+else
+    echo "✗ Error: backend directory not found"
+    exit 1
+fi
+
+# Install podman-compose using pipx
+echo "Installing podman-compose..."
+if command -v pipx &> /dev/null; then
+    pipx install podman-compose
+    echo "✓ podman-compose installed successfully"
+else
+    echo "✗ Error: pipx is not installed. Please install pipx first."
+    exit 1
+fi
+
 echo "Setup completed successfully!"
 
-set +x; . /opt/environment_summary.sh
+# set +x; . /opt/environment_summary.sh
