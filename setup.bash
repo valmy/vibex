@@ -49,13 +49,13 @@ if [ -d "backend" ]; then
 
     # At this point we're in the backend directory
     # Pull and list Docker images
-    if [ -f "podman-compose.yml" ] || [ -f "compose.override.yml" ]; then
+    if [ -f "podman-compose.yml" ]; then
         echo "Pulling Docker images..."
-        docker compose -f podman-compose.yml -f compose.override.yml pull
+        docker compose -f podman-compose.yml pull postgres redis
         echo "✓ Docker images pulled successfully"
 
         echo "Listing Docker images..."
-        docker compose images
+        docker images
         echo "✓ Docker images listed successfully"
     else
         echo "⚠ Warning: docker-compose.yml or compose.yml not found in backend, skipping Docker operations"
