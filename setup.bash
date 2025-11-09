@@ -40,11 +40,12 @@ fi
 # Setup Python virtual environment with uv
 if [ -d "backend" ]; then
     echo "Setting up Python virtual environment..."
-    cd backend && uv sync
+    (
+        cd backend
+        uv pip install -e .              # install the package itself in editable mode
+        uv pip install -e ".[dev,test]" # same, plus the optional dependency sets
+    )
     echo "✓ Python virtual environment set up successfully"
-
-    # Go back to the project root
-    cd ..
 else
     echo "✗ Error: backend directory not found"
     exit 1
