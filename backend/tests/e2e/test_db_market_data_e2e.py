@@ -26,11 +26,8 @@ class TestDatabaseMarketDataE2E:
     @pytest.mark.asyncio
     async def test_fetch_real_btcusdt_5m_data(self, db_session, market_data_repository):
         """Test fetching real BTCUSDT 5m data from database."""
-        try:
-            # Fetch 100 latest 5m candles for BTCUSDT
-            data = await market_data_repository.get_latest(db_session, "BTCUSDT", "5m", 100)
-        except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+        # Fetch 100 latest 5m candles for BTCUSDT
+        data = await market_data_repository.get_latest(db_session, "BTCUSDT", "5m", 100)
 
         # Log the data for debugging in json format
         logger.info(f"Fetched market data: {json.dumps(data, default=str)}")

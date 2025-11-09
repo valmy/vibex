@@ -27,6 +27,7 @@ from app.schemas.trading_decision import (
     RiskMetrics,
     StrategyRiskParameters,
     TechnicalIndicators,
+    TechnicalIndicatorsSet,
     TradingContext,
     TradingDecision,
     TradingStrategy,
@@ -119,14 +120,26 @@ class TestLLMDecisionEnginePerformance:
     def _create_mock_context(self):
         """Create a mock trading context."""
         indicators = TechnicalIndicators(
-            ema_20=48000.0,
-            ema_50=47000.0,
-            rsi=65.0,
-            macd=100.0,
-            bb_upper=49000.0,
-            bb_lower=46000.0,
-            bb_middle=47500.0,
-            atr=500.0,
+            interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+                ema_50=[47000.0],
+                rsi=[65.0],
+                macd=[100.0],
+                bb_upper=[49000.0],
+                bb_lower=[46000.0],
+                bb_middle=[47500.0],
+                atr=[500.0],
+            ),
+            long_interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+                ema_50=[47000.0],
+                rsi=[65.0],
+                macd=[100.0],
+                bb_upper=[49000.0],
+                bb_lower=[46000.0],
+                bb_middle=[47500.0],
+                atr=[500.0],
+            ),
         )
 
         market_context = MarketContext(

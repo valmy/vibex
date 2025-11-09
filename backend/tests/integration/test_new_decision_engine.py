@@ -7,7 +7,10 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.security import create_access_token
 from app.main import app
+from app.models.account import Account, User
+from app.models.strategy import Strategy
 from app.schemas.trading_decision import (
     DecisionResult,
     TechnicalIndicators,
@@ -24,8 +27,35 @@ def client():
     return TestClient(app)
 
 
-def test_generate_decision_with_new_context(client):
+@pytest.mark.asyncio
+async def test_generate_decision_with_new_context(client, db_session):
     """Test the /api/v1/decisions/generate endpoint with the new context."""
+    # Create a test user, strategy and account
+    admin_user = User(address="adminuser", is_admin=True)
+    strategy = Strategy(
+        strategy_id="test_strategy",
+        strategy_name="Test Strategy",
+        strategy_type="long_short",
+        prompt_template="Test prompt",
+        timeframe_preference='["5m", "1h"]',
+        risk_parameters='{"max_risk_per_trade": 0.01}',
+    )
+    account = Account(
+        user=admin_user,
+        name="test_account",
+        description="Test Account",
+        status="active",
+        leverage=1,
+        max_position_size_usd=1000,
+        risk_per_trade=0.01,
+        is_paper_trading=True,
+    )
+    db_session.add(admin_user)
+    db_session.add(strategy)
+    db_session.add(account)
+    await db_session.commit()
+
+
     # Create mock TradingContext with the new TechnicalIndicators structure
     mock_context = Mock(spec=TradingContext)
     mock_context.symbol = "BTCUSDT"
@@ -70,14 +100,18 @@ def test_generate_decision_with_new_context(client):
     app.dependency_overrides[get_decision_engine] = lambda: mock_engine
 
     # Call the endpoint
+    access_token = create_access_token(data={"sub": admin_user.address})
+    headers = {"Authorization": f"Bearer {access_token}"}
     response = client.post(
         "/api/v1/decisions/generate",
         json={"symbol": "BTCUSDT", "account_id": 1},
+        headers=headers,
     )
 
     # Verify the response
     assert response.status_code == 200
     response_json = response.json()
+    assert "decision" in response_json
     assert "context" in response_json
     assert "technical_indicators" in response_json["context"]["market_data"]
     assert "interval" in response_json["context"]["market_data"]["technical_indicators"]

@@ -25,6 +25,7 @@ from app.schemas.trading_decision import (
     MarketContext,
     PerformanceMetrics,
     RiskMetrics,
+    TechnicalIndicatorsSet,
     TradingContext,
     TradingDecision,
 )
@@ -63,113 +64,10 @@ class TestLLMDecisionEngineE2E:
 
     @pytest.mark.asyncio
     async def test_complete_decision_workflow_with_real_data(
-        self, decision_engine, db_session, mocker
+        self, decision_engine, db_session, populate_market_data
     ):
         """Test complete decision generation workflow with real market data from database."""
         logger.info("Testing complete decision workflow with real data from database")
-
-        # Mock the LLM service to avoid actual LLM calls
-        mock_llm_service = mocker.MagicMock(spec=LLMService)
-
-        # The method is async
-        async def mock_generate_decision(*args, **kwargs):
-            context = kwargs.get("context")
-            mock_decision = TradingDecision(
-                asset="BTCUSDT",
-                action="buy",
-                confidence=75.0,
-                risk_level="medium",
-                rationale="Mocked rationale.",
-                allocation_usd=0,
-                exit_plan="Mocked exit plan.",
-            )
-            # Use model_construct to bypass validation for the mock
-            mock_result = DecisionResult.model_construct(
-                decision=mock_decision,
-                validation_passed=True,
-                validation_errors=[],
-                context=context,
-                processing_time_ms=100,
-                model_used="mock-model",
-            )
-            return mock_result
-
-        mock_llm_service.generate_trading_decision.side_effect = mock_generate_decision
-
-        # Replace the llm_service in the decision_engine with our mock
-        decision_engine.llm_service = mock_llm_service
-
-        # Mock the decision validator to always pass validation
-        from app.schemas.trading_decision import ValidationResult
-
-        mock_validation_result = ValidationResult(
-            is_valid=True,
-            errors=[],
-            warnings=[],
-            validation_time_ms=10.0,
-            rules_checked=["mock_rule"],
-        )
-        decision_engine.decision_validator.validate_decision = mocker.AsyncMock(
-            return_value=mock_validation_result
-        )
-
-        # Mock the account context to avoid database account lookup
-        from app.schemas.trading_decision import StrategyRiskParameters, TradingStrategy
-
-        mock_strategy = TradingStrategy(
-            strategy_id="test_strategy",
-            strategy_name="Test Strategy",
-            strategy_type="conservative",
-            prompt_template="Test prompt",
-            risk_parameters=StrategyRiskParameters(
-                max_risk_per_trade=2.0,
-                max_daily_loss=5.0,
-                stop_loss_percentage=2.0,
-                take_profit_ratio=2.0,
-                max_leverage=2.0,
-                cooldown_period=300,
-            ),
-            timeframe_preference=["5m", "1h"],
-            max_positions=3,
-            position_sizing="percentage",
-            is_active=True,
-        )
-
-        mock_account_context = AccountContext(
-            account_id=1,
-            balance_usd=10000.0,
-            available_balance=8000.0,
-            total_pnl=0.0,
-            open_positions=[],
-            recent_performance=PerformanceMetrics(
-                total_pnl=0.0,
-                win_rate=0.0,
-                avg_win=0.0,
-                avg_loss=0.0,
-                max_drawdown=0.0,
-                sharpe_ratio=None,
-            ),
-            risk_exposure=0.0,
-            max_position_size=2000.0,
-            active_strategy=mock_strategy,
-        )
-
-        # Mock the get_account_context method
-        decision_engine.context_builder.get_account_context = mocker.AsyncMock(
-            return_value=mock_account_context
-        )
-
-        # Mock the _validate_context method to return dict
-        mock_validation_result = {
-            "is_valid": True,
-            "missing_data": [],
-            "stale_data": [],
-            "warnings": [],
-            "data_age_seconds": 0,
-        }
-        decision_engine.context_builder._validate_context = mocker.Mock(
-            return_value=mock_validation_result
-        )
 
         # The context_builder is real and should use the db_session from the DI container
         # The decision_engine fixture should be correctly wired
@@ -399,15 +297,28 @@ class TestLLMDecisionEngineE2E:
 
             # Create technical indicators with simple float values as expected by the schema
             technical_indicators = TechnicalIndicators(
-                ema_20=49500.0,
-                ema_50=49000.0,
-                macd=150.0,
-                macd_signal=145.0,
-                rsi=65.0,
-                bb_upper=51000.0,
-                bb_middle=50000.0,
-                bb_lower=49000.0,
-                atr=500.0,
+                interval=TechnicalIndicatorsSet(
+                    ema_20=[49500.0],
+                    ema_50=[49000.0],
+                    macd=[150.0],
+                    macd_signal=[145.0],
+                    rsi=[65.0],
+                    bb_upper=[51000.0],
+                    bb_middle=[50000.0],
+                    bb_lower=[49000.0],
+                    atr=[500.0],
+                ),
+                long_interval=TechnicalIndicatorsSet(
+                    ema_20=[49500.0],
+                    ema_50=[49000.0],
+                    macd=[150.0],
+                    macd_signal=[145.0],
+                    rsi=[65.0],
+                    bb_upper=[51000.0],
+                    bb_middle=[50000.0],
+                    bb_lower=[49000.0],
+                    atr=[500.0],
+                ),
             )
 
             # Create market context (no symbol field in new schema)

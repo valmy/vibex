@@ -274,6 +274,8 @@ async def general_exception_handler(request, exc):
 @app.on_event("startup")
 async def startup_event():
     """Handle startup event."""
+    for route in app.routes:
+        logger.info(f"Route: {route.path}")
     logger.info(f"Starting {config.APP_NAME} v{config.APP_VERSION}")
     logger.info(f"Environment: {config.ENVIRONMENT}")
 

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from app.schemas.trading_decision import TradingContext
+from app.schemas.trading_decision import TechnicalIndicators, TradingContext
 from app.services.llm.context_builder import (
     ContextBuilderError,
     ContextBuilderService,
@@ -257,9 +257,10 @@ class TestContextBuilderService:
         # Create mock contexts with flat TechnicalIndicators structure
         market_context = Mock()
         market_context.current_price = 50000.0
-        market_context.technical_indicators = Mock()
-        market_context.technical_indicators.interval = Mock()
-        market_context.technical_indicators.long_interval = Mock()
+        market_context.technical_indicators = TechnicalIndicators(
+            interval=TechnicalIndicatorsSet(ema_20=[50000.0]),
+            long_interval=TechnicalIndicatorsSet(ema_20=[50000.0]),
+        )
         market_context.funding_rate = 0.01
         market_context.open_interest = 1000000.0
         # Add price_history for validation
