@@ -286,8 +286,18 @@ class TestMarketContext:
         """Test sufficient indicators validation."""
         # Indicators with enough data
         indicators_sufficient = TechnicalIndicators(
-            interval=TechnicalIndicatorsSet(ema_20=[48000.0], ema_50=[47000.0], rsi=[65.0], macd=[100.0]),
-            long_interval=TechnicalIndicatorsSet(ema_20=[48000.0], ema_50=[47000.0], rsi=[65.0], macd=[100.0]),
+            interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+                ema_50=[47000.0],
+                rsi=[65.0],
+                macd=[100.0],
+            ),
+            long_interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+                ema_50=[47000.0],
+                rsi=[65.0],
+                macd=[100.0],
+            ),
         )
 
         market_context = MarketContext(
@@ -302,8 +312,14 @@ class TestMarketContext:
 
         # Indicators with insufficient data
         indicators_insufficient = TechnicalIndicators(
-            interval=TechnicalIndicatorsSet(ema_20=[48000.0], rsi=[65.0]),
-            long_interval=TechnicalIndicatorsSet(ema_20=[48000.0], rsi=[65.0]),
+            interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+                rsi=[65.0],
+            ),
+            long_interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+                rsi=[65.0],
+            ),
         )
 
         market_context_insufficient = MarketContext(
@@ -319,8 +335,12 @@ class TestMarketContext:
     def test_price_trend_detection(self):
         """Test price trend detection."""
         indicators = TechnicalIndicators(
-            interval=TechnicalIndicatorsSet(ema_20=[48000.0]),
-            long_interval=TechnicalIndicatorsSet(ema_20=[47000.0]),
+            interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+            ),
+            long_interval=TechnicalIndicatorsSet(
+                ema_20=[47000.0],
+            ),
         )
 
         # Create price history with upward trend
@@ -396,8 +416,12 @@ class TestTradingContext:
         """Test trading context summary generation."""
         # Create minimal valid context components
         indicators = TechnicalIndicators(
-            interval=TechnicalIndicatorsSet(ema_20=[48000.0]),
-            long_interval=TechnicalIndicatorsSet(ema_20=[47000.0]),
+            interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+            ),
+            long_interval=TechnicalIndicatorsSet(
+                ema_20=[47000.0],
+            ),
         )
 
         market_context = MarketContext(
