@@ -20,7 +20,9 @@ fi
 if [ -f "backend/.env.example" ]; then
     cp backend/.env.example backend/.env.testing
     sed -i 's/DATABASE_URL=postgresql:\/\/trading_user:trading_password@postgres:5432\/trading_db/DATABASE_URL=postgresql:\/\/trading_user:trading_password@localhost:5432\/trading_db/' backend/.env.testing
+    sed -i 's/ENVIRONMENT=development/ENVIRONMENT=testing/' backend/.env.testing
     echo "✓ Copied backend/.env.example to backend/.env.testing and updated DATABASE_URL"
+    echo "✓ Updated ENVIRONMENT to 'testing' in backend/.env.testing"
 else
     echo "✗ Error: backend/.env.example not found"
     exit 1
