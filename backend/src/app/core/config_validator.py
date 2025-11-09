@@ -119,7 +119,6 @@ class ConfigValidator:
                 continue
 
             value = getattr(config, field_name)
-            print(f"Validating {field_name}: {value}")
             if not value or (isinstance(value, str) and not value.strip()):
                 errors.append(f"Required field '{field_name}' is empty")
 
