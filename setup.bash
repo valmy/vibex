@@ -43,9 +43,8 @@ if [ -d "backend" ]; then
     cd backend && uv sync
     echo "✓ Python virtual environment set up successfully"
 
-    echo "Installing development and test dependencies..."
-    uv pip install -e .[dev,test]
-    echo "✓ Development and test dependencies installed"
+    # Go back to the project root
+    cd ..
 else
     echo "✗ Error: backend directory not found"
     exit 1
