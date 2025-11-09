@@ -46,6 +46,23 @@ if [ -d "backend" ]; then
     echo "Installing development and test dependencies..."
     uv pip install -e .[dev,test]
     echo "✓ Development and test dependencies installed"
+
+    # At this point we're in the backend directory
+    # Pull and list Docker images
+    if [ -f "docker-compose.yml" ] || [ -f "compose.yml" ]; then
+        echo "Pulling Docker images..."
+        docker compose pull
+        echo "✓ Docker images pulled successfully"
+
+        echo "Listing Docker images..."
+        docker compose images
+        echo "✓ Docker images listed successfully"
+    else
+        echo "⚠ Warning: docker-compose.yml or compose.yml not found in backend, skipping Docker operations"
+    fi
+
+    # Go back to the project root
+    cd ..
 else
     echo "✗ Error: backend directory not found"
     exit 1
@@ -60,6 +77,10 @@ else
     echo "✗ Error: pipx is not installed. Please install pipx first."
     exit 1
 fi
+
+
+# Return to project root directory
+cd ..
 
 echo "Setup completed successfully!"
 
