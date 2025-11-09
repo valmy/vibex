@@ -51,6 +51,16 @@ else
     exit 1
 fi
 
+# Install podman-compose using pipx
+echo "Installing podman-compose..."
+if command -v pipx &> /dev/null; then
+    pipx install podman-compose
+    echo "✓ podman-compose installed successfully"
+else
+    echo "✗ Error: pipx is not installed. Please install pipx first."
+    exit 1
+fi
+
 echo "Setup completed successfully!"
 
 # set +x; . /opt/environment_summary.sh
