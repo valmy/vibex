@@ -67,13 +67,17 @@ This is to run the database and backend app
 cd backend && podman-compose up -d
 
 # View logs
-cd backend && podman-compose logs -f backend
+cd backend && podman-compose logs backend
 
 # Stop services
 cd backend && podman-compose down
 
 # Remove volumes
 cd backend && podman-compose down -v
+
+# Initial database will be set by backend/init-db.sql
+# Run migrations
+cd backend && ENVINRONMENT=testing uv run alembic upgrade head
 
 ### With podman-compose (Recommended for Development)
 
