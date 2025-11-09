@@ -37,6 +37,20 @@ else
     exit 1
 fi
 
+# Setup Python virtual environment with uv
+if [ -d "backend" ]; then
+    echo "Setting up Python virtual environment..."
+    cd backend && uv sync
+    echo "✓ Python virtual environment set up successfully"
+
+    echo "Installing development and test dependencies..."
+    uv pip install -e .[dev,test]
+    echo "✓ Development and test dependencies installed"
+else
+    echo "✗ Error: backend directory not found"
+    exit 1
+fi
+
 echo "Setup completed successfully!"
 
-set +x; . /opt/environment_summary.sh
+# set +x; . /opt/environment_summary.sh
