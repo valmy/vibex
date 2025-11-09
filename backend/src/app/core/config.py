@@ -152,9 +152,6 @@ def get_config() -> BaseConfig:
     """
     import os
 
-    from dotenv import load_dotenv
-
-    load_dotenv(".env.testing")
     environment = os.getenv("ENVIRONMENT", "development").lower()
 
     config_map = {
