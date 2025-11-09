@@ -42,6 +42,7 @@ if [ -d "backend" ]; then
     echo "Setting up Python virtual environment..."
     (
         cd backend
+        uv venv # Create a virtual environment in backend/.venv
         uv pip install -e .              # install the package itself in editable mode
         uv pip install -e ".[dev,test]" # same, plus the optional dependency sets
     )
