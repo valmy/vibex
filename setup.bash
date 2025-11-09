@@ -49,7 +49,7 @@ if [ -d "backend" ]; then
 
     # At this point we're in the backend directory
     # Pull and list Docker images
-    if [ -f "docker-compose.yml" ] || [ -f "compose.yml" ]; then
+    if [ -f "podman-compose.yml" ] || [ -f "compose.override.yml" ]; then
         echo "Pulling Docker images..."
         docker compose -f podman-compose.yml -f compose.override.yml pull
         echo "✓ Docker images pulled successfully"
