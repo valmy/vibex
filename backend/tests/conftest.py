@@ -11,14 +11,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-from dotenv import load_dotenv
 
-# Load .env.local if it exists (for local testing with localhost database)
-env_local = Path(__file__).parent.parent / ".env.local"
-if env_local.exists():
-    load_dotenv(env_local, override=True)
-else:
-    load_dotenv()
+
 
 # Set testing environment before importing app modules
 os.environ["ENVIRONMENT"] = "testing"

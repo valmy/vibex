@@ -1,0 +1,248 @@
+TESTS DIRECTORY STRUCTURE
+=========================
+
+backend/tests/
+│
+├── README.md                                    # Main directory guide
+├── ORGANIZATION_SUMMARY.md                      # Organization summary
+├── STRUCTURE.txt                                # This file
+├── conftest.py                                  # Pytest configuration & fixtures
+├── __init__.py                                  # Package initialization
+│
+├── docs/                                        # Test Documentation
+│   ├── INDEX.md                                 # Documentation index (NEW)
+│   ├── E2E_TEST_REAL_DATA_REPORT.md            # Test execution report
+│   ├── REAL_DATA_E2E_ACTION_PLAN.md            # Implementation plan
+│   ├── WHAT_NEEDS_TO_BE_DONE.md                # Outstanding tasks
+│   └── QUICK_REFERENCE.md                      # Quick reference guide
+│
+├── e2e/                                         # End-to-End Tests
+│   ├── README.md                                # E2E tests guide
+│   ├── __init__.py
+│   ├── test_decision_generate_api_e2e_http.py  # HTTP E2E tests (9 tests) ⭐
+│   ├── test_decision_generate_api_e2e.py       # ASGI E2E tests
+│   ├── test_decision_api_e2e.py                # Decision API tests
+│   ├── test_llm_decision_engine_e2e.py         # Full decision workflow
+│   ├── test_technical_analysis_e2e.py          # Technical indicators
+│   ├── test_context_builder_e2e.py             # Context building
+│   ├── test_db_market_data_e2e.py              # Database integration
+│   ├── test_full_pipeline_e2e.py               # Complete pipeline
+│   └── test_decision_accuracy_regression.py    # Accuracy regression
+│
+├── unit/                                        # Unit Tests
+│   ├── __init__.py
+│   ├── test_decision_api_with_real_data.py     # Decision API with real data
+│   ├── test_context_builder.py                 # Context builder
+│   ├── test_llm_service.py                     # LLM service
+│   ├── test_technical_analysis.py              # Technical analysis
+│   ├── test_decision_validator.py              # Decision validator
+│   ├── test_config_cache.py                    # Config cache
+│   ├── test_config_manager.py                  # Config manager
+│   ├── test_config_reloader.py                 # Config reloader
+│   ├── test_config_validator.py                # Config validator
+│   ├── test_market_data_funding_rate.py        # Market data funding rate
+│   ├── test_strategy_manager.py                # Strategy manager
+│   └── test_trading_decision_schemas.py        # Trading decision schemas
+│
+├── integration/                                 # Integration Tests
+│   ├── __init__.py
+│   ├── test_llm_decision_engine_integration.py # LLM engine integration
+│   ├── test_technical_analysis_integration.py  # Technical analysis integration
+│   └── test_config_integration.py              # Config integration
+│
+├── performance/                                 # Performance Tests
+│   ├── __init__.py
+│   └── test_llm_decision_performance.py        # Decision engine performance
+│
+├── scripts/                                     # Test Utility Scripts
+│   ├── README.md                                # Scripts documentation (NEW)
+│   ├── create_test_data.py                     # Create test data
+│   ├── delete_test_data.py                     # Delete test data
+│   ├── add_funding_rate.py                     # Add funding rate data
+│   ├── check_db.py                             # Check database status
+│   ├── check_users.py                          # Check user data
+│   └── test_scheduler.py                       # Test scheduler
+│
+└── data/                                        # Test Output & Results
+    ├── e2e_test_output.txt                     # E2E test output
+    ├── test_output.txt                         # Test output
+    ├── test_output2.txt                        # Test output 2
+    ├── test_output3.txt                        # Test output 3
+    ├── test_output4.txt                        # Test output 4
+    └── test_output_all.txt                     # All test output
+
+
+KEY STATISTICS
+==============
+
+Documentation Files:        5 files
+  - E2E test reports and plans
+  - Quick reference guides
+  - Documentation index
+
+Test Files:                 22 files
+  - E2E tests:              9 files
+  - Unit tests:             13 files
+  - Integration tests:      3 files
+  - Performance tests:      1 file
+
+Utility Scripts:            7 files
+  - Test data management
+  - Database utilities
+  - Scheduler testing
+
+Test Output Files:          6 files
+  - Previous test runs
+  - Execution results
+
+
+MAIN E2E TEST FILES (⭐ FOCUS)
+==============================
+
+1. test_decision_generate_api_e2e_http.py
+   - HTTP E2E tests for /api/v1/decisions/generate
+   - 9 comprehensive tests
+   - Tests with real data from database
+   - All tests passing ✅
+
+2. test_decision_generate_api_e2e.py
+   - ASGI E2E tests with authentication
+   - Wallet-based auth flow
+   - Request validation
+   - Response structure validation
+
+3. test_decision_api_e2e.py
+   - Decision Engine HTTP API tests
+   - Complete workflow validation
+   - Error handling tests
+
+
+QUICK COMMANDS
+==============
+
+# View main guide
+cat tests/README.md
+
+# View documentation index
+cat tests/docs/INDEX.md
+
+# View scripts guide
+cat tests/scripts/README.md
+
+# View organization summary
+cat tests/ORGANIZATION_SUMMARY.md
+
+# Run E2E tests
+cd backend && uv run pytest tests/e2e/ -v
+
+# Run specific test
+cd backend && uv run pytest tests/e2e/test_decision_generate_api_e2e_http.py -v
+
+# Create test data
+cd backend && uv run python tests/scripts/create_test_data.py
+
+# Check database
+cd backend && uv run python tests/scripts/check_db.py
+
+# Delete test data
+cd backend && uv run python tests/scripts/delete_test_data.py
+
+
+NAVIGATION GUIDE
+================
+
+For Test Execution:
+  1. tests/README.md (main guide)
+  2. tests/docs/QUICK_REFERENCE.md (quick commands)
+  3. tests/e2e/README.md (E2E tests guide)
+
+For Implementation:
+  1. tests/docs/REAL_DATA_E2E_ACTION_PLAN.md (detailed steps)
+  2. tests/docs/WHAT_NEEDS_TO_BE_DONE.md (requirements)
+  3. tests/scripts/README.md (script documentation)
+
+For Troubleshooting:
+  1. tests/docs/QUICK_REFERENCE.md (quick fixes)
+  2. tests/docs/E2E_TEST_REAL_DATA_REPORT.md (known issues)
+  3. tests/scripts/README.md (script troubleshooting)
+
+For Documentation:
+  1. tests/docs/INDEX.md (documentation index)
+  2. tests/ORGANIZATION_SUMMARY.md (organization overview)
+  3. tests/STRUCTURE.txt (this file)
+
+
+FILES MOVED TO TESTS FOLDER
+============================
+
+From backend/ root to tests/docs/:
+  ✓ E2E_TEST_REAL_DATA_REPORT.md
+  ✓ REAL_DATA_E2E_ACTION_PLAN.md
+  ✓ WHAT_NEEDS_TO_BE_DONE.md
+  ✓ QUICK_REFERENCE.md
+
+From backend/ root to tests/scripts/:
+  ✓ create_test_data.py
+  ✓ delete_test_data.py
+  ✓ add_funding_rate.py
+  ✓ check_db.py
+  ✓ check_users.py
+  ✓ test_scheduler.py
+
+From backend/ root to tests/data/:
+  ✓ e2e_test_output.txt
+  ✓ test_output.txt
+  ✓ test_output2.txt
+  ✓ test_output3.txt
+  ✓ test_output4.txt
+  ✓ test_output_all.txt
+
+New Files Created:
+  ✓ tests/README.md
+  ✓ tests/ORGANIZATION_SUMMARY.md
+  ✓ tests/STRUCTURE.txt
+  ✓ tests/docs/INDEX.md
+  ✓ tests/scripts/README.md
+
+
+ORGANIZATION BENEFITS
+=====================
+
+✓ Better Maintainability
+  - Related files grouped together
+  - Clear folder structure
+  - Easy to navigate
+
+✓ Cleaner Root Directory
+  - Removed 16 files from backend root
+  - Only essential files remain
+  - Easier to find main backend files
+
+✓ Comprehensive Documentation
+  - INDEX.md for navigation
+  - README.md in each folder
+  - ORGANIZATION_SUMMARY.md for overview
+
+✓ Scalability
+  - Easy to add new tests
+  - Easy to add new documentation
+  - Easy to add new scripts
+
+✓ Discoverability
+  - Clear folder names
+  - Comprehensive guides
+  - Quick reference documents
+
+
+STATUS
+======
+
+Organization Date: 2025-11-09
+Status: COMPLETE ✅
+
+All files successfully moved and organized.
+All documentation created and linked.
+All guides and references updated.
+
+Ready for use! 🚀
+
