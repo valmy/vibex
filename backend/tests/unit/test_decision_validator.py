@@ -128,6 +128,7 @@ class TestDecisionValidator:
         return TradingContext(
             symbol="BTCUSDT",
             account_id=1,
+            timeframes=["1h", "4h"],
             market_data=market_context,
             account_state=account_context,
             risk_metrics=risk_metrics,

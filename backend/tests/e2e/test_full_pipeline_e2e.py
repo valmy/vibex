@@ -243,11 +243,6 @@ class TestFullPipelineE2E:
         )
 
         return MarketContext(
-            symbol="BTCUSDT",
-            timeframes=["5m"],
-            latest_data=PricePoint(
-                timestamp=datetime.now(timezone.utc), price=50000.0, volume=100.0
-            ),
             current_price=50000.0,
             price_change_24h=2.5,
             volume_24h=1000.0,
@@ -354,6 +349,7 @@ class TestFullPipelineE2E:
         return TradingContext(
             symbol="BTCUSDT",
             account_id=1,
+            timeframes=["5m", "4h"],
             market_data=mock_market_context,
             account_state=mock_account_context,
             recent_trades=[
