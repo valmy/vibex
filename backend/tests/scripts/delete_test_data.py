@@ -16,15 +16,15 @@ async def delete_test_data():
         async with engine.begin() as conn:
             # Delete test market data
             await conn.execute(text("DELETE FROM trading.market_data WHERE symbol IN ('BTCUSDT', 'ETHUSDT')"))
-            print("✓ Test market data deleted")
+            print("[OK] Test market data deleted")
             
             # Delete test account
             await conn.execute(text("DELETE FROM trading.accounts WHERE id = 1"))
-            print("✓ Test account deleted")
+            print("[OK] Test account deleted")
             
             # Delete test user
             await conn.execute(text("DELETE FROM trading.users WHERE address = '0xCfbEE662dc66475Bf5F3b7203b4b6EE03028952F'"))
-            print("✓ Test user deleted")
+            print("[OK] Test user deleted")
             
     except Exception as e:
         print(f"Error: {e}")

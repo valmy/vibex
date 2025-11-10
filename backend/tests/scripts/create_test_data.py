@@ -73,8 +73,9 @@ async def create_test_data():
                 # Use naive datetime (database expects TIMESTAMP WITHOUT TIME ZONE)
                 now = datetime.now()
                 for i in range(100):
-                    # Create 5-minute candles going back 500 minutes (8.3 hours) from now
-                    timestamp = now - timedelta(minutes=(100-i) * 5)
+                    # Create 5-minute candles going back 495 minutes from now
+                    # The most recent candle (i=99) will be at now (current time)
+                    timestamp = now - timedelta(minutes=(99-i) * 5)
                     price = 50000 + (i * 10)  # Gradually increasing price
                     await conn.execute(text("""
                         INSERT INTO trading.market_data
@@ -88,7 +89,28 @@ async def create_test_data():
                         "price": price,
                     })
                 print("BTCUSDT market data created")
-            
+
+                # Also create 1h interval data for BTCUSDT
+                print("Creating BTCUSDT 1h market data...")
+                now = datetime.now()
+                for i in range(100):
+                    # Create 1-hour candles going back 99 hours from now
+                    # The most recent candle (i=99) will be at now (current time)
+                    timestamp = now - timedelta(hours=(99-i))
+                    price = 50000 + (i * 10)  # Gradually increasing price
+                    await conn.execute(text("""
+                        INSERT INTO trading.market_data
+                        (time, symbol, interval, open, high, low, close, volume,
+                         quote_asset_volume, number_of_trades, taker_buy_base_asset_volume,
+                         taker_buy_quote_asset_volume, funding_rate)
+                        VALUES (:time, 'BTCUSDT', '1h', :price, :price, :price, :price,
+                                100000, 5000000000, 1000, 50000, 2500000, 0.0001)
+                    """), {
+                        "time": timestamp,
+                        "price": price,
+                    })
+                print("BTCUSDT 1h market data created")
+
             # Check if ETHUSDT market data exists
             result = await conn.execute(text("""
                 SELECT COUNT(*) FROM trading.market_data WHERE symbol = 'ETHUSDT'
@@ -102,8 +124,9 @@ async def create_test_data():
                 # Use naive datetime (database expects TIMESTAMP WITHOUT TIME ZONE)
                 now = datetime.now()
                 for i in range(100):
-                    # Create 5-minute candles going back 500 minutes from now
-                    timestamp = now - timedelta(minutes=(100-i) * 5)
+                    # Create 5-minute candles going back 495 minutes from now
+                    # The most recent candle (i=99) will be at now (current time)
+                    timestamp = now - timedelta(minutes=(99-i) * 5)
                     price = 3000 + (i * 5)  # Gradually increasing price
                     await conn.execute(text("""
                         INSERT INTO trading.market_data
@@ -117,11 +140,32 @@ async def create_test_data():
                         "price": price,
                     })
                 print("ETHUSDT market data created")
-            
-            print("\n✓ Test data setup complete!")
-            
+
+                # Also create 1h interval data for ETHUSDT
+                print("Creating ETHUSDT 1h market data...")
+                now = datetime.now()
+                for i in range(100):
+                    # Create 1-hour candles going back 99 hours from now
+                    # The most recent candle (i=99) will be at now (current time)
+                    timestamp = now - timedelta(hours=(99-i))
+                    price = 3000 + (i * 5)  # Gradually increasing price
+                    await conn.execute(text("""
+                        INSERT INTO trading.market_data
+                        (time, symbol, interval, open, high, low, close, volume,
+                         quote_asset_volume, number_of_trades, taker_buy_base_asset_volume,
+                         taker_buy_quote_asset_volume, funding_rate)
+                        VALUES (:time, 'ETHUSDT', '1h', :price, :price, :price, :price,
+                                50000, 150000000, 500, 25000, 7500000, 0.00005)
+                    """), {
+                        "time": timestamp,
+                        "price": price,
+                    })
+                print("ETHUSDT 1h market data created")
+
+            print("\n[OK] Test data setup complete!")
+
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"[ERROR] Error: {e}")
         import traceback
         traceback.print_exc()
     finally:
