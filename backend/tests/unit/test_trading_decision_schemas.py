@@ -23,6 +23,7 @@ from app.schemas.trading_decision import (
     StrategyPerformance,
     StrategyRiskParameters,
     TechnicalIndicators,
+    TechnicalIndicatorsSet,
     TradingContext,
     TradingDecision,
     TradingStrategy,
@@ -281,9 +282,66 @@ class TestHealthStatus:
 class TestMarketContext:
     """Test MarketContext model validation."""
 
+    def test_sufficient_indicators_check(self):
+        """Test sufficient indicators validation."""
+        # Indicators with enough data
+        indicators_sufficient = TechnicalIndicators(
+            interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+                ema_50=[47000.0],
+                rsi=[65.0],
+                macd=[100.0],
+            ),
+            long_interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+                ema_50=[47000.0],
+                rsi=[65.0],
+                macd=[100.0],
+            ),
+        )
+
+        market_context = MarketContext(
+            current_price=48000.0,
+            price_change_24h=1000.0,
+            volume_24h=1000000.0,
+            volatility=0.02,
+            technical_indicators=indicators_sufficient,
+        )
+
+        assert market_context.has_sufficient_indicators()
+
+        # Indicators with insufficient data
+        indicators_insufficient = TechnicalIndicators(
+            interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+                rsi=[65.0],
+            ),
+            long_interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+                rsi=[65.0],
+            ),
+        )
+
+        market_context_insufficient = MarketContext(
+            current_price=48000.0,
+            price_change_24h=1000.0,
+            volume_24h=1000000.0,
+            volatility=0.02,
+            technical_indicators=indicators_insufficient,
+        )
+
+        assert not market_context_insufficient.has_sufficient_indicators()
+
     def test_price_trend_detection(self):
         """Test price trend detection."""
-        indicators = TechnicalIndicators(ema_20=48000.0, ema_50=47000.0, rsi=65.0, macd=100.0)
+        indicators = TechnicalIndicators(
+            interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+            ),
+            long_interval=TechnicalIndicatorsSet(
+                ema_20=[47000.0],
+            ),
+        )
 
         # Create price history with upward trend
         price_points = [
@@ -304,36 +362,6 @@ class TestMarketContext:
 
         trend = market_context.get_price_trend()
         assert trend == "bullish"
-
-    def test_sufficient_indicators_check(self):
-        """Test sufficient indicators validation."""
-        # Indicators with enough data
-        indicators_sufficient = TechnicalIndicators(
-            ema_20=48000.0, ema_50=47000.0, rsi=65.0, macd=100.0
-        )
-
-        market_context = MarketContext(
-            current_price=48000.0,
-            price_change_24h=1000.0,
-            volume_24h=1000000.0,
-            volatility=0.02,
-            technical_indicators=indicators_sufficient,
-        )
-
-        assert market_context.has_sufficient_indicators()
-
-        # Indicators with insufficient data
-        indicators_insufficient = TechnicalIndicators(ema_20=48000.0, rsi=65.0)
-
-        market_context_insufficient = MarketContext(
-            current_price=48000.0,
-            price_change_24h=1000.0,
-            volume_24h=1000000.0,
-            volatility=0.02,
-            technical_indicators=indicators_insufficient,
-        )
-
-        assert not market_context_insufficient.has_sufficient_indicators()
 
 
 class TestAccountContext:
@@ -386,7 +414,14 @@ class TestTradingContext:
     def test_context_summary_generation(self):
         """Test trading context summary generation."""
         # Create minimal valid context components
-        indicators = TechnicalIndicators(ema_20=48000.0, ema_50=47000.0, rsi=65.0, macd=100.0)
+        indicators = TechnicalIndicators(
+            interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+            ),
+            long_interval=TechnicalIndicatorsSet(
+                ema_20=[47000.0],
+            ),
+        )
 
         market_context = MarketContext(
             current_price=48000.0,
@@ -432,6 +467,7 @@ class TestTradingContext:
         trading_context = TradingContext(
             symbol="BTCUSDT",
             account_id=1,
+            timeframes=["1h", "4h"],
             market_data=market_context,
             account_state=account_context,
             risk_metrics=risk_metrics,

@@ -12,7 +12,7 @@ import numpy as np
 from ...models.market_data import MarketData
 from . import indicators
 from .exceptions import InsufficientDataError, InvalidCandleDataError
-from .schemas import TechnicalIndicators
+from .schemas import TATechnicalIndicators
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +21,13 @@ class TechnicalAnalysisService:
     """Service for calculating technical analysis indicators."""
 
     MIN_CANDLES = 50
+    SERIES_LENGTH = 10
 
     def __init__(self):
         """Initialize the Technical Analysis Service."""
         logger.info("TechnicalAnalysisService initialized")
 
-    def calculate_all_indicators(self, candles: List[MarketData]) -> TechnicalIndicators:
+    def calculate_all_indicators(self, candles: List[MarketData]) -> TATechnicalIndicators:
         """
         Calculate all technical indicators from a list of candles.
 
@@ -35,7 +36,7 @@ class TechnicalAnalysisService:
                     Requires at least 50 candles for accurate calculations.
 
         Returns:
-            TechnicalIndicators object containing all calculated indicator values.
+            TATechnicalIndicators object containing all calculated indicator values.
 
         Raises:
             InsufficientDataError: If fewer than 50 candles provided.
@@ -51,20 +52,26 @@ class TechnicalAnalysisService:
         logger.debug(f"Calculating indicators for {len(candles)} candles")
 
         # Calculate all indicators
-        ema = indicators.calculate_ema(close_prices)
-        macd = indicators.calculate_macd(close_prices)
+        ema_20 = indicators.calculate_ema(close_prices, period=20)
+        ema_50 = indicators.calculate_ema(close_prices, period=50)
+        macd, macd_signal, _ = indicators.calculate_macd(close_prices)
         rsi = indicators.calculate_rsi(close_prices)
-        bollinger_bands = indicators.calculate_bollinger_bands(close_prices)
+        bb_upper, bb_middle, bb_lower = indicators.calculate_bollinger_bands(close_prices)
         atr = indicators.calculate_atr(high_prices, low_prices, close_prices)
 
         # Assemble and return structured response
-        result = TechnicalIndicators(
-            ema=ema,
+        result = TATechnicalIndicators(
+            ema_20=ema_20,
+            ema_50=ema_50,
             macd=macd,
+            macd_signal=macd_signal,
             rsi=rsi,
-            bollinger_bands=bollinger_bands,
+            bb_upper=bb_upper,
+            bb_lower=bb_lower,
+            bb_middle=bb_middle,
             atr=atr,
             candle_count=len(candles),
+            series_length=self.SERIES_LENGTH,
         )
 
         logger.info(f"Indicators calculated successfully for {len(candles)} candles")

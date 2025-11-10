@@ -42,35 +42,36 @@ class TestTechnicalAnalysisE2E:
         assert result.candle_count == len(real_market_data), "Candle count should match"
 
         # Validate indicators are calculated
-        assert result.ema is not None, "EMA should be calculated"
+        assert result.ema_20 is not None, "EMA20 should be calculated"
+        assert result.ema_50 is not None, "EMA50 should be calculated"
         assert result.rsi is not None, "RSI should be calculated"
         assert result.macd is not None, "MACD should be calculated"
-        assert result.bollinger_bands is not None, "Bollinger Bands should be calculated"
+        assert result.bb_upper is not None, "Bollinger Bands should be calculated"
         assert result.atr is not None, "ATR should be calculated"
 
         # Validate EMA
-        if result.ema.ema is not None:
-            assert result.ema.ema > 0, "EMA should be positive"
+        if result.ema_20 is not None:
+            assert all(x > 0 for x in result.ema_20), "EMA20 should be positive"
 
         # Validate RSI
-        if result.rsi.rsi is not None:
-            assert 0 <= result.rsi.rsi <= 100, "RSI should be between 0-100"
+        if result.rsi is not None:
+            assert all(0 <= x <= 100 for x in result.rsi), "RSI should be between 0-100"
 
         # Validate MACD
-        if result.macd.macd is not None:
-            assert isinstance(result.macd.macd, (int, float)), "MACD should be numeric"
+        if result.macd is not None:
+            assert all(isinstance(x, (int, float)) for x in result.macd), "MACD should be numeric"
 
         # Validate Bollinger Bands
-        if result.bollinger_bands.upper is not None:
-            assert result.bollinger_bands.upper > 0, "BB upper should be positive"
-        if result.bollinger_bands.middle is not None:
-            assert result.bollinger_bands.middle > 0, "BB middle should be positive"
-        if result.bollinger_bands.lower is not None:
-            assert result.bollinger_bands.lower > 0, "BB lower should be positive"
+        if result.bb_upper is not None:
+            assert all(x > 0 for x in result.bb_upper), "BB upper should be positive"
+        if result.bb_middle is not None:
+            assert all(x > 0 for x in result.bb_middle), "BB middle should be positive"
+        if result.bb_lower is not None:
+            assert all(x > 0 for x in result.bb_lower), "BB lower should be positive"
 
         # Validate ATR
-        if result.atr.atr is not None:
-            assert result.atr.atr >= 0, "ATR should be non-negative"
+        if result.atr is not None:
+            assert all(x >= 0 for x in result.atr), "ATR should be non-negative"
 
     @pytest.mark.asyncio
     async def test_indicator_accuracy_with_volatile_data(
@@ -83,21 +84,22 @@ class TestTechnicalAnalysisE2E:
             result = technical_analysis_service.calculate_all_indicators(real_market_data)
 
             # In volatile markets, ATR should be higher
-            if result.atr.atr is not None:
-                assert result.atr.atr >= 0, "ATR should be calculated"
+            if result.atr is not None:
+                assert all(x >= 0 for x in result.atr), "ATR should be calculated"
 
             # Validate indicator relationships make sense
             if all(
                 [
-                    result.ema.ema is not None,
-                    result.bollinger_bands.upper is not None,
-                    result.bollinger_bands.middle is not None,
-                    result.bollinger_bands.lower is not None,
+                    result.ema_20 is not None,
+                    result.bb_upper is not None,
+                    result.bb_middle is not None,
+                    result.bb_lower is not None,
                 ]
             ):
                 # EMA should be between BB upper and lower
-                assert (
-                    result.bollinger_bands.lower <= result.ema.ema <= result.bollinger_bands.upper
+                assert all(
+                    lower <= ema <= upper
+                    for lower, ema, upper in zip(result.bb_lower, result.ema_20, result.bb_upper)
                 ), "EMA should be within Bollinger Bands"
 
     @pytest.mark.asyncio

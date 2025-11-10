@@ -297,10 +297,27 @@ class DecisionEngine:
         3. Validate decision
         4. Return result with metadata
         """
-        # Step 1: Build trading context
-        context = await self._build_context_with_recovery(symbol, account_id, force_refresh)
+        # Step 1: Get active strategy to determine timeframes
+        strategy = await self.strategy_manager.get_account_strategy(account_id)
+        if strategy_override:
+            strategy_obj = await self.strategy_manager.get_strategy(strategy_override)
+            if not strategy_obj:
+                raise DecisionEngineError(f"Strategy '{strategy_override}' not found")
+            strategy = strategy_obj
 
-        # Step 2: Apply strategy override if provided
+        timeframes = strategy.timeframe_preference or ["5m", "1h"]
+        if len(timeframes) != 2:
+            logger.warning(
+                f"Strategy '{strategy.strategy_id}' has {len(timeframes)} timeframes, expected 2. Defaulting to ['5m', '1h']."
+            )
+            timeframes = ["5m", "1h"]
+
+        # Step 2: Build trading context
+        context = await self._build_context_with_recovery(
+            symbol, account_id, timeframes, force_refresh
+        )
+
+        # Step 3: Apply strategy override if provided (context's account_state might have default)
         if strategy_override:
             strategy = await self.strategy_manager.get_strategy(strategy_override)
             if not strategy:
@@ -348,7 +365,7 @@ class DecisionEngine:
         return decision_result
 
     async def _build_context_with_recovery(
-        self, symbol: str, account_id: int, force_refresh: bool
+        self, symbol: str, account_id: int, timeframes: List[str], force_refresh: bool
     ) -> TradingContext:
         """
         Build trading context with error recovery mechanisms.
@@ -376,7 +393,10 @@ class DecisionEngine:
         try:
             # Build fresh context
             context = await self.context_builder.build_trading_context(
-                symbol=symbol, account_id=account_id, force_refresh=force_refresh
+                symbol=symbol,
+                account_id=account_id,
+                timeframes=timeframes,
+                force_refresh=force_refresh,
             )
 
             # Cache the context
@@ -399,6 +419,7 @@ class DecisionEngine:
                     context = await self.context_builder.build_trading_context(
                         symbol=symbol,
                         account_id=account_id,
+                        timeframes=timeframes,
                         force_refresh=True,  # Force refresh after conflict resolution
                     )
 
@@ -528,12 +549,14 @@ class DecisionEngine:
                     PerformanceMetrics,
                     RiskMetrics,
                     TechnicalIndicators,
+                    TechnicalIndicatorsSet,
                     TradingContext,
                 )
 
                 error_context = TradingContext(
                     symbol=symbols[i],
                     account_id=account_id,
+                    timeframes=["1h"],
                     market_data=MarketContext(
                         current_price=1.0,  # Must be > 0
                         price_change_24h=0.0,
@@ -542,15 +565,28 @@ class DecisionEngine:
                         open_interest=0.0,
                         volatility=0.0,
                         technical_indicators=TechnicalIndicators(
-                            ema_20=1.0,  # Provide at least some indicators
-                            ema_50=1.0,
-                            rsi=50.0,
-                            macd=0.0,
-                            macd_signal=0.0,
-                            bb_upper=1.0,
-                            bb_lower=1.0,
-                            bb_middle=1.0,
-                            atr=0.0,
+                            interval=TechnicalIndicatorsSet(
+                                ema_20=[1.0] * 10,
+                                ema_50=[1.0] * 10,
+                                rsi=[50.0] * 10,
+                                macd=[0.0] * 10,
+                                macd_signal=[0.0] * 10,
+                                bb_upper=[1.0] * 10,
+                                bb_lower=[1.0] * 10,
+                                bb_middle=[1.0] * 10,
+                                atr=[0.0] * 10,
+                            ),
+                            long_interval=TechnicalIndicatorsSet(
+                                ema_20=[1.0] * 10,
+                                ema_50=[1.0] * 10,
+                                rsi=[50.0] * 10,
+                                macd=[0.0] * 10,
+                                macd_signal=[0.0] * 10,
+                                bb_upper=[1.0] * 10,
+                                bb_lower=[1.0] * 10,
+                                bb_middle=[1.0] * 10,
+                                atr=[0.0] * 10,
+                            ),
                         ),
                     ),
                     account_state=AccountContext(
@@ -665,7 +701,7 @@ class DecisionEngine:
             DecisionEngineError: If switch fails
         """
         try:
-            assignment = await self.strategy_manager.switch_account_strategy(
+            await self.strategy_manager.switch_account_strategy(
                 account_id=account_id,
                 new_strategy_id=strategy_id,
                 switch_reason=switch_reason,

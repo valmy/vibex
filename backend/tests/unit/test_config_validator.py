@@ -150,13 +150,13 @@ async def test_validate_urls(validator, valid_config):
 async def test_validate_interval(validator, valid_config):
     """Test interval validation."""
     # Test invalid interval
-    valid_config.INTERVAL = "2h"
+    valid_config.INTERVAL = "6h"
     errors = await validator.validate_trading_params(valid_config)
     assert len(errors) > 0
     assert any("INTERVAL" in error for error in errors)
 
     # Test valid intervals
-    for interval in ["5m", "1h", "4h", "1d"]:
+    for interval in ["5m", "1h", "2h", "4h", "1d"]:
         valid_config.INTERVAL = interval
         errors = await validator.validate_trading_params(valid_config)
         assert not any("INTERVAL" in error for error in errors)

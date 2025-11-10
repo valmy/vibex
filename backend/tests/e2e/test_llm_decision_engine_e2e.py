@@ -68,6 +68,31 @@ class TestLLMDecisionEngineE2E:
         """Test complete decision generation workflow with real market data from database."""
         logger.info("Testing complete decision workflow with real data from database")
 
+        # Mock the strategy manager to return a valid strategy
+        from app.schemas.trading_decision import StrategyRiskParameters, TradingStrategy
+
+        mock_strategy = TradingStrategy(
+            strategy_id="test_strategy",
+            strategy_name="Test Strategy",
+            strategy_type="conservative",
+            prompt_template="Test prompt",
+            risk_parameters=StrategyRiskParameters(
+                max_risk_per_trade=2.0,
+                max_daily_loss=5.0,
+                stop_loss_percentage=2.0,
+                take_profit_ratio=2.0,
+                max_leverage=2.0,
+                cooldown_period=300,
+            ),
+            timeframe_preference=["5m", "4h"],
+            max_positions=3,
+            position_sizing="percentage",
+            is_active=True,
+        )
+        decision_engine.strategy_manager.get_account_strategy = mocker.AsyncMock(
+            return_value=mock_strategy
+        )
+
         # Mock the LLM service to avoid actual LLM calls
         mock_llm_service = mocker.MagicMock(spec=LLMService)
 
@@ -114,27 +139,6 @@ class TestLLMDecisionEngineE2E:
         )
 
         # Mock the account context to avoid database account lookup
-        from app.schemas.trading_decision import StrategyRiskParameters, TradingStrategy
-
-        mock_strategy = TradingStrategy(
-            strategy_id="test_strategy",
-            strategy_name="Test Strategy",
-            strategy_type="conservative",
-            prompt_template="Test prompt",
-            risk_parameters=StrategyRiskParameters(
-                max_risk_per_trade=2.0,
-                max_daily_loss=5.0,
-                stop_loss_percentage=2.0,
-                take_profit_ratio=2.0,
-                max_leverage=2.0,
-                cooldown_period=300,
-            ),
-            timeframe_preference=["5m", "1h"],
-            max_positions=3,
-            position_sizing="percentage",
-            is_active=True,
-        )
-
         mock_account_context = AccountContext(
             account_id=1,
             balance_usd=10000.0,
@@ -280,6 +284,7 @@ class TestLLMDecisionEngineE2E:
         context = await context_builder.build_trading_context(
             symbol=symbol,
             account_id=1,
+            timeframes=["5m", "4h"],  # Required timeframes parameter
             force_refresh=True,  # Force refresh to bypass cache and availability checks
         )
 
@@ -393,21 +398,39 @@ class TestLLMDecisionEngineE2E:
             llm_service = LLMService()
 
             # Import TechnicalIndicators from trading_decision
-            from app.schemas.trading_decision import TechnicalIndicators
+            from app.schemas.trading_decision import TechnicalIndicators, TechnicalIndicatorsSet
 
             # Import indicator output classes from technical_analysis.schemas
 
             # Create technical indicators with simple float values as expected by the schema
+            # TechnicalIndicators requires interval and long_interval fields
+            interval_indicators = TechnicalIndicatorsSet(
+                ema_20=[49500.0],
+                ema_50=[49000.0],
+                macd=[150.0],
+                macd_signal=[145.0],
+                rsi=[65.0],
+                bb_upper=[51000.0],
+                bb_middle=[50000.0],
+                bb_lower=[49000.0],
+                atr=[500.0],
+            )
+
+            long_interval_indicators = TechnicalIndicatorsSet(
+                ema_20=[49500.0],
+                ema_50=[49000.0],
+                macd=[150.0],
+                macd_signal=[145.0],
+                rsi=[65.0],
+                bb_upper=[51000.0],
+                bb_middle=[50000.0],
+                bb_lower=[49000.0],
+                atr=[500.0],
+            )
+
             technical_indicators = TechnicalIndicators(
-                ema_20=49500.0,
-                ema_50=49000.0,
-                macd=150.0,
-                macd_signal=145.0,
-                rsi=65.0,
-                bb_upper=51000.0,
-                bb_middle=50000.0,
-                bb_lower=49000.0,
-                atr=500.0,
+                interval=interval_indicators,
+                long_interval=long_interval_indicators,
             )
 
             # Create market context (no symbol field in new schema)
@@ -445,7 +468,7 @@ class TestLLMDecisionEngineE2E:
                     max_leverage=5.0,
                     cooldown_period=300,
                 ),
-                timeframe_preference=["1h", "4h"],
+                timeframe_preference=["5m", "4h"],
                 max_positions=5,
                 position_sizing="percentage",
                 is_active=True,
@@ -483,6 +506,7 @@ class TestLLMDecisionEngineE2E:
             context = TradingContext(
                 symbol="BTCUSDT",
                 account_id=1,
+                timeframes=["5m", "4h"],
                 market_data=market_context,
                 account_state=account_context,
                 recent_trades=[],
@@ -536,9 +560,35 @@ class TestLLMDecisionEngineE2E:
         mock_context_builder,
         mock_llm_service,
         db_session: AsyncSession,
+        mocker,
     ):
         """Test decision consistency when called multiple times with same data."""
         logger.info("Testing decision consistency over time")
+
+        # Mock the strategy manager to return a valid strategy
+        from app.schemas.trading_decision import StrategyRiskParameters, TradingStrategy
+
+        mock_strategy = TradingStrategy(
+            strategy_id="test_strategy",
+            strategy_name="Test Strategy",
+            strategy_type="conservative",
+            prompt_template="Test prompt",
+            risk_parameters=StrategyRiskParameters(
+                max_risk_per_trade=2.0,
+                max_daily_loss=5.0,
+                stop_loss_percentage=2.0,
+                take_profit_ratio=2.0,
+                max_leverage=2.0,
+                cooldown_period=300,
+            ),
+            timeframe_preference=["5m", "4h"],
+            max_positions=3,
+            position_sizing="percentage",
+            is_active=True,
+        )
+        decision_engine.strategy_manager.get_account_strategy = mocker.AsyncMock(
+            return_value=mock_strategy
+        )
 
         # Setup mocked services
         decision_engine.context_builder = mock_context_builder
@@ -611,46 +661,49 @@ class TestLLMDecisionEngineE2E:
             assert indicators_result.candle_count == len(market_data)
 
             # Check that at least some indicators have values
-            has_ema = indicators_result.ema.ema is not None
-            has_rsi = indicators_result.rsi.rsi is not None
-            has_macd = indicators_result.macd.macd is not None
-            has_bb = indicators_result.bollinger_bands.upper is not None
-            has_atr = indicators_result.atr.atr is not None
+            has_ema_20 = indicators_result.ema_20 and indicators_result.ema_20[-1] is not None
+            has_ema_50 = indicators_result.ema_50 and indicators_result.ema_50[-1] is not None
+            has_rsi = indicators_result.rsi and indicators_result.rsi[-1] is not None
+            has_macd = indicators_result.macd and indicators_result.macd[-1] is not None
+            has_bb = indicators_result.bb_upper and indicators_result.bb_upper[-1] is not None
+            has_atr = indicators_result.atr and indicators_result.atr[-1] is not None
 
-            indicators_calculated = sum([has_ema, has_rsi, has_macd, has_bb, has_atr])
+            indicators_calculated = sum(
+                [has_ema_20, has_ema_50, has_rsi, has_macd, has_bb, has_atr]
+            )
             assert indicators_calculated >= 2, (
                 f"At least 2 indicators should be calculated, got {indicators_calculated}"
             )
 
             # Validate indicator values are reasonable
-            if has_ema:
-                assert indicators_result.ema.ema > 0, "EMA should be positive"
+            if has_ema_20:
+                assert indicators_result.ema_20[-1] > 0, (
+                    f"EMA20 should be positive, got {indicators_result.ema_20[-1]}"
+                )
 
             if has_rsi:
-                assert 0 <= indicators_result.rsi.rsi <= 100, (
-                    f"RSI should be 0-100, got {indicators_result.rsi.rsi}"
+                assert 0 <= indicators_result.rsi[-1] <= 100, (
+                    f"RSI should be 0-100, got {indicators_result.rsi[-1]}"
                 )
 
             if has_atr:
-                assert indicators_result.atr.atr >= 0, "ATR should be non-negative"
+                assert indicators_result.atr[-1] >= 0, (
+                    f"ATR should be non-negative, got {indicators_result.atr[-1]}"
+                )
 
             # Log the complete technical analysis data
             logger.info(
                 f"Technical indicators calculated successfully for {len(market_data)} candles:"
             )
-            logger.info(f"  EMA: {indicators_result.ema.ema}")
-            logger.info(f"  EMA Period: {indicators_result.ema.period}")
-            logger.info(f"  RSI: {indicators_result.rsi.rsi}")
-            logger.info(f"  RSI Period: {indicators_result.rsi.period}")
-            logger.info(f"  MACD: {indicators_result.macd.macd}")
-            logger.info(f"  MACD Signal: {indicators_result.macd.signal}")
-            logger.info(f"  MACD Histogram: {indicators_result.macd.histogram}")
-            logger.info(f"  BB Upper: {indicators_result.bollinger_bands.upper}")
-            logger.info(f"  BB Middle: {indicators_result.bollinger_bands.middle}")
-            logger.info(f"  BB Lower: {indicators_result.bollinger_bands.lower}")
-            logger.info(f"  BB Period: {indicators_result.bollinger_bands.period}")
-            logger.info(f"  ATR: {indicators_result.atr.atr}")
-            logger.info(f"  ATR Period: {indicators_result.atr.period}")
+            logger.info(f"  EMA 20: {indicators_result.ema_20[-1]}")
+            logger.info(f"  EMA 50: {indicators_result.ema_50[-1]}")
+            logger.info(f"  RSI: {indicators_result.rsi[-1]}")
+            logger.info(f"  MACD: {indicators_result.macd[-1]}")
+            logger.info(f"  MACD Signal: {indicators_result.macd_signal[-1]}")
+            logger.info(f"  BB Upper: {indicators_result.bb_upper[-1]}")
+            logger.info(f"  BB Middle: {indicators_result.bb_middle[-1]}")
+            logger.info(f"  BB Lower: {indicators_result.bb_lower[-1]}")
+            logger.info(f"  ATR: {indicators_result.atr[-1]}")
             logger.info(f"  Candle Count: {indicators_result.candle_count}")
             logger.info(f"  Timestamp: {indicators_result.timestamp}")
 
@@ -671,10 +724,35 @@ class TestLLMDecisionEngineE2E:
 
     @pytest.mark.asyncio
     async def test_decision_validation_with_market_patterns(
-        self, decision_engine, mock_context_builder, mock_llm_service
+        self, decision_engine, mock_context_builder, mock_llm_service, mocker
     ):
         """Test decision validation with different market patterns."""
         logger.info("Testing decision validation with market patterns")
+
+        # Mock the strategy manager to return a valid strategy
+        from app.schemas.trading_decision import StrategyRiskParameters, TradingStrategy
+
+        mock_strategy = TradingStrategy(
+            strategy_id="test_strategy",
+            strategy_name="Test Strategy",
+            strategy_type="conservative",
+            prompt_template="Test prompt",
+            risk_parameters=StrategyRiskParameters(
+                max_risk_per_trade=2.0,
+                max_daily_loss=5.0,
+                stop_loss_percentage=2.0,
+                take_profit_ratio=2.0,
+                max_leverage=2.0,
+                cooldown_period=300,
+            ),
+            timeframe_preference=["5m", "4h"],
+            max_positions=3,
+            position_sizing="percentage",
+            is_active=True,
+        )
+        decision_engine.strategy_manager.get_account_strategy = mocker.AsyncMock(
+            return_value=mock_strategy
+        )
 
         # Test different market scenarios
         scenarios = [
@@ -725,14 +803,18 @@ class TestLLMDecisionEngineE2E:
                     "confidence": result.decision.confidence,
                     "risk_level": result.decision.risk_level,
                     "indicators": {
-                        "rsi": indicators_result.rsi.rsi,
-                        "ema": indicators_result.ema.ema,
+                        "rsi": indicators_result.rsi[-1]
+                        if indicators_result.rsi and indicators_result.rsi[-1] is not None
+                        else None,
+                        "ema_20": indicators_result.ema_20[-1]
+                        if indicators_result.ema_20 and indicators_result.ema_20[-1] is not None
+                        else None,
                         "current_price": market_data[-1].close,
                     },
                 }
 
                 logger.info(
-                    f"{scenario_name}: {result.decision.action} (confidence: {result.decision.confidence}%)"
+                    f"{scenario_name}: {result.decision.action} (confidence: {result.decision.confidence}%) "
                 )
 
             except Exception as e:
@@ -882,7 +964,7 @@ class TestLLMDecisionEngineE2E:
             candle = MarketData(
                 time=base_time + timedelta(hours=i),
                 symbol="BTCUSDT",
-                interval="1h",
+                interval="4h",
                 open=open_price,
                 high=high_price,
                 low=low_price,
@@ -910,7 +992,7 @@ class TestLLMDecisionEngineE2E:
             candle = MarketData(
                 time=base_time + timedelta(hours=i),
                 symbol="BTCUSDT",
-                interval="1h",
+                interval="4h",
                 open=open_price,
                 high=high_price,
                 low=low_price,
@@ -938,7 +1020,7 @@ class TestLLMDecisionEngineE2E:
             candle = MarketData(
                 time=base_time + timedelta(hours=i),
                 symbol="BTCUSDT",
-                interval="1h",
+                interval="4h",
                 open=open_price,
                 high=high_price,
                 low=low_price,
