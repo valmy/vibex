@@ -556,6 +556,7 @@ class DecisionEngine:
                 error_context = TradingContext(
                     symbol=symbols[i],
                     account_id=account_id,
+                    timeframes=["1h"],
                     market_data=MarketContext(
                         current_price=1.0,  # Must be > 0
                         price_change_24h=0.0,

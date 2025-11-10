@@ -74,6 +74,7 @@ class TestLLMService:
                 ema_50=[47000.0],
                 rsi=[65.0],
                 macd=[100.0],
+                macd_signal=[95.0],
                 bb_upper=[49000.0],
                 bb_lower=[46000.0],
                 bb_middle=[47500.0],
@@ -84,6 +85,7 @@ class TestLLMService:
                 ema_50=[47500.0],
                 rsi=[60.0],
                 macd=[150.0],
+                macd_signal=[145.0],
                 bb_upper=[49500.0],
                 bb_lower=[46500.0],
                 bb_middle=[48000.0],
@@ -150,6 +152,7 @@ class TestLLMService:
         return TradingContext(
             symbol="BTCUSDT",
             account_id=1,
+            timeframes=["4h", "1d"],
             market_data=market_context,
             account_state=account_context,
             risk_metrics=risk_metrics,
@@ -523,7 +526,6 @@ class TestLLMService:
         sample_trading_context.market_data.current_price = 48000.0
         sample_trading_context.account_state.balance_usd = 0.0
         assert llm_service._validate_context(sample_trading_context) is False
-
 
     def test_build_decision_prompt(self, llm_service, sample_trading_context):
         """Test decision prompt building."""

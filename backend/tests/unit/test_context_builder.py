@@ -7,14 +7,13 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from app.schemas.trading_decision import TradingContext
+from app.schemas.trading_decision import TechnicalIndicatorsSet, TradingContext
 from app.services.llm.context_builder import (
     ContextBuilderError,
     ContextBuilderService,
     get_context_builder_service,
 )
 from app.services.technical_analysis.schemas import TATechnicalIndicators
-from app.schemas.trading_decision import TechnicalIndicatorsSet
 
 
 class TestContextBuilderService:
@@ -308,7 +307,9 @@ class TestContextBuilderIntegration:
         ):
             with patch.object(context_builder, "handle_data_unavailability", return_value=None):
                 with pytest.raises(ContextBuilderError):
-                    await context_builder.build_trading_context("BTCUSDT", 1, timeframes=["1h", "4h"])
+                    await context_builder.build_trading_context(
+                        "BTCUSDT", 1, timeframes=["1h", "4h"]
+                    )
 
     @pytest.mark.asyncio
     async def test_build_trading_context_with_degraded_context(self, context_builder):
@@ -334,7 +335,9 @@ class TestContextBuilderIntegration:
             with patch.object(
                 context_builder, "handle_data_unavailability", return_value=mock_degraded_context
             ):
-                result = await context_builder.build_trading_context("BTCUSDT", 1, timeframes=["1h", "4h"])
+                result = await context_builder.build_trading_context(
+                    "BTCUSDT", 1, timeframes=["1h", "4h"]
+                )
                 assert result is mock_degraded_context
 
     def test_convert_technical_indicators(self, context_builder):

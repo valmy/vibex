@@ -378,6 +378,7 @@ class ContextBuilderService:
             context = TradingContext(
                 symbol=symbol,
                 account_id=account_id,
+                timeframes=timeframes,
                 market_data=market_context,
                 account_state=account_context,
                 recent_trades=recent_trades,
@@ -424,10 +425,25 @@ class ContextBuilderService:
                 db, symbol, timeframe, self.DEFAULT_PRICE_HISTORY_LIMIT
             )
             if not market_data or len(market_data) < self.MIN_CANDLES_FOR_INDICATORS:
-                logger.warning(
-                    f"Insufficient data for TA on {symbol} ({timeframe}): {len(market_data) if market_data else 0} candles"
-                )
-                return self._create_partial_indicators(market_data or [])
+                # Try to sync market data from the API first
+                try:
+                    logger.info(
+                        f"Attempting to sync market data for {symbol} ({timeframe}) due to insufficient data"
+                    )
+                    await self.market_data_service.sync_market_data(db, symbol, timeframe)
+                    # Try getting data again after sync
+                    market_data = await self.market_data_service.get_latest_market_data(
+                        db, symbol, timeframe, self.DEFAULT_PRICE_HISTORY_LIMIT
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to sync market data for {symbol} ({timeframe}): {e}")
+
+                # Check again after potential sync
+                if not market_data or len(market_data) < self.MIN_CANDLES_FOR_INDICATORS:
+                    logger.warning(
+                        f"Insufficient data for TA on {symbol} ({timeframe}): {len(market_data) if market_data else 0} candles"
+                    )
+                    return self._create_partial_indicators(market_data or [])
             try:
                 market_data.sort(key=lambda x: x.time)
                 ta_indicators = self.technical_analysis_service.calculate_all_indicators(
@@ -786,10 +802,14 @@ class ContextBuilderService:
                 for i in range(len(close_prices) - 14, len(close_prices)):
                     period_prices = close_prices[i - 14 : i + 1]
                     gains = sum(
-                        c2 - c1 for c1, c2 in zip(period_prices, period_prices[1:], strict=False) if c2 > c1
+                        c2 - c1
+                        for c1, c2 in zip(period_prices, period_prices[1:], strict=False)
+                        if c2 > c1
                     )
                     losses = sum(
-                        abs(c2 - c1) for c1, c2 in zip(period_prices, period_prices[1:], strict=False) if c2 < c1
+                        abs(c2 - c1)
+                        for c1, c2 in zip(period_prices, period_prices[1:], strict=False)
+                        if c2 < c1
                     )
                     avg_gain = gains / 14
                     avg_loss = losses / 14 if losses > 0 else 1

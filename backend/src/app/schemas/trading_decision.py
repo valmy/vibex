@@ -427,6 +427,7 @@ class TradingContext(BaseModel):
 
     symbol: str
     account_id: int
+    timeframes: List[str] = Field(..., description="Timeframes used for analysis [primary, long]")
     market_data: MarketContext
     account_state: AccountContext
     recent_trades: List[TradeHistory] = Field(default_factory=list)

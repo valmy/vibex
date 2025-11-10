@@ -677,8 +677,8 @@ Provide:
         account_state = context.account_state
 
         # Format technical indicators
-        def format_indicator_set(indicator_set, name):
-            lines = [f"--- {name} ---"]
+        def format_indicator_set(indicator_set, name, interval):
+            lines = [f"--- {name} ({interval}) ---"]
             for key, value in indicator_set.dict().items():
                 if value is not None:
                     # Format list of floats to 2 decimal places
@@ -688,8 +688,8 @@ Provide:
 
         indicators = market_data.technical_indicators
         indicators_text = f"""
-{format_indicator_set(indicators.interval, "Primary Interval")}
-{format_indicator_set(indicators.long_interval, "Long-Term Interval")}
+{format_indicator_set(indicators.interval, "Primary Interval", context.timeframes[0])}
+{format_indicator_set(indicators.long_interval, "Long-Term Interval", context.timeframes[1])}
 """
         # Format price history
         price_history_text = "\n".join(

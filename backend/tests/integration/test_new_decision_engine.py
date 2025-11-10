@@ -1,25 +1,22 @@
 """
 Integration tests for the updated Decision Engine.
 """
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, Mock
+
+from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.security import get_current_user
 from app.main import app
+from app.middleware import AdminOnlyMiddleware
+from app.models.account import User
 from app.schemas.trading_decision import (
     DecisionResult,
-    TechnicalIndicators,
-    TechnicalIndicatorsSet,
     TradingContext,
     TradingDecision,
 )
-from app.core.security import get_current_user
-from app.middleware import AdminOnlyMiddleware
-from app.models.account import User
 from app.services.llm import decision_engine as decision_engine_module
-from app.services.llm.decision_engine import get_decision_engine
 
 
 @pytest.fixture(autouse=True)
