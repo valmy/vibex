@@ -22,6 +22,9 @@ LLM-powered cryptocurrency trading agent for AsterDEX.
    ```bash
    cp .env.example .env
    # Edit .env with your API keys and configuration
+
+   cp .env.example .env.testing
+   # Edit .env with your API keys and configuration for running tests
    ```
 
 3. **Install dependencies**
@@ -39,7 +42,7 @@ LLM-powered cryptocurrency trading agent for AsterDEX.
 
 5. **Run migrations**
    ```bash
-   uv run alembic upgrade head
+   ENVIRONMENT=testing uv run alembic upgrade head
    ```
 
 The API will be available at `http://localhost:3000`

@@ -68,6 +68,7 @@ class TestTechnicalAnalysisService:
         """Test service initializes correctly."""
         assert ta_service is not None
         assert ta_service.MIN_CANDLES == 50
+        assert ta_service.SERIES_LENGTH == 10
 
     def test_singleton_factory(self):
         """Test singleton factory returns same instance."""
@@ -80,28 +81,25 @@ class TestTechnicalAnalysisService:
         result = ta_service.calculate_all_indicators(valid_candles)
 
         assert result is not None
-        assert result.ema is not None
-        assert result.ema.ema is not None
-        assert result.ema.period == 12
+        assert result.series_length == 10
 
-        assert result.macd is not None
-        assert result.macd.macd is not None
-        assert result.macd.signal is not None
-        assert result.macd.histogram is not None
+        assert isinstance(result.ema_20, list)
+        assert len(result.ema_20) == 10
 
-        assert result.rsi is not None
-        assert result.rsi.rsi is not None
-        assert result.rsi.period == 14
+        assert isinstance(result.macd, list)
+        assert isinstance(result.macd_signal, list)
+        assert len(result.macd) == 10
 
-        assert result.bollinger_bands is not None
-        assert result.bollinger_bands.upper is not None
-        assert result.bollinger_bands.middle is not None
-        assert result.bollinger_bands.lower is not None
-        assert result.bollinger_bands.period == 20
+        assert isinstance(result.rsi, list)
+        assert len(result.rsi) == 10
 
-        assert result.atr is not None
-        assert result.atr.atr is not None
-        assert result.atr.period == 14
+        assert isinstance(result.bb_upper, list)
+        assert isinstance(result.bb_middle, list)
+        assert isinstance(result.bb_lower, list)
+        assert len(result.bb_upper) == 10
+
+        assert isinstance(result.atr, list)
+        assert len(result.atr) == 10
 
         assert result.candle_count == 100
         assert result.timestamp is not None
@@ -181,37 +179,37 @@ class TestTechnicalAnalysisService:
     def test_rsi_value_range(self, ta_service, valid_candles):
         """Test RSI value is in valid range (0-100)."""
         result = ta_service.calculate_all_indicators(valid_candles)
-        if result.rsi.rsi is not None:
-            assert 0 <= result.rsi.rsi <= 100
+        for rsi_value in result.rsi:
+            if rsi_value is not None:
+                assert 0 <= rsi_value <= 100
 
     def test_ema_value_reasonable(self, ta_service, valid_candles):
         """Test EMA value is reasonable (close to price range)."""
         result = ta_service.calculate_all_indicators(valid_candles)
-        if result.ema.ema is not None:
+        last_ema = result.ema_20[-1]
+        if last_ema is not None:
             # EMA should be within reasonable range of prices
             prices = [c.close for c in valid_candles]
             min_price = min(prices)
             max_price = max(prices)
-            assert min_price <= result.ema.ema <= max_price * 1.1
+            assert min_price <= last_ema <= max_price * 1.1
 
     def test_bollinger_bands_order(self, ta_service, valid_candles):
         """Test Bollinger Bands upper > middle > lower."""
         result = ta_service.calculate_all_indicators(valid_candles)
-        bb = result.bollinger_bands
-        if all([bb.upper, bb.middle, bb.lower]):
-            assert bb.upper >= bb.middle >= bb.lower
+        for upper, middle, lower in zip(result.bb_upper, result.bb_middle, result.bb_lower):
+            if all([upper, middle, lower]):
+                assert upper >= middle >= lower
 
     def test_atr_positive(self, ta_service, valid_candles):
         """Test ATR is positive."""
         result = ta_service.calculate_all_indicators(valid_candles)
-        if result.atr.atr is not None:
-            assert result.atr.atr > 0
+        for atr_value in result.atr:
+            if atr_value is not None:
+                assert atr_value > 0
 
     def test_macd_histogram_calculation(self, ta_service, valid_candles):
         """Test MACD histogram = MACD - Signal."""
         result = ta_service.calculate_all_indicators(valid_candles)
-        macd = result.macd
-        if all([macd.macd, macd.signal, macd.histogram]):
-            # Histogram should be approximately MACD - Signal
-            expected_histogram = macd.macd - macd.signal
-            assert abs(macd.histogram - expected_histogram) < 0.01
+        # This test is no longer valid as the histogram is not part of the schema
+        pass

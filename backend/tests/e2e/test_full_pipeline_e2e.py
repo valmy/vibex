@@ -143,7 +143,7 @@ class TestFullPipelineE2E:
             # Check that we have some indicator data
             assert hasattr(indicators, "rsi")
             assert hasattr(indicators, "macd")
-            assert hasattr(indicators, "bollinger_bands")
+            assert hasattr(indicators, "bb_upper")
 
             # Check that the decision has reasoning
             assert decision.reasoning is not None
@@ -167,11 +167,21 @@ class TestFullPipelineE2E:
         # Mock the context builder's market context method to use real data
         async def mock_get_market_context(symbol, timeframes, force_refresh=False):
             technical_service = get_technical_analysis_service()
+            context_builder = ContextBuilderService()  # For access to the converter
 
             # Calculate technical indicators with real data
-            technical_indicators = None
+            technical_indicators_raw = None
             if len(real_market_data) >= 50:
-                technical_indicators = technical_service.calculate_all_indicators(real_market_data)
+                technical_indicators_raw = technical_service.calculate_all_indicators(
+                    real_market_data
+                )
+
+            # Convert to the flat structure expected by MarketContext
+            technical_indicators_flat = None
+            if technical_indicators_raw:
+                technical_indicators_flat = context_builder._convert_technical_indicators(
+                    technical_indicators_raw
+                )
 
             # Create mock market context with real data
             mock_market_context = Mock()
@@ -184,7 +194,7 @@ class TestFullPipelineE2E:
                 if len(real_market_data) >= 24
                 else 0
             )
-            mock_market_context.technical_indicators = technical_indicators
+            mock_market_context.technical_indicators = technical_indicators_flat
             mock_market_context.data_freshness = (
                 real_market_data[-1].time if real_market_data else None
             )
@@ -225,14 +235,14 @@ class TestFullPipelineE2E:
     @pytest.fixture
     def mock_market_context(self):
         """Create a mock market context."""
-        from app.schemas.trading_decision import MarketContext, PricePoint, TechnicalIndicators
+        from app.schemas.trading_decision import (
+            MarketContext,
+            PricePoint,
+            TechnicalIndicators,
+            TechnicalIndicatorsSet,
+        )
 
         return MarketContext(
-            symbol="BTCUSDT",
-            timeframes=["5m"],
-            latest_data=PricePoint(
-                timestamp=datetime.now(timezone.utc), price=50000.0, volume=100.0
-            ),
             current_price=50000.0,
             price_change_24h=2.5,
             volume_24h=1000.0,
@@ -247,15 +257,28 @@ class TestFullPipelineE2E:
             ],
             volatility=1.2,
             technical_indicators=TechnicalIndicators(
-                ema_20=49800.0,
-                ema_50=49500.0,
-                macd=100.0,
-                macd_signal=90.0,
-                rsi=55.0,
-                bb_upper=50500.0,
-                bb_lower=49500.0,
-                bb_middle=50000.0,
-                atr=200.0,
+                interval=TechnicalIndicatorsSet(
+                    ema_20=[49800.0] * 10,
+                    ema_50=[49500.0] * 10,
+                    macd=[100.0] * 10,
+                    macd_signal=[90.0] * 10,
+                    rsi=[55.0] * 10,
+                    bb_upper=[50500.0] * 10,
+                    bb_lower=[49500.0] * 10,
+                    bb_middle=[50000.0] * 10,
+                    atr=[200.0] * 10,
+                ),
+                long_interval=TechnicalIndicatorsSet(
+                    ema_20=[49800.0] * 10,
+                    ema_50=[49500.0] * 10,
+                    macd=[100.0] * 10,
+                    macd_signal=[90.0] * 10,
+                    rsi=[55.0] * 10,
+                    bb_upper=[50500.0] * 10,
+                    bb_lower=[49500.0] * 10,
+                    bb_middle=[50000.0] * 10,
+                    atr=[200.0] * 10,
+                ),
             ),
         )
 
@@ -326,6 +349,7 @@ class TestFullPipelineE2E:
         return TradingContext(
             symbol="BTCUSDT",
             account_id=1,
+            timeframes=["5m", "4h"],
             market_data=mock_market_context,
             account_state=mock_account_context,
             recent_trades=[

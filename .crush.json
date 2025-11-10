@@ -1,0 +1,22 @@
+{
+  "$schema": "https://charm.land/crush.json",
+  "lsp": {
+    "python": {
+      "command": "pylsp"
+    }
+  },
+  "mcp": {
+    "vibexpg": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@executeautomation/database-server",
+        "--postgresql",
+        "--host", "localhost",
+        "--database", "trading_db",
+        "--user", "trading_user",
+        "--password", "trading_password"
+      ]
+    }
+  }
+}

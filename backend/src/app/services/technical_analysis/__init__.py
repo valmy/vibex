@@ -6,7 +6,7 @@ Provides technical indicator calculations for market data.
 
 import logging
 
-from .schemas import TechnicalIndicators
+from .schemas import TATechnicalIndicators
 from .service import TechnicalAnalysisService
 
 logger = logging.getLogger(__name__)
@@ -35,6 +35,6 @@ def get_technical_analysis_service() -> TechnicalAnalysisService:
 
 __all__ = [
     "TechnicalAnalysisService",
-    "TechnicalIndicators",
+    "TATechnicalIndicators",
     "get_technical_analysis_service",
 ]

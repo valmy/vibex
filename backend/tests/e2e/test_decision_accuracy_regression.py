@@ -200,10 +200,10 @@ class TestDecisionAccuracyRegression:
             logger.info(f"Current price: ${mock_context.market_data.current_price:.2f}")
             logger.info(f"24h change: {mock_context.market_data.price_change_24h:.2f}%")
 
-            if indicators_result.rsi.rsi is not None:
-                logger.info(f"RSI: {indicators_result.rsi.rsi:.2f}")
-            if indicators_result.ema.ema is not None:
-                logger.info(f"EMA: ${indicators_result.ema.ema:.2f}")
+            if indicators_result.rsi and indicators_result.rsi[-1] is not None:
+                logger.info(f"RSI: {indicators_result.rsi[-1]:.2f}")
+            if indicators_result.ema_20 and indicators_result.ema_20[-1] is not None:
+                logger.info(f"EMA 20: ${indicators_result.ema_20[-1]:.2f}")
 
         except Exception as e:
             logger.warning(f"Uptrend test failed with technical analysis error: {e}")
@@ -260,8 +260,8 @@ class TestDecisionAccuracyRegression:
             logger.info(f"Current price: ${mock_context.market_data.current_price:.2f}")
             logger.info(f"24h change: {mock_context.market_data.price_change_24h:.2f}%")
 
-            if indicators_result.rsi.rsi is not None:
-                logger.info(f"RSI: {indicators_result.rsi.rsi:.2f}")
+            if indicators_result.rsi and indicators_result.rsi[-1] is not None:
+                logger.info(f"RSI: {indicators_result.rsi[-1]:.2f}")
 
         except Exception as e:
             logger.warning(f"Downtrend test failed with technical analysis error: {e}")
@@ -315,8 +315,8 @@ class TestDecisionAccuracyRegression:
             logger.info(f"Current price: ${mock_context.market_data.current_price:.2f}")
             logger.info(f"Volatility: {mock_context.market_data.volatility:.3f}")
 
-            if indicators_result.rsi.rsi is not None:
-                logger.info(f"RSI: {indicators_result.rsi.rsi:.2f}")
+            if indicators_result.rsi is not None:
+                logger.info(f"RSI: {indicators_result.rsi[-1]:.2f}")
 
         except Exception as e:
             logger.warning(f"Consolidation test failed with technical analysis error: {e}")
@@ -371,8 +371,8 @@ class TestDecisionAccuracyRegression:
             logger.info(f"24h volume: {mock_context.market_data.volume_24h:.0f}")
             logger.info(f"24h change: {mock_context.market_data.price_change_24h:.2f}%")
 
-            if indicators_result.rsi.rsi is not None:
-                logger.info(f"RSI: {indicators_result.rsi.rsi:.2f}")
+            if indicators_result.rsi is not None:
+                logger.info(f"RSI: {indicators_result.rsi[-1]:.2f}")
 
         except Exception as e:
             logger.warning(f"Breakout test failed with technical analysis error: {e}")
@@ -427,7 +427,9 @@ class TestDecisionAccuracyRegression:
                     "confidence": result.decision.confidence,
                     "risk_level": result.decision.risk_level,
                     "current_price": market_data[-1].close,
-                    "rsi": indicators_result.rsi.rsi if indicators_result.rsi.rsi else None,
+                    "rsi": indicators_result.rsi[-1]
+                    if indicators_result.rsi and indicators_result.rsi[-1] is not None
+                    else None,
                 }
 
             except Exception as e:
@@ -445,7 +447,7 @@ class TestDecisionAccuracyRegression:
         for pattern, result in pattern_results.items():
             if "error" not in result:
                 logger.info(
-                    f"  {pattern}: {result['action']} (confidence: {result['confidence']}%)"
+                    f"  {pattern}: {result['action']} (confidence: {result['confidence']}%) "
                 )
             else:
                 logger.warning(f"  {pattern}: ERROR - {result['error']}")

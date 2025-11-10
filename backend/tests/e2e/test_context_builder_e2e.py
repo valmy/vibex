@@ -74,7 +74,9 @@ class TestContextBuilderE2E:
 
         try:
             # Build market context
-            market_context = await context_builder_service.get_market_context("BTCUSDT", ["5m"])
+            market_context = await context_builder_service.get_market_context(
+                "BTCUSDT", ["5m", "4h"]
+            )
 
             # Validate context structure
             assert market_context is not None, "Should build market context"
@@ -90,19 +92,73 @@ class TestContextBuilderE2E:
 
             # Validate technical indicators if present
             if market_context.technical_indicators is not None:
-                # At least some indicators should be present (flat structure now)
-                indicators = market_context.technical_indicators
-                has_indicators = any(
-                    [
-                        indicators.ema_20 is not None,
-                        indicators.ema_50 is not None,
-                        indicators.rsi is not None,
-                        indicators.macd is not None,
-                        indicators.bb_upper is not None,
-                        indicators.atr is not None,
-                    ]
+                # At least some indicators should be present in interval or long_interval
+                indicators_interval = market_context.technical_indicators.interval
+                indicators_long = market_context.technical_indicators.long_interval
+
+                # Comprehensive list of indicator fields based on schema (TechnicalIndicatorsSet)
+                indicator_fields = [
+                    "ema_20",
+                    "ema_50",
+                    "macd",
+                    "macd_signal",
+                    "rsi",
+                    "bb_upper",
+                    "bb_lower",
+                    "bb_middle",
+                    "atr",
+                ]
+
+                # Check if any indicators are present in either interval or long_interval
+                has_indicators_interval = any(
+                    getattr(indicators_interval, field, None) is not None
+                    for field in indicator_fields
                 )
+                has_indicators_long = any(
+                    getattr(indicators_long, field, None) is not None for field in indicator_fields
+                )
+                has_indicators = has_indicators_interval or has_indicators_long
                 assert has_indicators, "Should have at least some technical indicators"
+
+                # Additional value validations for robustness - check both intervals
+                for indicators_set in [indicators_interval, indicators_long]:
+                    if indicators_set.rsi is not None:
+                        assert isinstance(indicators_set.rsi, list) and all(
+                            isinstance(r, (int, float)) and 0 <= r <= 100
+                            for r in indicators_set.rsi
+                        ), "RSI must be a list of numbers between 0 and 100"
+                    if indicators_set.ema_20 is not None:
+                        assert isinstance(indicators_set.ema_20, list) and all(
+                            isinstance(e, (int, float)) and e > 0 for e in indicators_set.ema_20
+                        ), "EMA_20 must be a list of positive numbers"
+                    if indicators_set.ema_50 is not None:
+                        assert isinstance(indicators_set.ema_50, list) and all(
+                            isinstance(e, (int, float)) and e > 0 for e in indicators_set.ema_50
+                        ), "EMA_50 must be a list of positive numbers"
+                    if indicators_set.macd is not None:
+                        assert isinstance(indicators_set.macd, list) and all(
+                            isinstance(m, (int, float)) for m in indicators_set.macd
+                        ), "MACD must be a list of numbers"
+                    if indicators_set.macd_signal is not None:
+                        assert isinstance(indicators_set.macd_signal, list) and all(
+                            isinstance(m, (int, float)) for m in indicators_set.macd_signal
+                        ), "MACD_SIGNAL must be a list of numbers"
+                    if indicators_set.bb_upper is not None:
+                        assert isinstance(indicators_set.bb_upper, list) and all(
+                            isinstance(b, (int, float)) for b in indicators_set.bb_upper
+                        ), "BB_UPPER must be a list of numbers"
+                    if indicators_set.bb_lower is not None:
+                        assert isinstance(indicators_set.bb_lower, list) and all(
+                            isinstance(b, (int, float)) for b in indicators_set.bb_lower
+                        ), "BB_LOWER must be a list of numbers"
+                    if indicators_set.bb_middle is not None:
+                        assert isinstance(indicators_set.bb_middle, list) and all(
+                            isinstance(b, (int, float)) for b in indicators_set.bb_middle
+                        ), "BB_MIDDLE must be a list of numbers"
+                    if indicators_set.atr is not None:
+                        assert isinstance(indicators_set.atr, list) and all(
+                            isinstance(a, (int, float)) and a >= 0 for a in indicators_set.atr
+                        ), "ATR must be a list of non-negative numbers"
         except Exception as e:
             # Skip if insufficient market data (test isolation issue when running all tests)
             if "Insufficient market data" in str(e):
@@ -161,7 +217,9 @@ class TestContextBuilderE2E:
         """Test context validation with real market data."""
         try:
             # Build market context and verify it returns valid data
-            market_context = await context_builder_service.get_market_context("BTCUSDT", ["5m"])
+            market_context = await context_builder_service.get_market_context(
+                "BTCUSDT", ["5m", "4h"]
+            )
 
             # Print log market_context
             logger.info(f"Market context: {market_context}")
@@ -202,18 +260,18 @@ class TestContextBuilderE2E:
             context_builder_service.clear_cache()
 
             # Build context first time (should populate cache)
-            context1 = await context_builder_service.get_market_context("BTCUSDT", ["5m"])
+            context1 = await context_builder_service.get_market_context("BTCUSDT", ["5m", "4h"])
             assert context1 is not None, "Should build market context"
             # Note: symbol field is in TradingContext, not MarketContext
 
             # Build context second time (should use cache)
-            context2 = await context_builder_service.get_market_context("BTCUSDT", ["5m"])
+            context2 = await context_builder_service.get_market_context("BTCUSDT", ["5m", "4h"])
             assert context2 is not None, "Should build market context from cache"
             # Note: symbol field is in TradingContext, not MarketContext
 
             # Build context with force_refresh (should bypass cache)
             context3 = await context_builder_service.get_market_context(
-                "BTCUSDT", ["5m"], force_refresh=True
+                "BTCUSDT", ["5m", "4h"], force_refresh=True
             )
             assert context3 is not None, "Should build fresh market context"
             # Note: symbol field is in TradingContext, not MarketContext

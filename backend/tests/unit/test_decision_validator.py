@@ -22,6 +22,7 @@ from app.schemas.trading_decision import (
     RiskValidationResult,
     StrategyRiskParameters,
     TechnicalIndicators,
+    TechnicalIndicatorsSet,
     TradingContext,
     TradingDecision,
     TradingStrategy,
@@ -42,14 +43,26 @@ class TestDecisionValidator:
     def sample_trading_context(self):
         """Create a sample trading context for testing."""
         indicators = TechnicalIndicators(
-            ema_20=48000.0,
-            ema_50=47000.0,
-            rsi=65.0,
-            macd=100.0,
-            bb_upper=49000.0,
-            bb_lower=46000.0,
-            bb_middle=47500.0,
-            atr=500.0,
+            interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+                ema_50=[47000.0],
+                rsi=[65.0],
+                macd=[100.0],
+                bb_upper=[49000.0],
+                bb_lower=[46000.0],
+                bb_middle=[47500.0],
+                atr=[500.0],
+            ),
+            long_interval=TechnicalIndicatorsSet(
+                ema_20=[48500.0],
+                ema_50=[47500.0],
+                rsi=[60.0],
+                macd=[150.0],
+                bb_upper=[49500.0],
+                bb_lower=[46500.0],
+                bb_middle=[48000.0],
+                atr=[550.0],
+            ),
         )
 
         market_context = MarketContext(
@@ -115,6 +128,7 @@ class TestDecisionValidator:
         return TradingContext(
             symbol="BTCUSDT",
             account_id=1,
+            timeframes=["1h", "4h"],
             market_data=market_context,
             account_state=account_context,
             risk_metrics=risk_metrics,
