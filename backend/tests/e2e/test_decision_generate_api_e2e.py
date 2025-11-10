@@ -35,6 +35,7 @@ from app.schemas.trading_decision import (
     MarketContext,
     AccountContext,
     TechnicalIndicators,
+    TechnicalIndicatorsSet,
     PerformanceMetrics,
     RiskMetrics,
     StrategyRiskParameters,
@@ -47,15 +48,28 @@ from datetime import datetime, timezone
 def create_mock_trading_context(symbol: str = "BTCUSDT", account_id: int = 1) -> TradingContext:
     """Create a minimal mock trading context for testing."""
     indicators = TechnicalIndicators(
-        ema_20=48000.0,
-        ema_50=47000.0,
-        rsi=65.0,
-        macd=100.0,
-        macd_signal=90.0,
-        bb_upper=49000.0,
-        bb_lower=46000.0,
-        bb_middle=47500.0,
-        atr=500.0,
+        interval=TechnicalIndicatorsSet(
+            ema_20=[48000.0],
+            ema_50=[47000.0],
+            rsi=[65.0],
+            macd=[100.0],
+            macd_signal=[90.0],
+            bb_upper=[49000.0],
+            bb_lower=[46000.0],
+            bb_middle=[47500.0],
+            atr=[500.0],
+        ),
+        long_interval=TechnicalIndicatorsSet(
+            ema_20=[48500.0],
+            ema_50=[47500.0],
+            rsi=[60.0],
+            macd=[95.0],
+            macd_signal=[85.0],
+            bb_upper=[49500.0],
+            bb_lower=[46500.0],
+            bb_middle=[48000.0],
+            atr=[450.0],
+        ),
     )
 
     market_context = MarketContext(
@@ -117,6 +131,7 @@ def create_mock_trading_context(symbol: str = "BTCUSDT", account_id: int = 1) ->
     return TradingContext(
         symbol=symbol,
         account_id=account_id,
+        timeframes=["5m", "4h"],
         market_data=market_context,
         account_state=account_context,
         risk_metrics=risk_metrics,
@@ -193,15 +208,28 @@ class TestDecisionGenerateAPIWithAuth:
         """Create a mock decision result for testing."""
         # Create technical indicators
         indicators = TechnicalIndicators(
-            ema_20=101000.0,
-            ema_50=100000.0,
-            rsi=65.0,
-            macd=150.0,
-            macd_signal=120.0,
-            bb_upper=102000.0,
-            bb_lower=100000.0,
-            bb_middle=101000.0,
-            atr=500.0,
+            interval=TechnicalIndicatorsSet(
+                ema_20=[101000.0],
+                ema_50=[100000.0],
+                rsi=[65.0],
+                macd=[150.0],
+                macd_signal=[120.0],
+                bb_upper=[102000.0],
+                bb_lower=[100000.0],
+                bb_middle=[101000.0],
+                atr=[500.0],
+            ),
+            long_interval=TechnicalIndicatorsSet(
+                ema_20=[101500.0],
+                ema_50=[100500.0],
+                rsi=[60.0],
+                macd=[140.0],
+                macd_signal=[110.0],
+                bb_upper=[102500.0],
+                bb_lower=[100500.0],
+                bb_middle=[101500.0],
+                atr=[450.0],
+            ),
         )
 
         # Create market context
@@ -271,6 +299,7 @@ class TestDecisionGenerateAPIWithAuth:
         context = TradingContext(
             symbol="BTCUSDT",
             account_id=1,
+            timeframes=["5m", "4h"],
             market_data=market_context,
             account_state=account_context,
             risk_metrics=risk_metrics,

@@ -263,6 +263,11 @@ class DecisionEngine:
                 # Clean up active task
                 self._active_decisions.pop(decision_key, None)
 
+        except RateLimitExceededError:
+            # Re-raise rate limit errors without wrapping
+            self.metrics["total_decisions"] += 1
+            self.metrics["failed_decisions"] += 1
+            raise
         except Exception as e:
             self.metrics["total_decisions"] += 1
             self.metrics["failed_decisions"] += 1

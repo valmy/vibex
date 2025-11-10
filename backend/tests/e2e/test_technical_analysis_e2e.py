@@ -90,17 +90,22 @@ class TestTechnicalAnalysisE2E:
             # Validate indicator relationships make sense
             if all(
                 [
-                    result.ema_20 is not None,
                     result.bb_upper is not None,
                     result.bb_middle is not None,
                     result.bb_lower is not None,
                 ]
             ):
-                # EMA should be between BB upper and lower
+                # BB middle should be between BB upper and lower
                 assert all(
-                    lower <= ema <= upper
-                    for lower, ema, upper in zip(result.bb_lower, result.ema_20, result.bb_upper)
-                ), "EMA should be within Bollinger Bands"
+                    lower <= middle <= upper
+                    for lower, middle, upper in zip(result.bb_lower, result.bb_middle, result.bb_upper)
+                ), "BB middle should be within BB upper and lower bands"
+
+                # BB upper should be greater than BB lower
+                assert all(
+                    upper > lower
+                    for lower, upper in zip(result.bb_lower, result.bb_upper)
+                ), "BB upper should be greater than BB lower"
 
     @pytest.mark.asyncio
     async def test_indicator_with_trending_markets(

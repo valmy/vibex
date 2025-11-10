@@ -21,6 +21,7 @@ from app.schemas.trading_decision import (
     MarketContext,
     AccountContext,
     TechnicalIndicators,
+    TechnicalIndicatorsSet,
     PerformanceMetrics,
     RiskMetrics,
     StrategyRiskParameters,
@@ -34,39 +35,70 @@ class TestDecisionGenerateAPIE2E:
     @pytest.fixture
     async def async_client(self):
         """Create async HTTP client for testing."""
-        # Bypass AdminOnlyMiddleware for testing by mocking the dispatch method
+        # Bypass authentication for testing
         from app.middleware import AdminOnlyMiddleware
+        from app.core.security import get_current_user
+        from app.db.session import get_db
+        from app.models.account import User
+        from unittest.mock import AsyncMock
 
         async def mock_dispatch(self, request, call_next):
             """Mock dispatch that bypasses authentication."""
             return await call_next(request)
 
-        # Temporarily replace the dispatch method
+        async def mock_get_current_user():
+            """Mock user for testing."""
+            return User(id=1, address="0xtest", is_admin=True)
+
+        async def mock_get_db():
+            """Mock database session for testing."""
+            mock_db = AsyncMock()
+            yield mock_db
+
+        # Temporarily replace the dispatch method and dependency
         original_dispatch = AdminOnlyMiddleware.dispatch
         AdminOnlyMiddleware.dispatch = mock_dispatch
 
         try:
+            # Override dependencies
+            app.dependency_overrides[get_current_user] = mock_get_current_user
+            app.dependency_overrides[get_db] = mock_get_db
+
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 yield client
         finally:
-            # Restore original dispatch
+            # Restore original dispatch and clear overrides
             AdminOnlyMiddleware.dispatch = original_dispatch
+            app.dependency_overrides.clear()
 
     @pytest.fixture
     def mock_decision_result(self):
         """Create a mock decision result for testing."""
         # Create technical indicators
         indicators = TechnicalIndicators(
-            ema_20=101000.0,
-            ema_50=100000.0,
-            rsi=65.0,
-            macd=150.0,
-            macd_signal=120.0,
-            bb_upper=102000.0,
-            bb_lower=100000.0,
-            bb_middle=101000.0,
-            atr=500.0,
+            interval=TechnicalIndicatorsSet(
+                ema_20=[101000.0],
+                ema_50=[100000.0],
+                rsi=[65.0],
+                macd=[150.0],
+                macd_signal=[120.0],
+                bb_upper=[102000.0],
+                bb_lower=[100000.0],
+                bb_middle=[101000.0],
+                atr=[500.0],
+            ),
+            long_interval=TechnicalIndicatorsSet(
+                ema_20=[101500.0],
+                ema_50=[100500.0],
+                rsi=[60.0],
+                macd=[140.0],
+                macd_signal=[110.0],
+                bb_upper=[102500.0],
+                bb_lower=[100500.0],
+                bb_middle=[101500.0],
+                atr=[450.0],
+            ),
         )
 
         # Create market context
@@ -137,6 +169,7 @@ class TestDecisionGenerateAPIE2E:
         context = TradingContext(
             symbol="BTCUSDT",
             account_id=1,
+            timeframes=["5m", "4h"],
             market_data=market_context,
             account_state=account_context,
             risk_metrics=risk_metrics,
