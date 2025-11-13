@@ -396,13 +396,14 @@ This implementation plan converts the LLM Decision Engine Integration design int
   - Update performance tracking to aggregate across assets
   - _Requirements: 8.2_
 
-- [ ] 11.8 Create tests for multi-asset functionality
-  - Create unit tests for multi-asset schema validation
-  - Test Context Builder with multiple assets from ASSETS env variable
-  - Test LLM Service with multi-asset prompts and responses
-  - Test Decision Validator with portfolio-wide validation rules
-  - Create integration tests for complete multi-asset decision workflow
-  - Test API endpoints with multi-asset requests and responses
+- [ ] 11.8 Update existing tests for multi-asset functionality
+  - Update unit tests to validate multi-asset schema structures
+  - Update Context Builder tests to handle multiple assets from ASSETS env variable
+  - Update LLM Service tests with multi-asset prompts and responses
+  - Update Decision Validator tests for portfolio-wide validation rules
+  - Update integration tests for complete multi-asset decision workflow
+  - Update API endpoint tests with multi-asset requests and responses
+  - Review and update e2e tests to cover multi-asset scenarios
   - _Requirements: All multi-asset requirements_
 
 ## Implementation Notes
