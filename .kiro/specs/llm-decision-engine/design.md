@@ -55,6 +55,44 @@ This organization provides:
 - **Clean Imports**: Package interface provides clean access to services
 - **Scalability**: Easy to add new LLM-related components
 
+## Multi-Asset Decision Making for Perpetual Futures
+
+The LLM Decision Engine is designed to analyze and make perpetual futures trading decisions across multiple assets simultaneously, as defined by the `$ASSETS` environment variable (e.g., BTC, ETH, SOL). This approach provides several advantages for active futures trading:
+
+### Benefits of Multi-Asset Analysis
+
+1. **Opportunity Identification**: The LLM can identify the best trading opportunities across multiple assets simultaneously
+2. **Capital Efficiency**: The system can optimize capital allocation across multiple active positions
+3. **Market Context Awareness**: Cross-asset analysis provides better understanding of overall market conditions and trends
+4. **Risk Management**: Decisions account for concentration risk across the entire portfolio of active positions
+5. **Comparative Analysis**: The LLM can compare relative strength and momentum across assets to prioritize trades
+
+### Decision Structure
+
+Each trading decision contains:
+- **Individual Asset Decisions**: Specific actions (buy/sell/hold/adjust) for each perpetual futures contract
+- **Portfolio Rationale**: Overall strategy explaining the multi-asset trading approach
+- **Total Allocation**: Aggregate capital allocation across all active positions
+- **Portfolio Risk Level**: Overall risk assessment considering all positions and leverage
+
+### Context Building
+
+The Context Builder aggregates data for all configured assets:
+- Market data (price, volume, funding rate) for each perpetual futures contract
+- Technical indicators for each asset across multiple timeframes
+- Overall market sentiment analysis
+- Per-asset trade history and performance
+- Current open positions and their P&L
+
+### LLM Prompt Strategy
+
+The LLM receives comprehensive multi-asset context and is prompted to:
+1. Analyze each asset individually based on technical indicators and market conditions
+2. Identify the strongest trading opportunities across all assets
+3. Optimize capital allocation across opportunities based on conviction and risk
+4. Provide specific actions for each asset with rationale
+5. Explain the overall trading strategy across all assets
+
 ## Architecture
 
 ### High-Level System Architecture
@@ -118,7 +156,7 @@ This organization provides:
 ```python
 async def generate_trading_decision(
     self,
-    symbol: str,
+    symbols: List[str],
     context: TradingContext
 ) -> TradingDecision
 
@@ -144,13 +182,13 @@ async def switch_model(self, model_name: str) -> bool
 ```python
 async def build_trading_context(
     self,
-    symbol: str,
+    symbols: List[str],
     account_id: int
 ) -> TradingContext
 
 async def get_market_context(
     self,
-    symbol: str,
+    symbols: List[str],
     timeframes: List[str]
 ) -> MarketContext
 
@@ -235,21 +273,16 @@ async def get_strategy_performance(
 ```python
 async def make_trading_decision(
     self,
-    symbol: str,
+    symbols: List[str],
     account_id: int,
     strategy_override: Optional[str] = None
 ) -> DecisionResult
 
-async def batch_decisions(
-    self,
-    symbols: List[str],
-    account_id: int
-) -> List[DecisionResult]
-
 async def get_decision_history(
     self,
     account_id: int,
-    limit: int = 100
+    limit: int = 100,
+    symbol: Optional[str] = None
 ) -> List[DecisionResult]
 
 async def switch_strategy(
@@ -264,8 +297,8 @@ async def switch_strategy(
 ### Trading Decision Schema
 
 ```python
-class TradingDecision(BaseModel):
-    """Structured trading decision from LLM."""
+class AssetDecision(BaseModel):
+    """Trading decision for a single asset."""
 
     asset: str = Field(..., description="Trading pair symbol")
     action: Literal["buy", "sell", "hold", "adjust_position", "close_position", "adjust_orders"] = Field(
@@ -284,6 +317,22 @@ class TradingDecision(BaseModel):
     rationale: str = Field(..., description="Decision reasoning")
     confidence: float = Field(..., ge=0, le=100, description="Confidence score")
     risk_level: Literal["low", "medium", "high"] = Field(..., description="Risk assessment")
+
+class TradingDecision(BaseModel):
+    """Multi-asset structured trading decision from LLM for perpetual futures."""
+
+    decisions: List[AssetDecision] = Field(
+        ..., description="Trading decisions for each asset"
+    )
+    portfolio_rationale: str = Field(
+        ..., description="Overall trading strategy and reasoning across assets"
+    )
+    total_allocation_usd: float = Field(
+        ..., ge=0, description="Total allocation across all assets"
+    )
+    portfolio_risk_level: Literal["low", "medium", "high"] = Field(
+        ..., description="Overall portfolio risk assessment"
+    )
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 class PositionAdjustment(BaseModel):
@@ -324,13 +373,15 @@ class OrderAdjustment(BaseModel):
 
 ```python
 class TradingContext(BaseModel):
-    """Complete context for trading decisions."""
+    """Complete multi-asset context for trading decisions."""
 
-    symbol: str
+    symbols: List[str] = Field(..., description="List of asset symbols to analyze")
     account_id: int
-    market_data: MarketContext
+    market_data: MarketContext = Field(..., description="Multi-asset market data")
     account_state: AccountContext
-    recent_trades: List[TradeHistory]
+    recent_trades: Dict[str, List[TradeHistory]] = Field(
+        ..., description="Recent trades grouped by asset symbol"
+    )
     risk_metrics: RiskMetrics
     timestamp: datetime
 ```
@@ -338,9 +389,10 @@ class TradingContext(BaseModel):
 ### Market Context Schema
 
 ```python
-class MarketContext(BaseModel):
-    """Market data context for decisions."""
+class AssetMarketData(BaseModel):
+    """Market data for a single asset."""
 
+    symbol: str
     current_price: float
     price_change_24h: float
     volume_24h: float
@@ -349,6 +401,17 @@ class MarketContext(BaseModel):
     price_history: List[PricePoint]
     volatility: float
     technical_indicators: TechnicalIndicators
+
+class MarketContext(BaseModel):
+    """Multi-asset market data context for perpetual futures trading decisions."""
+
+    assets: Dict[str, AssetMarketData] = Field(
+        ..., description="Market data for each asset symbol"
+    )
+    market_sentiment: Optional[str] = Field(
+        None, description="Overall market sentiment (bullish/bearish/neutral)"
+    )
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 class TechnicalIndicatorsSet(BaseModel):
     """Set of technical indicators for a specific timeframe."""
@@ -516,7 +579,7 @@ class InsufficientDataError(DecisionEngineError):
 ```
 POST /api/v1/decisions/generate
 {
-  "symbol": "BTCUSDT",
+  "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],  // Optional, defaults to $ASSETS env variable
   "account_id": 1,
   "force_refresh": false
 }
@@ -525,7 +588,7 @@ POST /api/v1/decisions/generate
 ### Decision History
 
 ```
-GET /api/v1/decisions/history?account_id=1&limit=50&symbol=BTCUSDT
+GET /api/v1/decisions/history?account_id=1&limit=50&symbol=BTCUSDT  // symbol filter is optional
 ```
 
 ### Decision Validation
