@@ -178,33 +178,44 @@ class TestLLMDecisionEngineE2E:
         # The context_builder is real and should use the db_session from the DI container
         # The decision_engine fixture should be correctly wired
         result = await decision_engine.make_trading_decision(
-            symbol="BTCUSDT", account_id=1, force_refresh=True
+            symbols=["BTCUSDT"], account_id=1, force_refresh=True
         )
 
-        # Validate decision structure
+        # Validate decision structure - now multi-asset
         assert isinstance(result, DecisionResult)
         assert isinstance(result.decision, TradingDecision)
-        assert result.decision.asset == "BTCUSDT"
-        assert result.decision.action == "buy"
+        assert len(result.decision.decisions) > 0, "Should have at least one asset decision"
+
+        # Validate first asset decision
+        first_decision = result.decision.decisions[0]
+        assert first_decision.asset == "BTCUSDT"
+        assert first_decision.action == "buy"
+
+        # Validate portfolio-level fields
+        assert result.decision.portfolio_rationale is not None
+        assert result.decision.total_allocation_usd >= 0
 
         # Validate context was built with real data
         assert result.context is not None
-        assert result.context.symbol == "BTCUSDT"
+        assert "BTCUSDT" in result.context.symbols
         assert result.context.account_id == 1
-        assert result.context.market_data.current_price > 0
-        assert result.context.market_data.technical_indicators is not None
+        assert "BTCUSDT" in result.context.market_data.assets
+        btc_data = result.context.market_data.assets["BTCUSDT"]
+        assert btc_data.current_price > 0
+        assert btc_data.technical_indicators is not None
 
         # Validate technical indicators were calculated from real data
         # Note: When running with other tests, the technical indicators structure may vary
         # due to test isolation issues, so we just check that they exist
-        assert result.context.market_data.technical_indicators is not None
+        assert btc_data.technical_indicators is not None
 
         # Validate processing time is reasonable
         assert result.processing_time_ms > 0
         assert result.processing_time_ms < 30000  # Should complete within 30 seconds
 
         logger.info(
-            f"Decision generated: {result.decision.action} with confidence {result.decision.confidence}%"
+            f"Decision generated: {len(result.decision.decisions)} asset decisions, "
+            f"total allocation: ${result.decision.total_allocation_usd}"
         )
 
     @pytest.mark.asyncio
@@ -277,12 +288,12 @@ class TestLLMDecisionEngineE2E:
         context_builder.get_account_context = mocker.AsyncMock(return_value=mock_account_context)
 
         # Use the real market data from the fixture
-        symbol = "BTCUSDT"
+        symbols = ["BTCUSDT"]
 
         # Build the complete trading context with real market data
         logger.info("Building trading context with real market data...")
         context = await context_builder.build_trading_context(
-            symbol=symbol,
+            symbols=symbols,
             account_id=1,
             timeframes=["5m", "4h"],  # Required timeframes parameter
             force_refresh=True,  # Force refresh to bypass cache and availability checks
@@ -290,7 +301,7 @@ class TestLLMDecisionEngineE2E:
 
         # Validate context was built
         assert context is not None, "Failed to build trading context"
-        assert context.symbol == symbol
+        assert symbols[0] in context.symbols
         assert context.market_data is not None
         assert context.account_state is not None
 
@@ -298,41 +309,52 @@ class TestLLMDecisionEngineE2E:
         logger.info("Sending request to real LLM API...")
 
         try:
-            result = await llm_service.generate_trading_decision(symbol=symbol, context=context)
+            result = await llm_service.generate_trading_decision(symbols=symbols, context=context)
 
-            # Basic validation of the response
+            # Basic validation of the response - now multi-asset
             assert result is not None, "No result returned from LLM service"
             assert hasattr(result, "decision"), "Response missing 'decision' attribute"
-            assert hasattr(result.decision, "action"), "Decision missing 'action' attribute"
-            assert hasattr(result.decision, "allocation_usd"), (
-                "Decision missing 'allocation_usd' attribute"
+            assert hasattr(result.decision, "decisions"), "Decision missing 'decisions' attribute"
+            assert len(result.decision.decisions) > 0, "Should have at least one asset decision"
+
+            first_decision = result.decision.decisions[0]
+            assert hasattr(first_decision, "action"), "Asset decision missing 'action' attribute"
+            assert hasattr(first_decision, "allocation_usd"), (
+                "Asset decision missing 'allocation_usd' attribute"
             )
 
             logger.info(
-                f"✓ Received decision from LLM: {result.decision.action} with allocation ${result.decision.allocation_usd}"
+                f"✓ Received decision from LLM: {len(result.decision.decisions)} asset decisions, "
+                f"total allocation ${result.decision.total_allocation_usd}"
             )
             logger.info(f"✓ Model used: {getattr(result, 'model_used', 'N/A')}")
             logger.info(f"✓ Processing time: {getattr(result, 'processing_time_ms', 'N/A')}ms")
 
-            # Check if we have a rationale in the decision or the result
-            rationale = getattr(result.decision, "rationale", getattr(result, "rationale", None))
-            if rationale:
-                logger.info(f"✓ Rationale: {rationale[:200]}...")  # Log first 200 chars
+            # Log portfolio rationale
+            if result.decision.portfolio_rationale:
+                logger.info(
+                    f"✓ Portfolio Rationale: {result.decision.portfolio_rationale[:200]}..."
+                )
 
-            # Additional validation based on action
-            assert result.decision.action in [
-                "buy",
-                "sell",
-                "hold",
-                "adjust_position",
-                "close_position",
-                "adjust_orders",
-            ], f"Invalid action: {result.decision.action}"
+            # Validate each asset decision
+            for asset_decision in result.decision.decisions:
+                assert asset_decision.action in [
+                    "buy",
+                    "sell",
+                    "hold",
+                    "adjust_position",
+                    "close_position",
+                    "adjust_orders",
+                ], f"Invalid action: {asset_decision.action}"
 
-            # Validate decision structure
-            assert result.decision.asset == symbol
-            assert result.decision.confidence >= 0 and result.decision.confidence <= 100
-            assert result.decision.risk_level in ["low", "medium", "high"]
+                assert asset_decision.asset in symbols, f"Unexpected asset: {asset_decision.asset}"
+                assert asset_decision.confidence >= 0 and asset_decision.confidence <= 100
+                assert asset_decision.risk_level in ["low", "medium", "high"]
+
+                logger.info(
+                    f"  - {asset_decision.asset}: {asset_decision.action} "
+                    f"(${asset_decision.allocation_usd}, confidence: {asset_decision.confidence}%)"
+                )
 
             logger.info("✓ LLM integration test passed successfully!")
 
@@ -502,49 +524,88 @@ class TestLLMDecisionEngineE2E:
                 concentration_risk=10.0,  # Concentration risk (percentage)
             )
 
-            # Create trading context with all required fields
-            context = TradingContext(
+            # Create trading context with all required fields (multi-asset)
+            symbols = ["BTCUSDT"]
+
+            # Create multi-asset market context
+            from app.schemas.trading_decision import AssetMarketData
+
+            asset_market_data = AssetMarketData(
                 symbol="BTCUSDT",
+                current_price=50000.0,
+                price_change_24h=500.0,
+                volume_24h=1000000.0,
+                funding_rate=0.01,
+                open_interest=1000000.0,
+                price_history=[
+                    PricePoint(
+                        timestamp=datetime.now(timezone.utc) - timedelta(minutes=i),
+                        price=50000.0 - (i * 100) + (i % 2 * 200),
+                        volume=1000.0,
+                    )
+                    for i in range(10, 0, -1)
+                ],
+                volatility=1.5,
+                technical_indicators=technical_indicators,
+            )
+
+            multi_asset_market_context = MarketContext(
+                assets={"BTCUSDT": asset_market_data},
+                market_sentiment="neutral",
+            )
+
+            context = TradingContext(
+                symbols=symbols,
                 account_id=1,
                 timeframes=["5m", "4h"],
-                market_data=market_context,
+                market_data=multi_asset_market_context,
                 account_state=account_context,
-                recent_trades=[],
+                recent_trades={"BTCUSDT": []},
                 risk_metrics=risk_metrics,
             )
 
             # Test LLM service with the context
             logger.info("Sending request to LLM service...")
 
-            result = await llm_service.generate_trading_decision(symbol="BTCUSDT", context=context)
+            result = await llm_service.generate_trading_decision(symbols=symbols, context=context)
 
-            # Basic validation of the response
+            # Basic validation of the response - now multi-asset
             assert result is not None
             assert hasattr(result, "decision"), "Response missing 'decision' attribute"
-            assert hasattr(result.decision, "action"), "Decision missing 'action' attribute"
-            assert hasattr(result.decision, "allocation_usd"), (
-                "Decision missing 'allocation_usd' attribute"
+            assert hasattr(result.decision, "decisions"), "Decision missing 'decisions' attribute"
+            assert len(result.decision.decisions) > 0, "Should have at least one asset decision"
+
+            first_decision = result.decision.decisions[0]
+            assert hasattr(first_decision, "action"), "Asset decision missing 'action' attribute"
+            assert hasattr(first_decision, "allocation_usd"), (
+                "Asset decision missing 'allocation_usd' attribute"
             )
 
             logger.info(
-                f"Received decision from LLM: {result.decision.action} with allocation ${result.decision.allocation_usd}"
+                f"Received decision from LLM: {len(result.decision.decisions)} asset decisions, "
+                f"total allocation ${result.decision.total_allocation_usd}"
             )
             logger.info(f"Model used: {getattr(result, 'model_used', 'N/A')}")
             logger.info(f"Processing time: {getattr(result, 'processing_time_ms', 'N/A')}ms")
 
-            # Check if we have a rationale in the decision or the result
-            rationale = getattr(result.decision, "rationale", getattr(result, "rationale", None))
-            if rationale:
-                logger.info(f"Rationale: {rationale}")
+            # Log portfolio rationale
+            if result.decision.portfolio_rationale:
+                logger.info(f"Portfolio Rationale: {result.decision.portfolio_rationale}")
 
-            # Additional validation based on action
-            assert result.decision.action in ["buy", "sell", "hold"], (
-                f"Invalid action: {result.decision.action}"
-            )
-            if result.decision.action in ["buy", "sell"]:
-                assert result.decision.allocation_usd > 0, (
-                    "Allocation should be positive for buy/sell actions"
-                )
+            # Validate each asset decision
+            for asset_decision in result.decision.decisions:
+                assert asset_decision.action in [
+                    "buy",
+                    "sell",
+                    "hold",
+                    "adjust_position",
+                    "close_position",
+                    "adjust_orders",
+                ], f"Invalid action: {asset_decision.action}"
+                if asset_decision.action in ["buy", "sell"]:
+                    assert asset_decision.allocation_usd > 0, (
+                        "Allocation should be positive for buy/sell actions"
+                    )
 
         except Exception as e:
             logger.error(f"LLM integration test failed: {str(e)}")
@@ -601,7 +662,7 @@ class TestLLMDecisionEngineE2E:
         decisions = []
         for i in range(3):
             result = await decision_engine.make_trading_decision(
-                symbol="BTCUSDT", account_id=1, force_refresh=True
+                symbols=["BTCUSDT"], account_id=1, force_refresh=True
             )
             decisions.append(result)
             await asyncio.sleep(0.1)  # Small delay between calls
@@ -613,8 +674,13 @@ class TestLLMDecisionEngineE2E:
             assert len(result.validation_errors) == 0
 
         # Check for reasonable consistency (decisions shouldn't be wildly different)
-        actions = [d.decision.action for d in decisions]
-        confidences = [d.decision.confidence for d in decisions]
+        # Extract first asset decision from each multi-asset decision
+        actions = [
+            d.decision.decisions[0].action if d.decision.decisions else "hold" for d in decisions
+        ]
+        confidences = [
+            d.decision.decisions[0].confidence if d.decision.decisions else 0 for d in decisions
+        ]
 
         # If all decisions are the same action, that's good consistency
         if len(set(actions)) == 1:
@@ -790,18 +856,21 @@ class TestLLMDecisionEngineE2E:
 
                 # Generate decision
                 result = await decision_engine.make_trading_decision(
-                    symbol="BTCUSDT", account_id=1, force_refresh=True
+                    symbols=["BTCUSDT"], account_id=1, force_refresh=True
                 )
 
                 # Validate decision quality
                 assert result.validation_passed is True
-                assert result.decision.confidence >= 0
-                assert len(result.decision.rationale) > 10
+                assert len(result.decision.decisions) > 0, "Should have at least one asset decision"
+
+                first_decision = result.decision.decisions[0]
+                assert first_decision.confidence >= 0
+                assert len(first_decision.rationale) > 10
 
                 scenario_results[scenario_name] = {
-                    "action": result.decision.action,
-                    "confidence": result.decision.confidence,
-                    "risk_level": result.decision.risk_level,
+                    "action": first_decision.action,
+                    "confidence": first_decision.confidence,
+                    "risk_level": first_decision.risk_level,
                     "indicators": {
                         "rsi": indicators_result.rsi[-1]
                         if indicators_result.rsi and indicators_result.rsi[-1] is not None
@@ -814,7 +883,7 @@ class TestLLMDecisionEngineE2E:
                 }
 
                 logger.info(
-                    f"{scenario_name}: {result.decision.action} (confidence: {result.decision.confidence}%) "
+                    f"{scenario_name}: {first_decision.action} (confidence: {first_decision.confidence}%) "
                 )
 
             except Exception as e:

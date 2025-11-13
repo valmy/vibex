@@ -41,6 +41,7 @@ from ...models.position import Position
 from ...models.trade import Trade
 from ...schemas.trading_decision import (
     AccountContext,
+    AssetMarketData,
     MarketContext,
     PerformanceMetrics,
     PositionSummary,
@@ -172,24 +173,71 @@ class ContextBuilderService:
             atr=get_last_10(indicators.atr),
         )
 
-    def _calculate_risk_metrics(
+    def _calculate_market_sentiment(self, assets: Dict[str, "AssetMarketData"]) -> str:
+        """Calculate overall market sentiment based on asset price changes.
+
+        Args:
+            assets: Dictionary of asset market data
+
+        Returns:
+            Market sentiment string: "bullish", "bearish", or "neutral"
+        """
+        if not assets:
+            return "neutral"
+
+        # Calculate average price change
+        avg_price_change = sum(asset_data.price_change_24h for asset_data in assets.values()) / len(
+            assets
+        )
+
+        # Count bullish vs bearish assets
+        bullish_count = sum(1 for asset_data in assets.values() if asset_data.price_change_24h > 0)
+        bearish_count = len(assets) - bullish_count
+
+        # Determine sentiment
+        if avg_price_change > 2.0 and bullish_count > bearish_count:
+            return "bullish"
+        elif avg_price_change < -2.0 and bearish_count > bullish_count:
+            return "bearish"
+        else:
+            return "neutral"
+
+    def _calculate_portfolio_risk_metrics(
         self, account_context: AccountContext, market_context: MarketContext
     ) -> RiskMetrics:
-        """Calculate risk metrics for trading context.
+        """Calculate portfolio-wide risk metrics for multi-asset trading context.
 
         Args:
             account_context: Account context with positions and performance
-            market_context: Market context with price and volatility data
+            market_context: Multi-asset market context with price and volatility data
 
         Returns:
-            RiskMetrics with calculated values
+            RiskMetrics with calculated values across all assets
         """
         # Calculate total exposure from open positions
         total_exposure = sum(pos.size * pos.current_price for pos in account_context.open_positions)
 
+        # Calculate portfolio-weighted volatility
+        portfolio_volatility = 0.0
+        if market_context.assets and total_exposure > 0:
+            # Weight volatility by position size
+            weighted_volatility = 0.0
+            for pos in account_context.open_positions:
+                asset_data = market_context.assets.get(pos.symbol)
+                if asset_data:
+                    position_value = pos.size * pos.current_price
+                    weight = position_value / total_exposure
+                    weighted_volatility += asset_data.volatility * weight
+            portfolio_volatility = weighted_volatility
+        elif market_context.assets:
+            # If no positions, use average volatility
+            portfolio_volatility = sum(
+                asset_data.volatility for asset_data in market_context.assets.values()
+            ) / len(market_context.assets)
+
         # Calculate Value at Risk (95%) - simplified calculation
         # VaR = Position Value * Volatility * Z-score (1.65 for 95%)
-        var_95 = total_exposure * market_context.volatility * 1.65 if total_exposure > 0 else 0.0
+        var_95 = total_exposure * portfolio_volatility * 1.65 if total_exposure > 0 else 0.0
 
         # Get max drawdown from performance metrics
         max_drawdown = abs(account_context.recent_performance.max_drawdown)
@@ -204,13 +252,19 @@ class ContextBuilderService:
                 max(long_positions, short_positions) / len(account_context.open_positions) * 100
             )
 
-        # Calculate concentration risk (largest position as % of total)
+        # Calculate concentration risk across assets
         concentration_risk = 0.0
         if account_context.open_positions and total_exposure > 0:
-            largest_position = max(
-                pos.size * pos.current_price for pos in account_context.open_positions
-            )
-            concentration_risk = (largest_position / total_exposure) * 100
+            # Group positions by asset
+            asset_exposures = {}
+            for pos in account_context.open_positions:
+                position_value = pos.size * pos.current_price
+                asset_exposures[pos.symbol] = asset_exposures.get(pos.symbol, 0) + position_value
+
+            # Find largest asset exposure
+            if asset_exposures:
+                largest_asset_exposure = max(asset_exposures.values())
+                concentration_risk = (largest_asset_exposure / total_exposure) * 100
 
         return RiskMetrics(
             var_95=var_95,
@@ -220,12 +274,12 @@ class ContextBuilderService:
         )
 
     def _validate_context(
-        self, market_context: MarketContext, account_context: AccountContext
+        self, asset_market_data: AssetMarketData, account_context: AccountContext
     ) -> dict:
         """Validate the built context for completeness and freshness.
 
         Args:
-            market_context: Market context to validate
+            asset_market_data: Asset market data to validate
             account_context: Account context to validate
 
         Returns:
@@ -236,21 +290,21 @@ class ContextBuilderService:
         warnings = []
 
         # Check market context
-        if market_context is None:
-            missing_data.append("Market context is None")
+        if asset_market_data is None:
+            missing_data.append("Asset market data is None")
         else:
-            if market_context.current_price <= 0:
+            if asset_market_data.current_price <= 0:
                 missing_data.append("Invalid current price")
-            if market_context.technical_indicators is None:
+            if asset_market_data.technical_indicators is None:
                 warnings.append("No technical indicators available")
 
-            # Check data freshness using the market context's method
-            if not market_context.validate_data_freshness(
+            # Check data freshness using the asset market data's method
+            if not asset_market_data.validate_data_freshness(
                 max_age_minutes=self.MAX_DATA_AGE_MINUTES
             ):
                 # Calculate age from price history
-                if market_context.price_history:
-                    latest_data = max(market_context.price_history, key=lambda x: x.timestamp)
+                if asset_market_data.price_history:
+                    latest_data = max(asset_market_data.price_history, key=lambda x: x.timestamp)
                     # Handle both timezone-aware and timezone-naive datetimes
                     latest_timestamp = latest_data.timestamp
                     if latest_timestamp.tzinfo is None:
@@ -269,8 +323,8 @@ class ContextBuilderService:
 
         # Calculate data age
         data_age_seconds = 0.0
-        if market_context and market_context.price_history:
-            latest_data = max(market_context.price_history, key=lambda x: x.timestamp)
+        if asset_market_data and asset_market_data.price_history:
+            latest_data = max(asset_market_data.price_history, key=lambda x: x.timestamp)
             # Handle both timezone-aware and timezone-naive datetimes
             latest_timestamp = latest_data.timestamp
             if latest_timestamp.tzinfo is None:
@@ -289,21 +343,21 @@ class ContextBuilderService:
 
     async def build_trading_context(
         self,
-        symbol: str,
+        symbols: List[str],
         account_id: int,
         timeframes: List[str],
         force_refresh: bool = False,
     ) -> TradingContext:
-        """Build complete trading context for decision making.
+        """Build complete multi-asset trading context for decision making.
 
         Args:
-            symbol: Trading pair symbol (e.g., "BTCUSDT")
+            symbols: List of trading pair symbols (e.g., ["BTCUSDT", "ETHUSDT", "SOLUSDT"])
             account_id: Account ID
             timeframes: List of two timeframes to analyze (e.g., ["5m", "1h"])
             force_refresh: Force refresh of cached data
 
         Returns:
-            TradingContext object with all necessary data
+            TradingContext object with all necessary data for all assets
 
         Raises:
             ContextBuilderError: If context building fails
@@ -314,104 +368,106 @@ class ContextBuilderService:
             raise ValueError("build_trading_context requires exactly two timeframes.")
 
         logger.info(
-            f"Building trading context for {symbol}, account {account_id} with timeframes {timeframes}"
+            f"Building multi-asset trading context for {symbols}, account {account_id} with timeframes {timeframes}"
         )
 
         try:
             # Clean up expired cache entries
             self.cleanup_expired_cache()
 
-            # Pre-validate data availability if not forcing refresh
-            if not force_refresh:
-                availability_check = await self.validate_context_data_availability(
-                    symbol, account_id
-                )
-                # availability_check is now a dict instead of ContextValidationResult object
-                if not availability_check["is_valid"]:
-                    # Try graceful degradation
-                    degraded_context = self.handle_data_unavailability(
-                        symbol, account_id, availability_check
-                    )
-                    if degraded_context:
-                        logger.info(f"Using degraded context for {symbol}")
-                        return degraded_context
-                    else:
-                        raise InsufficientMarketDataError(
-                            f"Data unavailable: {availability_check['missing_data']}"
-                        )
-
             # Build context components concurrently
-            market_context_task = self.get_market_context(symbol, timeframes, force_refresh)
+            market_context_task = self.get_market_context(symbols, timeframes, force_refresh)
             account_context_task = self.get_account_context(account_id, force_refresh)
-            recent_trades_task = self.get_recent_trades(account_id, symbol)
 
-            market_context, account_context, recent_trades = await asyncio.gather(
+            # Get recent trades for all symbols
+            recent_trades_tasks = [self.get_recent_trades(account_id, symbol) for symbol in symbols]
+
+            # Execute all tasks concurrently
+            results = await asyncio.gather(
                 market_context_task,
                 account_context_task,
-                recent_trades_task,
+                *recent_trades_tasks,
                 return_exceptions=True,
             )
+
+            # Extract results
+            market_context = results[0]
+            account_context = results[1]
+            recent_trades_results = results[2:]
 
             # Check for exceptions
             if isinstance(market_context, Exception):
                 raise market_context
             if isinstance(account_context, Exception):
                 raise account_context
-            if isinstance(recent_trades, Exception):
-                logger.warning(f"Failed to get recent trades: {recent_trades}")
-                recent_trades = []
 
-            # Validate context
-            validation_result = self._validate_context(market_context, account_context)
-            if not validation_result["is_valid"]:
-                logger.warning(f"Context validation warnings: {validation_result['warnings']}")
-                if validation_result["missing_data"]:
-                    raise InsufficientMarketDataError(
-                        f"Missing data: {validation_result['missing_data']}"
+            # Process recent trades results
+            recent_trades_by_symbol = {}
+            for i, symbol in enumerate(symbols):
+                if isinstance(recent_trades_results[i], Exception):
+                    logger.warning(
+                        f"Failed to get recent trades for {symbol}: {recent_trades_results[i]}"
                     )
-                if validation_result["stale_data"]:
-                    raise StaleDataError(f"Stale data: {validation_result['stale_data']}")
+                    recent_trades_by_symbol[symbol] = []
+                else:
+                    recent_trades_by_symbol[symbol] = recent_trades_results[i]
 
-            # Calculate risk metrics
-            risk_metrics = self._calculate_risk_metrics(account_context, market_context)
+            # Validate context (using first asset's data for basic validation)
+            first_asset_data = (
+                next(iter(market_context.assets.values())) if market_context.assets else None
+            )
+            if first_asset_data:
+                validation_result = self._validate_context(first_asset_data, account_context)
+                if not validation_result["is_valid"]:
+                    logger.warning(f"Context validation warnings: {validation_result['warnings']}")
+                    if validation_result["missing_data"]:
+                        raise InsufficientMarketDataError(
+                            f"Missing data: {validation_result['missing_data']}"
+                        )
+                    if validation_result["stale_data"]:
+                        raise StaleDataError(f"Stale data: {validation_result['stale_data']}")
+
+            # Calculate risk metrics (using aggregated market data)
+            risk_metrics = self._calculate_portfolio_risk_metrics(account_context, market_context)
 
             context = TradingContext(
-                symbol=symbol,
+                symbols=symbols,
                 account_id=account_id,
                 timeframes=timeframes,
                 market_data=market_context,
                 account_state=account_context,
-                recent_trades=recent_trades,
+                recent_trades=recent_trades_by_symbol,
                 risk_metrics=risk_metrics,
                 timestamp=datetime.now(timezone.utc),
             )
 
-            logger.info(
-                f"Successfully built trading context for {symbol} (data age: {validation_result['data_age_seconds'] / 60:.1f}min)"
-            )
+            logger.info(f"Successfully built multi-asset trading context for {len(symbols)} assets")
             return context
 
         except Exception as e:
-            logger.error(f"Failed to build trading context for {symbol}: {e}")
+            logger.error(f"Failed to build multi-asset trading context: {e}")
             raise ContextBuilderError(f"Context building failed: {str(e)}") from e
 
     async def get_market_context(
         self,
-        symbol: str,
+        symbols: List[str],
         timeframes: List[str],
         force_refresh: bool = False,
         db_session: AsyncSession = None,
     ) -> MarketContext:
-        """Build market context with price data and technical indicators for multiple timeframes."""
+        """Build multi-asset market context with price data and technical indicators for multiple timeframes.
+
+        Args:
+            symbols: List of trading pair symbols
+            timeframes: List of two timeframes to analyze
+            force_refresh: Force refresh of cached data
+            db_session: Optional database session
+
+        Returns:
+            MarketContext with AssetMarketData for each symbol
+        """
         if len(timeframes) != 2:
             raise ValueError("get_market_context expects exactly two timeframes.")
-
-        cache_key = f"market_context_{symbol}_{'-'.join(timeframes)}"
-        if not force_refresh and cache_key in self._cache:
-            cached_time, cached_data = self._cache[cache_key]
-            if (datetime.now(timezone.utc) - cached_time).total_seconds() < self._cache_ttl_seconds:
-                logger.debug(f"Using cached market context for {symbol}")
-                return cached_data
 
         db = db_session or self._db_session
         if db is None:
@@ -420,113 +476,161 @@ class ContextBuilderService:
         # Primary timeframe (for price, volume, etc.) is the shorter one
         primary_timeframe, long_timeframe = timeframes
 
-        async def _get_indicator_set(timeframe: str) -> TechnicalIndicatorsSet:
-            market_data = await self.market_data_service.get_latest_market_data(
-                db, symbol, timeframe, self.DEFAULT_PRICE_HISTORY_LIMIT
-            )
-            if not market_data or len(market_data) < self.MIN_CANDLES_FOR_INDICATORS:
-                # Try to sync market data from the API first
-                try:
-                    logger.info(
-                        f"Attempting to sync market data for {symbol} ({timeframe}) due to insufficient data"
-                    )
-                    await self.market_data_service.sync_market_data(db, symbol, timeframe)
-                    # Try getting data again after sync
-                    market_data = await self.market_data_service.get_latest_market_data(
-                        db, symbol, timeframe, self.DEFAULT_PRICE_HISTORY_LIMIT
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to sync market data for {symbol} ({timeframe}): {e}")
+        async def _get_asset_market_data(symbol: str) -> AssetMarketData:
+            """Get market data for a single asset."""
+            cache_key = f"market_context_{symbol}_{'-'.join(timeframes)}"
+            if not force_refresh and cache_key in self._cache:
+                cached_time, cached_data = self._cache[cache_key]
+                if (
+                    datetime.now(timezone.utc) - cached_time
+                ).total_seconds() < self._cache_ttl_seconds:
+                    logger.debug(f"Using cached market context for {symbol}")
+                    return cached_data
 
-                # Check again after potential sync
-                if not market_data or len(market_data) < self.MIN_CANDLES_FOR_INDICATORS:
-                    logger.warning(
-                        f"Insufficient data for TA on {symbol} ({timeframe}): {len(market_data) if market_data else 0} candles"
-                    )
-                    return self._create_partial_indicators(market_data or [])
-            try:
-                market_data.sort(key=lambda x: x.time)
-                ta_indicators = self.technical_analysis_service.calculate_all_indicators(
-                    market_data
+            async def _get_indicator_set(timeframe: str) -> TechnicalIndicatorsSet:
+                market_data = await self.market_data_service.get_latest_market_data(
+                    db, symbol, timeframe, self.DEFAULT_PRICE_HISTORY_LIMIT
                 )
-                return self._convert_technical_indicators(ta_indicators)
-            except TAInsufficientDataError as e:
-                logger.warning(f"TA InsufficientDataError for {symbol} ({timeframe}): {e}")
-                return self._create_partial_indicators(market_data)
-            except Exception as e:
-                logger.error(f"Failed to calculate indicators for {symbol} ({timeframe}): {e}")
-                return TechnicalIndicatorsSet()
+                if not market_data or len(market_data) < self.MIN_CANDLES_FOR_INDICATORS:
+                    # Try to sync market data from the API first
+                    try:
+                        logger.info(
+                            f"Attempting to sync market data for {symbol} ({timeframe}) due to insufficient data"
+                        )
+                        await self.market_data_service.sync_market_data(db, symbol, timeframe)
+                        # Try getting data again after sync
+                        market_data = await self.market_data_service.get_latest_market_data(
+                            db, symbol, timeframe, self.DEFAULT_PRICE_HISTORY_LIMIT
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to sync market data for {symbol} ({timeframe}): {e}"
+                        )
 
-        # Fetch indicators for both timeframes concurrently
-        interval_indicators, long_interval_indicators = await asyncio.gather(
-            _get_indicator_set(primary_timeframe),
-            _get_indicator_set(long_timeframe),
-        )
+                    # Check again after potential sync
+                    if not market_data or len(market_data) < self.MIN_CANDLES_FOR_INDICATORS:
+                        logger.warning(
+                            f"Insufficient data for TA on {symbol} ({timeframe}): {len(market_data) if market_data else 0} candles"
+                        )
+                        return self._create_partial_indicators(market_data or [])
+                try:
+                    market_data.sort(key=lambda x: x.time)
+                    ta_indicators = self.technical_analysis_service.calculate_all_indicators(
+                        market_data
+                    )
+                    return self._convert_technical_indicators(ta_indicators)
+                except TAInsufficientDataError as e:
+                    logger.warning(f"TA InsufficientDataError for {symbol} ({timeframe}): {e}")
+                    return self._create_partial_indicators(market_data)
+                except Exception as e:
+                    logger.error(f"Failed to calculate indicators for {symbol} ({timeframe}): {e}")
+                    return TechnicalIndicatorsSet()
 
-        technical_indicators = TechnicalIndicators(
-            interval=interval_indicators,
-            long_interval=long_interval_indicators,
-        )
+            # Fetch indicators for both timeframes concurrently
+            interval_indicators, long_interval_indicators = await asyncio.gather(
+                _get_indicator_set(primary_timeframe),
+                _get_indicator_set(long_timeframe),
+            )
 
-        # Get primary market data for main context fields
-        primary_market_data = await self.market_data_service.get_latest_market_data(
-            db, symbol, primary_timeframe, self.DEFAULT_PRICE_HISTORY_LIMIT
-        )
-        if not primary_market_data or len(primary_market_data) < 10:
-            raise InsufficientMarketDataError(f"Insufficient primary market data for {symbol}")
+            technical_indicators = TechnicalIndicators(
+                interval=interval_indicators,
+                long_interval=long_interval_indicators,
+            )
 
-        primary_market_data.sort(key=lambda x: x.time)
-        latest_candle = primary_market_data[-1]
-        current_price = latest_candle.close
-        price_24h_ago = (
-            primary_market_data[-24].close
-            if len(primary_market_data) >= 24
-            else primary_market_data[0].close
-        )
-        price_change_24h = ((current_price - price_24h_ago) / price_24h_ago) * 100
-        volume_24h = (
-            sum(c.volume for c in primary_market_data[-24:])
-            if len(primary_market_data) >= 24
-            else latest_candle.volume
-        )
+            # Get primary market data for main context fields
+            primary_market_data = await self.market_data_service.get_latest_market_data(
+                db, symbol, primary_timeframe, self.DEFAULT_PRICE_HISTORY_LIMIT
+            )
+            if not primary_market_data or len(primary_market_data) < 10:
+                raise InsufficientMarketDataError(f"Insufficient primary market data for {symbol}")
 
-        # Calculate volatility
-        volatility = 0.0
-        if len(primary_market_data) >= 20:
-            returns = [
-                (primary_market_data[-i].close - primary_market_data[-i - 1].close)
-                / primary_market_data[-i - 1].close
-                for i in range(1, min(21, len(primary_market_data)))
+            primary_market_data.sort(key=lambda x: x.time)
+            latest_candle = primary_market_data[-1]
+            current_price = latest_candle.close
+            price_24h_ago = (
+                primary_market_data[-24].close
+                if len(primary_market_data) >= 24
+                else primary_market_data[0].close
+            )
+            price_change_24h = ((current_price - price_24h_ago) / price_24h_ago) * 100
+            volume_24h = (
+                sum(c.volume for c in primary_market_data[-24:])
+                if len(primary_market_data) >= 24
+                else latest_candle.volume
+            )
+
+            # Calculate volatility
+            volatility = 0.0
+            if len(primary_market_data) >= 20:
+                returns = [
+                    (primary_market_data[-i].close - primary_market_data[-i - 1].close)
+                    / primary_market_data[-i - 1].close
+                    for i in range(1, min(21, len(primary_market_data)))
+                ]
+                if len(returns) > 1:
+                    volatility = stdev(returns) * 100
+
+            price_history = [
+                PricePoint(timestamp=c.time, price=c.close, volume=c.volume)
+                for c in primary_market_data[-50:]
             ]
-            if len(returns) > 1:
-                volatility = stdev(returns) * 100
 
-        price_history = [
-            PricePoint(timestamp=c.time, price=c.close, volume=c.volume)
-            for c in primary_market_data[-50:]
-        ]
+            funding_rate = next(
+                (
+                    float(c.funding_rate)
+                    for c in reversed(primary_market_data)
+                    if hasattr(c, "funding_rate") and c.funding_rate is not None
+                ),
+                None,
+            )
 
-        funding_rate = next(
-            (
-                float(c.funding_rate)
-                for c in reversed(primary_market_data)
-                if hasattr(c, "funding_rate") and c.funding_rate is not None
-            ),
-            None,
+            asset_market_data = AssetMarketData(
+                symbol=symbol,
+                current_price=current_price,
+                price_change_24h=price_change_24h,
+                volume_24h=volume_24h,
+                funding_rate=funding_rate,
+                open_interest=None,  # TODO
+                price_history=price_history,
+                volatility=volatility,
+                technical_indicators=technical_indicators,
+            )
+
+            self._cache[cache_key] = (datetime.now(timezone.utc), asset_market_data)
+            return asset_market_data
+
+        # Fetch market data for all symbols concurrently
+        asset_data_results = await asyncio.gather(
+            *[_get_asset_market_data(symbol) for symbol in symbols], return_exceptions=True
         )
+
+        # Process results and build assets dictionary
+        assets = {}
+        failed_symbols = []
+        for i, symbol in enumerate(symbols):
+            if isinstance(asset_data_results[i], Exception):
+                logger.error(f"Failed to get market data for {symbol}: {asset_data_results[i]}")
+                failed_symbols.append(symbol)
+            else:
+                assets[symbol] = asset_data_results[i]
+
+        if not assets:
+            raise InsufficientMarketDataError(
+                f"Failed to get market data for all symbols: {symbols}"
+            )
+
+        if failed_symbols:
+            logger.warning(f"Partial market data failure for symbols: {failed_symbols}")
+
+        # Determine overall market sentiment based on price changes
+        market_sentiment = self._calculate_market_sentiment(assets)
 
         market_context = MarketContext(
-            current_price=current_price,
-            price_change_24h=price_change_24h,
-            volume_24h=volume_24h,
-            funding_rate=funding_rate,
-            open_interest=None,  # TODO
-            price_history=price_history,
-            volatility=volatility,
-            technical_indicators=technical_indicators,
+            assets=assets,
+            market_sentiment=market_sentiment,
+            timestamp=datetime.now(timezone.utc),
         )
 
-        self._cache[cache_key] = (datetime.now(timezone.utc), market_context)
         return market_context
 
     async def get_account_context(

@@ -6,6 +6,7 @@ error handling, and A/B testing functionality.
 """
 
 import json
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -67,7 +68,9 @@ class TestLLMService:
 
     @pytest.fixture
     def sample_trading_context(self):
-        """Create a sample trading context."""
+        """Create a sample multi-asset trading context."""
+        from app.schemas.trading_decision import AssetMarketData
+
         indicators = TechnicalIndicators(
             interval=TechnicalIndicatorsSet(
                 ema_20=[48000.0],
@@ -93,7 +96,9 @@ class TestLLMService:
             ),
         )
 
-        market_context = MarketContext(
+        # Create AssetMarketData for BTCUSDT
+        btc_asset_data = AssetMarketData(
+            symbol="BTCUSDT",
             current_price=48000.0,
             price_change_24h=1000.0,
             volume_24h=1000000.0,
@@ -102,6 +107,13 @@ class TestLLMService:
             volatility=0.02,
             technical_indicators=indicators,
             price_history=[],
+        )
+
+        # Create multi-asset MarketContext
+        market_context = MarketContext(
+            assets={"BTCUSDT": btc_asset_data},
+            market_sentiment="bullish",
+            timestamp=datetime.now(timezone.utc),
         )
 
         risk_params = StrategyRiskParameters(
@@ -150,12 +162,14 @@ class TestLLMService:
         )
 
         return TradingContext(
-            symbol="BTCUSDT",
+            symbols=["BTCUSDT"],
             account_id=1,
             timeframes=["4h", "1d"],
             market_data=market_context,
             account_state=account_context,
+            recent_trades={"BTCUSDT": []},
             risk_metrics=risk_metrics,
+            timestamp=datetime.now(timezone.utc),
         )
 
     def test_service_initialization(self, llm_service):
@@ -280,17 +294,25 @@ class TestLLMService:
     async def test_generate_trading_decision_success(
         self, llm_service, mock_openai_client, sample_trading_context
     ):
-        """Test successful trading decision generation."""
+        """Test successful multi-asset trading decision generation."""
+        # Multi-asset decision JSON structure
         decision_json = {
-            "asset": "BTCUSDT",
-            "action": "buy",
-            "allocation_usd": 1000.0,
-            "tp_price": 50000.0,
-            "sl_price": 46000.0,
-            "exit_plan": "Take profit at resistance",
-            "rationale": "Strong bullish momentum with good risk/reward",
-            "confidence": 85,
-            "risk_level": "medium",
+            "decisions": [
+                {
+                    "asset": "BTCUSDT",
+                    "action": "buy",
+                    "allocation_usd": 1000.0,
+                    "tp_price": 50000.0,
+                    "sl_price": 46000.0,
+                    "exit_plan": "Take profit at resistance",
+                    "rationale": "Strong bullish momentum with good risk/reward",
+                    "confidence": 85,
+                    "risk_level": "medium",
+                }
+            ],
+            "portfolio_rationale": "Overall bullish market conditions favor long positions",
+            "total_allocation_usd": 1000.0,
+            "portfolio_risk_level": "medium",
         }
 
         mock_openai_client.chat.completions.create.return_value.choices[
@@ -299,7 +321,10 @@ class TestLLMService:
 
         llm_service._client = mock_openai_client
         with patch.object(llm_service.metrics_tracker, "record_api_call"):
-            result = await llm_service.generate_trading_decision("BTCUSDT", sample_trading_context)
+            # Updated to pass list of symbols
+            result = await llm_service.generate_trading_decision(
+                ["BTCUSDT"], sample_trading_context
+            )
 
             assert isinstance(result, DecisionResult)
             assert result.validation_passed is True
@@ -308,68 +333,79 @@ class TestLLMService:
             assert result.model_used == llm_service.model
 
             decision = result.decision
-            assert decision.asset == "BTCUSDT"
-            assert decision.action == "buy"
-            assert decision.allocation_usd == 1000.0
-            assert decision.confidence == 85
+            # Now decision is a TradingDecision with decisions list
+            assert len(decision.decisions) == 1
+            assert decision.decisions[0].asset == "BTCUSDT"
+            assert decision.decisions[0].action == "buy"
+            assert decision.decisions[0].allocation_usd == 1000.0
+            assert decision.decisions[0].confidence == 85
+            assert decision.portfolio_rationale is not None
+            assert decision.total_allocation_usd == 1000.0
 
     @pytest.mark.asyncio
     async def test_generate_trading_decision_insufficient_context(
         self, llm_service, sample_trading_context
     ):
-        """Test decision generation with insufficient context."""
-        # Make context insufficient
-        sample_trading_context.market_data.current_price = None
+        """Test multi-asset decision generation with insufficient context."""
+        # Make context insufficient - remove asset data
+        sample_trading_context.market_data.assets = {}
 
-        result = await llm_service.generate_trading_decision("BTCUSDT", sample_trading_context)
+        result = await llm_service.generate_trading_decision(["BTCUSDT"], sample_trading_context)
 
         assert isinstance(result, DecisionResult)
         assert result.validation_passed is False
         assert len(result.validation_errors) > 0
         assert "Insufficient context" in result.validation_errors[0]
 
-        # Should return fallback decision
-        assert result.decision.action == "hold"
-        assert result.decision.allocation_usd == 0.0
+        # Should return fallback decision with hold actions
+        assert len(result.decision.decisions) > 0
+        assert result.decision.decisions[0].action == "hold"
+        assert result.decision.decisions[0].allocation_usd == 0.0
 
     @pytest.mark.asyncio
     async def test_generate_trading_decision_api_failure(
         self, llm_service, mock_openai_client, sample_trading_context
     ):
-        """Test decision generation with API failure."""
+        """Test multi-asset decision generation with API failure."""
         mock_openai_client.chat.completions.create.side_effect = Exception("API Error")
 
         llm_service._client = mock_openai_client
         with patch.object(llm_service.metrics_tracker, "record_api_call"):
-            result = await llm_service.generate_trading_decision("BTCUSDT", sample_trading_context)
+            result = await llm_service.generate_trading_decision(
+                ["BTCUSDT"], sample_trading_context
+            )
 
             assert isinstance(result, DecisionResult)
             assert result.validation_passed is False
             assert len(result.validation_errors) > 0
 
-            # Should return fallback decision
-            assert result.decision.action == "hold"
-            assert result.decision.confidence == 0
+            # Should return fallback decision with hold actions
+            assert len(result.decision.decisions) > 0
+            assert result.decision.decisions[0].action == "hold"
+            assert result.decision.decisions[0].confidence == 0
 
     @pytest.mark.asyncio
     async def test_generate_trading_decision_invalid_json(
         self, llm_service, mock_openai_client, sample_trading_context
     ):
-        """Test decision generation with invalid JSON response."""
+        """Test multi-asset decision generation with invalid JSON response."""
         mock_openai_client.chat.completions.create.return_value.choices[
             0
         ].message.content = "Invalid JSON response"
 
         llm_service._client = mock_openai_client
         with patch.object(llm_service.metrics_tracker, "record_api_call"):
-            result = await llm_service.generate_trading_decision("BTCUSDT", sample_trading_context)
+            result = await llm_service.generate_trading_decision(
+                ["BTCUSDT"], sample_trading_context
+            )
 
             assert isinstance(result, DecisionResult)
             assert result.validation_passed is False
             assert len(result.validation_errors) > 0
 
-            # Should return fallback decision
-            assert result.decision.action == "hold"
+            # Should return fallback decision with hold actions
+            assert len(result.decision.decisions) > 0
+            assert result.decision.decisions[0].action == "hold"
 
     @pytest.mark.asyncio
     async def test_switch_model_success(self, llm_service, mock_openai_client):
@@ -487,15 +523,22 @@ class TestLLMService:
     async def test_generate_decision_with_ab_test(
         self, llm_service, mock_openai_client, sample_trading_context
     ):
-        """Test decision generation with A/B testing."""
+        """Test multi-asset decision generation with A/B testing."""
         decision_json = {
-            "asset": "BTCUSDT",
-            "action": "buy",
-            "allocation_usd": 1000.0,
-            "exit_plan": "Test exit plan",
-            "rationale": "Test rationale",
-            "confidence": 85,
-            "risk_level": "medium",
+            "decisions": [
+                {
+                    "asset": "BTCUSDT",
+                    "action": "buy",
+                    "allocation_usd": 1000.0,
+                    "exit_plan": "Test exit plan",
+                    "rationale": "Test rationale",
+                    "confidence": 85,
+                    "risk_level": "medium",
+                }
+            ],
+            "portfolio_rationale": "Test portfolio rationale",
+            "total_allocation_usd": 1000.0,
+            "portfolio_risk_level": "medium",
         }
 
         mock_openai_client.chat.completions.create.return_value.choices[
@@ -507,108 +550,143 @@ class TestLLMService:
             with patch.object(llm_service.ab_test_manager, "record_decision_performance"):
                 with patch.object(llm_service.metrics_tracker, "record_api_call"):
                     result = await llm_service.generate_trading_decision(
-                        "BTCUSDT", sample_trading_context, ab_test_name="test1"
+                        ["BTCUSDT"], sample_trading_context, ab_test_name="test1"
                     )
 
                     assert isinstance(result, DecisionResult)
                     assert result.validation_passed is True
 
     def test_validate_context(self, llm_service, sample_trading_context):
-        """Test context validation."""
-        # Valid context
+        """Test multi-asset context validation."""
+        # Valid context should pass
         assert llm_service._validate_context(sample_trading_context) is True
 
-        # Invalid context - missing current price
-        sample_trading_context.market_data.current_price = None
+        # Invalid balance should fail
+        sample_trading_context.account_state.balance_usd = 0
         assert llm_service._validate_context(sample_trading_context) is False
 
-        # Invalid context - zero balance
-        sample_trading_context.market_data.current_price = 48000.0
-        sample_trading_context.account_state.balance_usd = 0.0
+        # Reset balance
+        sample_trading_context.account_state.balance_usd = 10000.0
+
+        # Invalid available balance should fail
+        sample_trading_context.account_state.available_balance = 0
         assert llm_service._validate_context(sample_trading_context) is False
 
-    def test_build_decision_prompt(self, llm_service, sample_trading_context):
-        """Test decision prompt building."""
-        prompt = llm_service._build_decision_prompt("BTCUSDT", sample_trading_context)
+        # Reset available balance
+        sample_trading_context.account_state.available_balance = 8000.0
 
+        # Empty assets should fail
+        sample_trading_context.market_data.assets = {}
+        assert llm_service._validate_context(sample_trading_context) is False
+
+    def test_build_multi_asset_decision_prompt(self, llm_service, sample_trading_context):
+        """Test multi-asset decision prompt building."""
+        # Use only symbols that exist in the sample context
+        symbols = ["BTCUSDT"]
+        prompt = llm_service._build_multi_asset_decision_prompt(symbols, sample_trading_context)
+
+        # Check that prompt contains the symbol
         assert "BTCUSDT" in prompt
-        assert "48000.00" in prompt
-        assert "Conservative trading prompt" in prompt
-        assert "Primary Interval" in prompt
-        assert "Long-Term Interval" in prompt
 
-    def test_build_decision_prompt_with_strategy_override(
+        # Check that prompt contains key sections
+        assert "MULTI-ASSET PORTFOLIO ANALYSIS" in prompt
+        assert "MARKET DATA FOR ALL ASSETS" in prompt
+        assert "ACCOUNT INFO" in prompt
+        assert "RISK METRICS" in prompt
+        assert "STRATEGY PARAMETERS" in prompt
+
+        # Check that prompt contains account info
+        assert "Balance:" in prompt
+        assert "Available:" in prompt
+
+        # Check that prompt contains portfolio-level instructions
+        assert "portfolio" in prompt.lower()
+
+        # Check that prompt mentions the number of assets
+        assert "1 perpetual futures" in prompt
+
+    def test_build_multi_asset_decision_prompt_with_strategy_override(
         self, llm_service, sample_trading_context
     ):
-        """Test decision prompt building with strategy override."""
-        with patch.object(
-            llm_service, "_get_strategy_template", return_value="Aggressive strategy for trading"
-        ):
-            prompt = llm_service._build_decision_prompt(
-                "BTCUSDT", sample_trading_context, "aggressive"
-            )
+        """Test multi-asset decision prompt building with strategy override."""
+        symbols = ["BTCUSDT"]
+        prompt = llm_service._build_multi_asset_decision_prompt(
+            symbols, sample_trading_context, strategy_override="conservative"
+        )
 
-            assert "Aggressive strategy for trading" in prompt
+        # Check that prompt was generated
+        assert len(prompt) > 0
+        assert "BTCUSDT" in prompt
 
-    def test_parse_decision_response_valid_json(self, llm_service):
-        """Test parsing valid JSON decision response."""
+    def test_parse_multi_asset_decision_response_valid_json(self, llm_service):
+        """Test parsing valid multi-asset JSON decision response."""
         decision_json = {
-            "asset": "BTCUSDT",
-            "action": "buy",
-            "allocation_usd": 1000.0,
-            "exit_plan": "Take profit at resistance",
-            "rationale": "Strong momentum",
-            "confidence": 85,
-            "risk_level": "medium",
+            "decisions": [
+                {
+                    "asset": "BTCUSDT",
+                    "action": "buy",
+                    "allocation_usd": 1000.0,
+                    "exit_plan": "Take profit at resistance",
+                    "rationale": "Strong momentum",
+                    "confidence": 85,
+                    "risk_level": "medium",
+                }
+            ],
+            "portfolio_rationale": "Overall bullish market conditions",
+            "total_allocation_usd": 1000.0,
+            "portfolio_risk_level": "medium",
         }
 
         response_data = {"content": json.dumps(decision_json)}
 
-        decision = llm_service._parse_decision_response(response_data, "BTCUSDT")
+        decision = llm_service._parse_multi_asset_decision_response(response_data, ["BTCUSDT"])
 
         assert isinstance(decision, TradingDecision)
-        assert decision.asset == "BTCUSDT"
-        assert decision.action == "buy"
-        assert decision.allocation_usd == 1000.0
-        assert decision.confidence == 85
+        assert len(decision.decisions) == 1
+        assert decision.decisions[0].asset == "BTCUSDT"
+        assert decision.decisions[0].action == "buy"
+        assert decision.decisions[0].allocation_usd == 1000.0
+        assert decision.decisions[0].confidence == 85
+        assert decision.portfolio_rationale is not None
+        assert decision.total_allocation_usd == 1000.0
 
-    def test_parse_decision_response_invalid_json(self, llm_service):
+    def test_parse_multi_asset_decision_response_invalid_json(self, llm_service):
         """Test parsing invalid JSON decision response."""
         response_data = {"content": "This is not valid JSON"}
 
         with pytest.raises(ValidationError, match="No valid JSON found"):
-            llm_service._parse_decision_response(response_data, "BTCUSDT")
+            llm_service._parse_multi_asset_decision_response(response_data, ["BTCUSDT"])
 
-    def test_parse_decision_response_missing_asset(self, llm_service):
-        """Test parsing decision response with missing asset field."""
+    def test_parse_multi_asset_decision_response_missing_decisions(self, llm_service):
+        """Test parsing decision response with missing decisions field."""
         decision_json = {
-            "action": "buy",
-            "allocation_usd": 1000.0,
-            "exit_plan": "Take profit at resistance",
-            "rationale": "Strong momentum",
-            "confidence": 85,
-            "risk_level": "medium",
+            "portfolio_rationale": "Test rationale",
+            "total_allocation_usd": 1000.0,
+            "portfolio_risk_level": "medium",
         }
 
         response_data = {"content": json.dumps(decision_json)}
 
-        decision = llm_service._parse_decision_response(response_data, "BTCUSDT")
-
-        assert decision.asset == "BTCUSDT"  # Should be filled from symbol parameter
+        # Should raise validation error for missing decisions
+        with pytest.raises(ValidationError):
+            llm_service._parse_multi_asset_decision_response(response_data, ["BTCUSDT"])
 
     def test_extract_json_from_text(self, llm_service):
-        """Test extracting JSON from text response."""
+        """Test extracting multi-asset JSON from text response."""
         text_with_json = """
         Here is my analysis:
-        {"asset": "BTCUSDT", "action": "buy", "allocation_usd": 1000.0, "exit_plan": "test", "rationale": "test", "confidence": 85, "risk_level": "medium"}
+        {"decisions": [{"asset": "BTCUSDT", "action": "buy", "allocation_usd": 1000.0, "exit_plan": "test", "rationale": "test", "confidence": 85, "risk_level": "medium"}], "portfolio_rationale": "test", "total_allocation_usd": 1000.0, "portfolio_risk_level": "medium"}
         That's my recommendation.
         """
 
         result = llm_service._extract_json_from_text(text_with_json)
 
-        assert result["asset"] == "BTCUSDT"
-        assert result["action"] == "buy"
-        assert result["allocation_usd"] == 1000.0
+        assert "decisions" in result
+        assert len(result["decisions"]) == 1
+        assert result["decisions"][0]["asset"] == "BTCUSDT"
+        assert result["decisions"][0]["action"] == "buy"
+        assert result["decisions"][0]["allocation_usd"] == 1000.0
+        assert result["portfolio_rationale"] == "test"
 
     def test_extract_json_from_text_no_json(self, llm_service):
         """Test extracting JSON from text with no valid JSON."""
@@ -617,17 +695,21 @@ class TestLLMService:
         with pytest.raises(ValidationError, match="No valid JSON found"):
             llm_service._extract_json_from_text(text_without_json)
 
-    def test_create_fallback_decision(self, llm_service):
-        """Test creating fallback decision."""
-        fallback = llm_service._create_fallback_decision("BTCUSDT")
+    def test_create_multi_asset_fallback_decision(self, llm_service):
+        """Test creating multi-asset fallback decision."""
+        fallback = llm_service._create_multi_asset_fallback_decision(["BTCUSDT", "ETHUSDT"])
 
         assert isinstance(fallback, TradingDecision)
-        assert fallback.asset == "BTCUSDT"
-        assert fallback.action == "hold"
-        assert fallback.allocation_usd == 0.0
-        assert fallback.confidence == 0
-        assert fallback.risk_level == "low"
-        assert "analysis failed" in fallback.rationale.lower()
+        assert len(fallback.decisions) == 2
+        assert fallback.decisions[0].asset == "BTCUSDT"
+        assert fallback.decisions[0].action == "hold"
+        assert fallback.decisions[0].allocation_usd == 0.0
+        assert fallback.decisions[0].confidence == 0
+        assert fallback.decisions[0].risk_level == "low"
+        assert "analysis failed" in fallback.decisions[0].rationale.lower()
+        assert fallback.decisions[1].asset == "ETHUSDT"
+        assert fallback.total_allocation_usd == 0.0
+        assert fallback.portfolio_risk_level == "low"
 
     def test_get_strategy_template(self, llm_service):
         """Test getting strategy templates."""

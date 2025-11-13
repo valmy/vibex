@@ -41,10 +41,15 @@ async def db_session():
         pytest.skip(f"Database not available: {e}")
 
 
-def create_mock_context():
-    """Create a mock trading context for testing."""
+def create_mock_context(symbols=None):
+    """Create a mock trading context for testing.
+
+    Args:
+        symbols: List of symbols to include in context. Defaults to ["BTCUSDT"]
+    """
     from app.schemas.trading_decision import (
         AccountContext,
+        AssetMarketData,
         MarketContext,
         PerformanceMetrics,
         RiskMetrics,
@@ -54,6 +59,9 @@ def create_mock_context():
         TradingContext,
         TradingStrategy,
     )
+
+    if symbols is None:
+        symbols = ["BTCUSDT"]
 
     # Create mock technical indicators
     indicators = TechnicalIndicators(
@@ -81,16 +89,28 @@ def create_mock_context():
         ),
     )
 
-    # Create mock market context
+    # Create asset market data for each symbol
+    assets = {}
+    base_prices = {"BTCUSDT": 48000.0, "ETHUSDT": 3200.0, "SOLUSDT": 120.0}
+
+    for symbol in symbols:
+        base_price = base_prices.get(symbol, 50000.0)
+        assets[symbol] = AssetMarketData(
+            symbol=symbol,
+            current_price=base_price,
+            price_change_24h=base_price * 0.02,  # 2% change
+            volume_24h=1000000.0,
+            funding_rate=0.01,
+            open_interest=50000000.0,
+            volatility=0.02,
+            technical_indicators=indicators,
+            price_history=[],
+        )
+
+    # Create mock market context with multi-asset support
     market_context = MarketContext(
-        current_price=48000.0,
-        price_change_24h=1000.0,
-        volume_24h=1000000.0,
-        funding_rate=0.01,
-        open_interest=50000000.0,
-        volatility=0.02,
-        technical_indicators=indicators,
-        price_history=[],
+        assets=assets,
+        market_sentiment="neutral",
     )
 
     # Create mock strategy
@@ -145,38 +165,52 @@ def create_mock_context():
         concentration_risk=25.0,
     )
 
-    # Create mock trading context
+    # Create mock trading context with multi-asset support
     return TradingContext(
-        symbol="BTCUSDT",
+        symbols=symbols,
         account_id=1,
         timeframes=["5m", "4h"],
         market_data=market_context,
         account_state=account_context,
         risk_metrics=risk_metrics,
+        recent_trades={symbol: [] for symbol in symbols},
     )
 
 
 @pytest.fixture
 def mock_llm_service():
     """Create a mock LLM service for testing."""
-    from app.schemas.trading_decision import DecisionResult, TradingDecision
+    from app.schemas.trading_decision import (
+        AssetDecision,
+        DecisionResult,
+        TradingDecision,
+    )
     from app.services.llm.llm_service import LLMService
 
     mock_service = AsyncMock(spec=LLMService)
 
-    # Mock successful decision generation
+    # Mock successful multi-asset decision generation
+    asset_decisions = [
+        AssetDecision(
+            asset="BTCUSDT",
+            action="buy",
+            allocation_usd=1000.0,
+            tp_price=50000.0,
+            sl_price=46000.0,
+            exit_plan="Take profit at resistance",
+            rationale="Strong bullish momentum with good technical indicators",
+            confidence=85,
+            risk_level="medium",
+            position_adjustment=None,
+            order_adjustment=None,
+        )
+    ]
+
     mock_decision = TradingDecision(
-        asset="BTCUSDT",
-        action="buy",
-        allocation_usd=1000.0,
-        tp_price=50000.0,
-        sl_price=46000.0,
-        exit_plan="Take profit at resistance",
-        rationale="Strong bullish momentum with good technical indicators",
-        confidence=85,
-        risk_level="medium",
-        position_adjustment=None,
-        order_adjustment=None,
+        decisions=asset_decisions,
+        portfolio_rationale="Focus on BTC with strong momentum",
+        total_allocation_usd=1000.0,
+        portfolio_risk_level="medium",
     )
 
     # Create mock context
@@ -202,7 +236,11 @@ def mock_context_builder():
 
     mock_builder = AsyncMock(spec=ContextBuilderService)
 
-    # Create mock trading context
+    # Create mock trading context (single asset by default)
     mock_context = create_mock_context()
     mock_builder.build_trading_context.return_value = mock_context
+
+    # Also mock get_market_context for multi-asset tests
+    mock_builder.get_market_context.return_value = mock_context.market_data
+
     return mock_builder

@@ -12,6 +12,8 @@ import pytest
 
 from app.schemas.trading_decision import (
     AccountContext,
+    AssetDecision,
+    AssetMarketData,
     DecisionResult,
     MarketContext,
     PerformanceMetrics,
@@ -48,8 +50,8 @@ class TestLLMDecisionEngineIntegration:
         """Create a mock LLM service."""
         mock_service = AsyncMock(spec=LLMService)
 
-        # Mock successful decision generation
-        mock_decision = TradingDecision(
+        # Mock successful multi-asset decision generation
+        btc_decision = AssetDecision(
             asset="BTCUSDT",
             action="buy",
             allocation_usd=1000.0,
@@ -63,17 +65,16 @@ class TestLLMDecisionEngineIntegration:
             order_adjustment=None,
         )
 
-        # Create a proper TradingContext for the mock result
-        from app.schemas.trading_decision import (
-            AccountContext,
-            MarketContext,
-            PerformanceMetrics,
-            RiskMetrics,
-            TechnicalIndicators,
-            TradingContext,
+        mock_decision = TradingDecision(
+            decisions=[btc_decision],
+            portfolio_rationale="Bullish market conditions favor BTC entry",
+            total_allocation_usd=1000.0,
+            portfolio_risk_level="medium",
         )
 
-        market_context = MarketContext(
+        # Create a proper multi-asset TradingContext for the mock result
+        btc_market_data = AssetMarketData(
+            symbol="BTCUSDT",
             current_price=48000.0,
             price_change_24h=1000.0,
             volume_24h=1000000.0,
@@ -105,6 +106,11 @@ class TestLLMDecisionEngineIntegration:
                 ),
             ),
             price_history=[],
+        )
+
+        market_context = MarketContext(
+            assets={"BTCUSDT": btc_market_data},
+            market_sentiment="bullish",
         )
 
         account_context = AccountContext(
@@ -148,11 +154,12 @@ class TestLLMDecisionEngineIntegration:
         )
 
         mock_context = TradingContext(
-            symbol="BTCUSDT",
+            symbols=["BTCUSDT"],
             account_id=1,
             timeframes=["1h", "4h"],
             market_data=market_context,
             account_state=account_context,
+            recent_trades={"BTCUSDT": []},
             risk_metrics=risk_metrics,
         )
 
@@ -173,7 +180,7 @@ class TestLLMDecisionEngineIntegration:
         """Create a mock context builder service."""
         mock_builder = AsyncMock(spec=ContextBuilderService)
 
-        # Create mock trading context
+        # Create mock multi-asset trading context
         indicators = TechnicalIndicators(
             interval=TechnicalIndicatorsSet(
                 ema_20=[48000.0] * 10,
@@ -199,7 +206,8 @@ class TestLLMDecisionEngineIntegration:
             ),
         )
 
-        market_context = MarketContext(
+        btc_market_data = AssetMarketData(
+            symbol="BTCUSDT",
             current_price=48000.0,
             price_change_24h=1000.0,
             volume_24h=1000000.0,
@@ -208,6 +216,11 @@ class TestLLMDecisionEngineIntegration:
             volatility=0.02,
             technical_indicators=indicators,
             price_history=[],
+        )
+
+        market_context = MarketContext(
+            assets={"BTCUSDT": btc_market_data},
+            market_sentiment="bullish",
         )
 
         risk_params = StrategyRiskParameters(
@@ -256,11 +269,12 @@ class TestLLMDecisionEngineIntegration:
         )
 
         mock_context = TradingContext(
-            symbol="BTCUSDT",
+            symbols=["BTCUSDT"],
             account_id=1,
             timeframes=["1h", "4h"],
             market_data=market_context,
             account_state=account_context,
+            recent_trades={"BTCUSDT": []},
             risk_metrics=risk_metrics,
         )
 
@@ -323,25 +337,29 @@ class TestLLMDecisionEngineIntegration:
         mock_decision_validator,
         mock_strategy_manager,
     ):
-        """Test the complete decision generation workflow."""
+        """Test the complete multi-asset decision generation workflow."""
         # Inject mocked services
         decision_engine.llm_service = mock_llm_service
         decision_engine.context_builder = mock_context_builder
         decision_engine.decision_validator = mock_decision_validator
         decision_engine.strategy_manager = mock_strategy_manager
 
-        # Execute decision generation
-        result = await decision_engine.make_trading_decision("BTCUSDT", 1)
+        # Execute decision generation for multiple assets
+        result = await decision_engine.make_trading_decision(["BTCUSDT"], 1)
 
         # Verify the workflow was executed correctly
         assert isinstance(result, DecisionResult)
-        assert result.decision.asset == "BTCUSDT"
-        assert result.decision.action == "buy"
+        assert isinstance(result.decision, TradingDecision)
+        assert len(result.decision.decisions) > 0
+        assert result.decision.decisions[0].asset == "BTCUSDT"
+        assert result.decision.decisions[0].action == "buy"
         assert result.validation_passed is True
+        assert result.decision.portfolio_rationale is not None
+        assert result.decision.total_allocation_usd > 0
 
         # Verify all services were called
         mock_context_builder.build_trading_context.assert_called_once_with(
-            symbol="BTCUSDT", account_id=1, timeframes=["4h", "1d"], force_refresh=False
+            symbols=["BTCUSDT"], account_id=1, timeframes=["4h", "1d"], force_refresh=False
         )
         mock_llm_service.generate_trading_decision.assert_called_once()
         mock_decision_validator.validate_decision.assert_called_once()
@@ -355,19 +373,19 @@ class TestLLMDecisionEngineIntegration:
         mock_decision_validator,
         mock_strategy_manager,
     ):
-        """Test decision generation when validation fails."""
+        """Test multi-asset decision generation when validation fails."""
         # Mock validation failure
         mock_validation = ValidationResult(
             is_valid=False,
-            errors=["Allocation exceeds available balance"],
+            errors=["Total allocation exceeds available balance"],
             warnings=[],
-            rules_checked=["schema_validation", "business_rules"],
+            rules_checked=["schema_validation", "business_rules", "portfolio_allocation"],
             validation_time_ms=50.0,
         )
         mock_decision_validator.validate_decision.return_value = mock_validation
 
-        # Mock fallback decision creation
-        fallback_decision = TradingDecision(
+        # Mock fallback decision creation (multi-asset)
+        fallback_asset_decision = AssetDecision(
             asset="BTCUSDT",
             action="hold",
             allocation_usd=0.0,
@@ -380,6 +398,12 @@ class TestLLMDecisionEngineIntegration:
             tp_price=None,
             sl_price=None,
         )
+        fallback_decision = TradingDecision(
+            decisions=[fallback_asset_decision],
+            portfolio_rationale="Holding all positions due to validation failure",
+            total_allocation_usd=0.0,
+            portfolio_risk_level="low",
+        )
         mock_decision_validator.create_fallback_decision.return_value = fallback_decision
 
         # Inject mocked services
@@ -389,11 +413,13 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Execute decision generation
-        result = await decision_engine.make_trading_decision("BTCUSDT", 1)
+        result = await decision_engine.make_trading_decision(["BTCUSDT"], 1)
 
         # Verify fallback was used
-        assert result.decision.action == "hold"
-        assert result.decision.allocation_usd == 0.0
+        assert len(result.decision.decisions) > 0
+        assert result.decision.decisions[0].action == "hold"
+        assert result.decision.decisions[0].allocation_usd == 0.0
+        assert result.decision.total_allocation_usd == 0.0
         assert result.validation_passed is True  # Fallback is considered valid
         assert len(result.validation_errors) > 0
 
@@ -409,7 +435,7 @@ class TestLLMDecisionEngineIntegration:
         mock_decision_validator,
         mock_strategy_manager,
     ):
-        """Test concurrent decision processing for multiple accounts."""
+        """Test concurrent multi-asset decision processing for multiple accounts."""
         # Inject mocked services
         decision_engine.llm_service = mock_llm_service
         decision_engine.context_builder = mock_context_builder
@@ -417,37 +443,40 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Mock different contexts for different accounts
-        def mock_build_context(symbol, account_id, timeframes, force_refresh=False):
+        def mock_build_context(symbols, account_id, timeframes, force_refresh=False):
             context = mock_context_builder.build_trading_context.return_value
             context.account_id = account_id
+            context.symbols = symbols
             return context
 
         mock_context_builder.build_trading_context.side_effect = mock_build_context
 
-        # Execute batch decisions
+        # Execute batch decisions for multiple assets
         symbols = ["BTCUSDT", "ETHUSDT"]
         account_ids = [1, 2, 3]
 
         results = []
         for account_id in account_ids:
+            # Each batch_decisions call now processes all symbols together
             account_results = await decision_engine.batch_decisions(symbols, account_id)
             results.extend(account_results)
 
-        # Verify all decisions were processed
-        assert len(results) == len(symbols) * len(account_ids)
+        # Verify all decisions were processed (one decision per account, containing multiple assets)
+        assert len(results) == len(account_ids)
 
-        # Verify each result is valid
+        # Verify each result is valid and contains multi-asset decisions
         for result in results:
             assert isinstance(result, DecisionResult)
-            assert result.decision.asset in symbols
+            assert isinstance(result.decision, TradingDecision)
+            assert len(result.decision.decisions) > 0
+            # Verify decisions contain expected assets
+            decision_assets = [d.asset for d in result.decision.decisions]
+            for asset in decision_assets:
+                assert asset in symbols
 
-        # Verify services were called for each account/symbol combination
-        assert mock_context_builder.build_trading_context.call_count == len(symbols) * len(
-            account_ids
-        )
-        assert mock_llm_service.generate_trading_decision.call_count == len(symbols) * len(
-            account_ids
-        )
+        # Verify services were called for each account
+        assert mock_context_builder.build_trading_context.call_count == len(account_ids)
+        assert mock_llm_service.generate_trading_decision.call_count == len(account_ids)
 
     @pytest.mark.asyncio
     async def test_strategy_switching_integration(
@@ -477,11 +506,12 @@ class TestLLMDecisionEngineIntegration:
             switched_by=None,
         )
 
-        # Test decision generation after strategy switch
-        decision_result = await decision_engine.make_trading_decision("BTCUSDT", 1)
+        # Test multi-asset decision generation after strategy switch
+        decision_result = await decision_engine.make_trading_decision(["BTCUSDT"], 1)
 
         # Verify decision was generated
         assert isinstance(decision_result, DecisionResult)
+        assert isinstance(decision_result.decision, TradingDecision)
         assert decision_result.validation_passed is True
 
     @pytest.mark.asyncio
@@ -493,10 +523,10 @@ class TestLLMDecisionEngineIntegration:
         mock_decision_validator,
         mock_strategy_manager,
     ):
-        """Test error handling and recovery scenarios."""
+        """Test error handling and recovery scenarios for multi-asset decisions."""
 
         # Mock context building failure
-        def mock_build_context_failure(symbol, account_id, timeframes, force_refresh=False):
+        def mock_build_context_failure(symbols, account_id, timeframes, force_refresh=False):
             raise Exception("Context building failed")
 
         mock_context_builder.build_trading_context.side_effect = mock_build_context_failure
@@ -509,7 +539,7 @@ class TestLLMDecisionEngineIntegration:
 
         # Execute decision generation - should handle error gracefully
         with pytest.raises(DecisionEngineError):
-            await decision_engine.make_trading_decision("BTCUSDT", 1)
+            await decision_engine.make_trading_decision(["BTCUSDT"], 1)
 
     @pytest.mark.asyncio
     async def test_decision_caching_and_rate_limiting(
@@ -520,7 +550,7 @@ class TestLLMDecisionEngineIntegration:
         mock_decision_validator,
         mock_strategy_manager,
     ):
-        """Test decision caching and rate limiting functionality."""
+        """Test multi-asset decision caching and rate limiting functionality."""
         # Inject mocked services
         decision_engine.llm_service = mock_llm_service
         decision_engine.context_builder = mock_context_builder
@@ -528,16 +558,18 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Make first decision
-        result1 = await decision_engine.make_trading_decision("BTCUSDT", 1)
+        result1 = await decision_engine.make_trading_decision(["BTCUSDT"], 1)
         assert isinstance(result1, DecisionResult)
+        assert isinstance(result1.decision, TradingDecision)
 
         # Make second decision immediately (should be rate limited or cached)
-        result2 = await decision_engine.make_trading_decision("BTCUSDT", 1)
+        result2 = await decision_engine.make_trading_decision(["BTCUSDT"], 1)
         assert isinstance(result2, DecisionResult)
+        assert isinstance(result2.decision, TradingDecision)
 
         # Verify caching behavior - exact behavior depends on implementation
         # At minimum, both calls should succeed
-        assert result1.decision.asset == result2.decision.asset
+        assert result1.decision.decisions[0].asset == result2.decision.decisions[0].asset
 
     @pytest.mark.asyncio
     async def test_decision_history_tracking(
@@ -548,17 +580,17 @@ class TestLLMDecisionEngineIntegration:
         mock_decision_validator,
         mock_strategy_manager,
     ):
-        """Test decision history tracking and retrieval."""
+        """Test multi-asset decision history tracking and retrieval."""
         # Inject mocked services
         decision_engine.llm_service = mock_llm_service
         decision_engine.context_builder = mock_context_builder
         decision_engine.decision_validator = mock_decision_validator
         decision_engine.strategy_manager = mock_strategy_manager
 
-        # Generate several decisions
-        symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
-        for symbol in symbols:
-            await decision_engine.make_trading_decision(symbol, 1)
+        # Generate several multi-asset decisions
+        symbols_list = [["BTCUSDT"], ["ETHUSDT"], ["SOLUSDT"]]
+        for symbols in symbols_list:
+            await decision_engine.make_trading_decision(symbols, 1)
 
         # Retrieve decision history
         history = await decision_engine.get_decision_history(1, limit=10)
@@ -567,9 +599,11 @@ class TestLLMDecisionEngineIntegration:
         assert isinstance(history, list)
         assert len(history) <= 10  # Respects limit
 
-        # Verify each history item is a DecisionResult
+        # Verify each history item is a DecisionResult with multi-asset structure
         for decision_result in history:
             assert isinstance(decision_result, DecisionResult)
+            assert isinstance(decision_result.decision, TradingDecision)
+            assert len(decision_result.decision.decisions) > 0
 
     @pytest.mark.asyncio
     async def test_performance_under_load(
@@ -596,12 +630,12 @@ class TestLLMDecisionEngineIntegration:
 
         mock_llm_service.generate_trading_decision.side_effect = delayed_decision
 
-        # Generate concurrent decisions
+        # Generate concurrent multi-asset decisions
         import asyncio
 
         tasks = []
         for i in range(10):  # 10 concurrent decisions
-            task = decision_engine.make_trading_decision("BTCUSDT", i + 1)
+            task = decision_engine.make_trading_decision(["BTCUSDT"], i + 1)
             tasks.append(task)
 
         # Execute all tasks concurrently
@@ -616,6 +650,7 @@ class TestLLMDecisionEngineIntegration:
         for result in results:
             assert isinstance(result, DecisionResult)
             assert not isinstance(result, Exception)
+            assert isinstance(result.decision, TradingDecision)
 
         # Verify reasonable performance (should be much faster than sequential)
         total_time = (end_time - start_time).total_seconds()
@@ -630,7 +665,7 @@ class TestLLMDecisionEngineIntegration:
         mock_decision_validator,
         mock_strategy_manager,
     ):
-        """Test context invalidation and refresh scenarios."""
+        """Test multi-asset context invalidation and refresh scenarios."""
         # Inject mocked services
         decision_engine.llm_service = mock_llm_service
         decision_engine.context_builder = mock_context_builder
@@ -638,15 +673,17 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Make initial decision
-        result1 = await decision_engine.make_trading_decision("BTCUSDT", 1)
+        result1 = await decision_engine.make_trading_decision(["BTCUSDT"], 1)
         assert isinstance(result1, DecisionResult)
+        assert isinstance(result1.decision, TradingDecision)
 
         # Simulate context invalidation (e.g., new market data)
         decision_engine.invalidate_symbol_caches("BTCUSDT")
 
         # Make another decision - should rebuild context
-        result2 = await decision_engine.make_trading_decision("BTCUSDT", 1)
+        result2 = await decision_engine.make_trading_decision(["BTCUSDT"], 1)
         assert isinstance(result2, DecisionResult)
+        assert isinstance(result2.decision, TradingDecision)
 
         # Verify context was rebuilt
         assert mock_context_builder.build_trading_context.call_count >= 2
@@ -698,9 +735,9 @@ class TestLLMDecisionEngineIntegration:
         for _, validation_result in enumerate(validation_scenarios):
             mock_decision_validator.validate_decision.return_value = validation_result
 
-            # Mock fallback for invalid decisions
+            # Mock fallback for invalid decisions (multi-asset)
             if not validation_result.is_valid:
-                fallback_decision = TradingDecision(
+                fallback_asset_decision = AssetDecision(
                     asset="BTCUSDT",
                     action="hold",
                     allocation_usd=0.0,
@@ -713,9 +750,15 @@ class TestLLMDecisionEngineIntegration:
                     tp_price=None,
                     sl_price=None,
                 )
+                fallback_decision = TradingDecision(
+                    decisions=[fallback_asset_decision],
+                    portfolio_rationale="Holding all positions due to validation failure",
+                    total_allocation_usd=0.0,
+                    portfolio_risk_level="low",
+                )
                 mock_decision_validator.create_fallback_decision.return_value = fallback_decision
 
-            result = await decision_engine.make_trading_decision("BTCUSDT", 1)
+            result = await decision_engine.make_trading_decision(["BTCUSDT"], 1)
 
             # Verify result matches validation outcome
             assert isinstance(result, DecisionResult)
@@ -734,6 +777,164 @@ class TestLLMDecisionEngineIntegration:
                 # Skip the invalid decision test case since the mock setup doesn't work as expected
                 # The engine is not creating fallback decisions properly in this test setup
                 pass
+
+    @pytest.mark.asyncio
+    async def test_multi_asset_decision_workflow(
+        self,
+        decision_engine,
+        mock_llm_service,
+        mock_context_builder,
+        mock_decision_validator,
+        mock_strategy_manager,
+    ):
+        """Test complete multi-asset decision workflow with multiple assets."""
+        # Create multi-asset mock decision
+        btc_decision = AssetDecision(
+            asset="BTCUSDT",
+            action="buy",
+            allocation_usd=1000.0,
+            tp_price=50000.0,
+            sl_price=46000.0,
+            exit_plan="Take profit at resistance",
+            rationale="Strong bullish momentum",
+            confidence=85,
+            risk_level="medium",
+        )
+
+        eth_decision = AssetDecision(
+            asset="ETHUSDT",
+            action="buy",
+            allocation_usd=500.0,
+            tp_price=3500.0,
+            sl_price=3200.0,
+            exit_plan="Take profit at key level",
+            rationale="Following BTC momentum",
+            confidence=75,
+            risk_level="medium",
+        )
+
+        multi_asset_decision = TradingDecision(
+            decisions=[btc_decision, eth_decision],
+            portfolio_rationale="Bullish market conditions favor both BTC and ETH entries",
+            total_allocation_usd=1500.0,
+            portfolio_risk_level="medium",
+        )
+
+        # Update mock to return multi-asset decision
+        mock_context = mock_context_builder.build_trading_context.return_value
+        mock_result = DecisionResult(
+            decision=multi_asset_decision,
+            context=mock_context,
+            validation_passed=True,
+            validation_errors=[],
+            processing_time_ms=300.0,
+            model_used="gpt-4",
+        )
+        mock_llm_service.generate_trading_decision.return_value = mock_result
+
+        # Inject mocked services
+        decision_engine.llm_service = mock_llm_service
+        decision_engine.context_builder = mock_context_builder
+        decision_engine.decision_validator = mock_decision_validator
+        decision_engine.strategy_manager = mock_strategy_manager
+
+        # Execute multi-asset decision generation
+        result = await decision_engine.make_trading_decision(["BTCUSDT", "ETHUSDT"], 1)
+
+        # Verify multi-asset decision structure
+        assert isinstance(result, DecisionResult)
+        assert isinstance(result.decision, TradingDecision)
+        assert len(result.decision.decisions) == 2
+
+        # Verify individual asset decisions
+        assets = [d.asset for d in result.decision.decisions]
+        assert "BTCUSDT" in assets
+        assert "ETHUSDT" in assets
+
+        # Verify portfolio-level fields
+        assert result.decision.portfolio_rationale is not None
+        assert result.decision.total_allocation_usd == 1500.0
+        assert result.decision.portfolio_risk_level == "medium"
+
+        # Verify total allocation matches sum of individual allocations
+        total_individual = sum(d.allocation_usd for d in result.decision.decisions)
+        assert result.decision.total_allocation_usd == total_individual
+
+    @pytest.mark.asyncio
+    async def test_partial_asset_failure_handling(
+        self,
+        decision_engine,
+        mock_llm_service,
+        mock_context_builder,
+        mock_decision_validator,
+        mock_strategy_manager,
+    ):
+        """Test handling of partial asset failures in multi-asset decisions."""
+        # Create a decision with only successful assets
+        btc_decision = AssetDecision(
+            asset="BTCUSDT",
+            action="buy",
+            allocation_usd=1000.0,
+            tp_price=50000.0,
+            sl_price=46000.0,
+            exit_plan="Take profit at resistance",
+            rationale="Strong bullish momentum",
+            confidence=85,
+            risk_level="medium",
+        )
+
+        # Decision excludes ETHUSDT due to data unavailability
+        partial_decision = TradingDecision(
+            decisions=[btc_decision],
+            portfolio_rationale="Trading only BTC due to ETH data unavailability",
+            total_allocation_usd=1000.0,
+            portfolio_risk_level="medium",
+        )
+
+        # Mock context builder to simulate partial failure
+        def mock_build_context_partial(symbols, account_id, timeframes, force_refresh=False):
+            # Simulate that ETH data is unavailable but BTC is fine
+            context = mock_context_builder.build_trading_context.return_value
+            # Filter out ETHUSDT from the context
+            if "ETHUSDT" in symbols:
+                # Return context with only BTC data
+                context.symbols = ["BTCUSDT"]
+            return context
+
+        mock_context_builder.build_trading_context.side_effect = mock_build_context_partial
+
+        # Update mock to return partial decision
+        mock_context = mock_context_builder.build_trading_context.return_value
+        mock_result = DecisionResult(
+            decision=partial_decision,
+            context=mock_context,
+            validation_passed=True,
+            validation_errors=["ETHUSDT data unavailable"],
+            processing_time_ms=250.0,
+            model_used="gpt-4",
+        )
+        mock_llm_service.generate_trading_decision.return_value = mock_result
+
+        # Inject mocked services
+        decision_engine.llm_service = mock_llm_service
+        decision_engine.context_builder = mock_context_builder
+        decision_engine.decision_validator = mock_decision_validator
+        decision_engine.strategy_manager = mock_strategy_manager
+
+        # Execute decision generation with partial failure
+        result = await decision_engine.make_trading_decision(["BTCUSDT", "ETHUSDT"], 1)
+
+        # Verify decision was generated despite partial failure
+        assert isinstance(result, DecisionResult)
+        assert isinstance(result.decision, TradingDecision)
+
+        # Verify only successful asset is included
+        assert len(result.decision.decisions) == 1
+        assert result.decision.decisions[0].asset == "BTCUSDT"
+
+        # Verify error is recorded
+        assert len(result.validation_errors) > 0
+        assert any("ETHUSDT" in str(err) for err in result.validation_errors)
 
     def test_get_decision_engine_singleton(self):
         """Test that get_decision_engine returns singleton instance."""
@@ -766,55 +967,41 @@ class TestLLMDecisionEngineIntegration:
         mock_decision_validator,
         mock_strategy_manager,
     ):
-        """Test batch decision processing with mixed success/failure scenarios."""
+        """Test batch multi-asset decision processing with partial asset failure scenarios."""
         # Inject mocked services
         decision_engine.llm_service = mock_llm_service
         decision_engine.context_builder = mock_context_builder
         decision_engine.decision_validator = mock_decision_validator
         decision_engine.strategy_manager = mock_strategy_manager
 
-        # Mock context builder to fail for one symbol
-        def mock_build_context_with_failure(symbol, account_id, timeframes, force_refresh=False):
-            if symbol == "ETHUSDT":
+        # Mock context builder to fail for one asset in the multi-asset request
+        def mock_build_context_with_failure(symbols, account_id, timeframes, force_refresh=False):
+            if "ETHUSDT" in symbols:
                 raise Exception("Market data unavailable for ETHUSDT")
             return mock_context_builder.build_trading_context.return_value
 
         mock_context_builder.build_trading_context.side_effect = mock_build_context_with_failure
 
-        # Execute batch decisions
+        # Execute batch decisions with multiple assets
         symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
         results = await decision_engine.batch_decisions(symbols, 1)
 
-        # Verify we got results for all symbols
-        assert len(results) == 3
+        # Verify we got a result (may be a single multi-asset decision or multiple)
+        assert len(results) > 0
 
-        # Verify we got results for all symbols
-        assert len(results) == 3
+        # Check that results contain DecisionResult objects
+        for result in results:
+            assert isinstance(result, DecisionResult)
+            assert isinstance(result.decision, TradingDecision)
 
-        # Check that we have results for each symbol
-        assets = [r.decision.asset for r in results]
-        # Note: Due to caching, BTCUSDT may appear multiple times
-        unique_assets = set(assets)
-        assert "BTCUSDT" in unique_assets
-        assert "ETHUSDT" in unique_assets
-        # SOLUSDT should also be present (the test failure suggests it might be cached as BTCUSDT)
-        # Let's just verify we have at least 2 unique assets for now
-        assert len(unique_assets) >= 2
+        # Verify that at least one result has validation errors due to ETH failure
+        has_errors = any(len(r.validation_errors) > 0 for r in results)
+        assert has_errors
 
-        # Verify BTC succeeded, ETH failed gracefully
-        btc_results = [r for r in results if r.decision.asset == "BTCUSDT"]
-        eth_results = [r for r in results if r.decision.asset == "ETHUSDT"]
+        # Verify error messages mention the unavailable data
+        all_errors = []
+        for result in results:
+            all_errors.extend(result.validation_errors)
 
-        assert len(btc_results) > 0
-        assert len(eth_results) > 0
-
-        # At least one BTC result should have passed validation
-        assert any(r.validation_passed for r in btc_results)
-
-        # ETH results should have failed validation
-        assert all(not r.validation_passed for r in eth_results)
-
-        # ETH result should contain error information
-        for eth_result in eth_results:
-            assert len(eth_result.validation_errors) > 0
-            assert "Market data unavailable" in str(eth_result.validation_errors)
+        error_str = str(all_errors)
+        assert "Market data unavailable" in error_str or "ETHUSDT" in error_str

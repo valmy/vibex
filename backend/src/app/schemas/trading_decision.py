@@ -28,7 +28,7 @@ The old context.py file has been deleted and should not be used.
 """
 
 from datetime import datetime, timezone
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -64,8 +64,8 @@ class OrderAdjustment(BaseModel):
     cancel_sl: bool = Field(default=False, description="Cancel existing stop-loss order")
 
 
-class TradingDecision(BaseModel):
-    """Structured trading decision from LLM."""
+class AssetDecision(BaseModel):
+    """Trading decision for a single asset."""
 
     asset: str = Field(..., description="Trading pair symbol")
     action: Literal["buy", "sell", "hold", "adjust_position", "close_position", "adjust_orders"] = (
@@ -84,7 +84,6 @@ class TradingDecision(BaseModel):
     rationale: str = Field(..., description="Decision reasoning")
     confidence: float = Field(..., ge=0, le=100, description="Confidence score")
     risk_level: Literal["low", "medium", "high"] = Field(..., description="Risk assessment")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
 
     def validate_action_requirements(self) -> List[str]:
         """Validate that required fields are present for specific actions."""
@@ -121,6 +120,76 @@ class TradingDecision(BaseModel):
                 errors.append("Stop-loss price must be higher than current price for sell orders")
 
         return errors
+
+
+class TradingDecision(BaseModel):
+    """Multi-asset structured trading decision from LLM for perpetual futures.
+
+    This schema represents a portfolio-level trading decision that can include
+    decisions for multiple assets simultaneously. The LLM analyzes all configured
+    assets and provides a comprehensive trading strategy across the portfolio.
+    """
+
+    decisions: List[AssetDecision] = Field(..., description="Trading decisions for each asset")
+    portfolio_rationale: str = Field(
+        ..., description="Overall trading strategy and reasoning across assets"
+    )
+    total_allocation_usd: float = Field(..., ge=0, description="Total allocation across all assets")
+    portfolio_risk_level: Literal["low", "medium", "high"] = Field(
+        ..., description="Overall portfolio risk assessment"
+    )
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+    def validate_portfolio_allocation(self) -> List[str]:
+        """Validate that individual allocations sum to total allocation."""
+        errors = []
+
+        individual_sum = sum(decision.allocation_usd for decision in self.decisions)
+
+        # Allow small floating point differences
+        if abs(individual_sum - self.total_allocation_usd) > 0.01:
+            errors.append(
+                f"Individual allocations (${individual_sum:.2f}) do not match "
+                f"total allocation (${self.total_allocation_usd:.2f})"
+            )
+
+        return errors
+
+    def get_decision_for_asset(self, asset: str) -> Optional[AssetDecision]:
+        """Get decision for a specific asset."""
+        for decision in self.decisions:
+            if decision.asset == asset:
+                return decision
+        return None
+
+    def get_active_decisions(self) -> List[AssetDecision]:
+        """Get all non-hold decisions."""
+        return [d for d in self.decisions if d.action != "hold"]
+
+    def validate_all_decisions(self, market_prices: Dict[str, float]) -> List[str]:
+        """Validate all asset decisions against current market prices."""
+        all_errors = []
+
+        # Validate portfolio allocation
+        all_errors.extend(self.validate_portfolio_allocation())
+
+        # Validate each asset decision
+        for decision in self.decisions:
+            # Validate action requirements
+            all_errors.extend(
+                [f"{decision.asset}: {error}" for error in decision.validate_action_requirements()]
+            )
+
+            # Validate price logic if market price available
+            if decision.asset in market_prices:
+                all_errors.extend(
+                    [
+                        f"{decision.asset}: {error}"
+                        for error in decision.validate_price_logic(market_prices[decision.asset])
+                    ]
+                )
+
+        return all_errors
 
 
 class TechnicalIndicatorsSet(BaseModel):
@@ -160,9 +229,10 @@ class PricePoint(BaseModel):
     volume: Optional[float] = Field(None, ge=0)
 
 
-class MarketContext(BaseModel):
-    """Market data context for decisions."""
+class AssetMarketData(BaseModel):
+    """Market data for a single asset."""
 
+    symbol: str = Field(..., description="Trading pair symbol")
     current_price: float = Field(..., gt=0)
     price_change_24h: float
     volume_24h: float = Field(..., ge=0)
@@ -220,6 +290,39 @@ class MarketContext(BaseModel):
             indicators.macd,
         ]
         return sum(1 for ind in required_indicators if ind is not None) >= 3
+
+
+class MarketContext(BaseModel):
+    """Multi-asset market data context for perpetual futures trading decisions.
+
+    Contains market data for all configured assets that the LLM will analyze
+    to make portfolio-level trading decisions.
+    """
+
+    assets: Dict[str, AssetMarketData] = Field(..., description="Market data for each asset symbol")
+    market_sentiment: Optional[str] = Field(
+        None, description="Overall market sentiment (bullish/bearish/neutral)"
+    )
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+    def get_asset_data(self, symbol: str) -> Optional[AssetMarketData]:
+        """Get market data for a specific asset."""
+        return self.assets.get(symbol)
+
+    def validate_all_data_freshness(self, max_age_minutes: int = 5) -> Dict[str, bool]:
+        """Validate data freshness for all assets."""
+        return {
+            symbol: data.validate_data_freshness(max_age_minutes)
+            for symbol, data in self.assets.items()
+        }
+
+    def get_portfolio_trends(self) -> Dict[str, str]:
+        """Get price trends for all assets."""
+        return {symbol: data.get_price_trend() for symbol, data in self.assets.items()}
+
+    def has_sufficient_data(self) -> bool:
+        """Check if all assets have sufficient data."""
+        return all(data.has_sufficient_indicators() for data in self.assets.values())
 
 
 class PositionSummary(BaseModel):
@@ -411,9 +514,9 @@ class RiskMetrics(BaseModel):
 
 
 class TradingContext(BaseModel):
-    """Complete context for trading decisions.
+    """Complete multi-asset context for trading decisions.
 
-    CANONICAL SCHEMA (as of 2025-11-02):
+    CANONICAL SCHEMA (as of 2025-11-02, updated for multi-asset support):
     This is the single source of truth for trading context throughout the system.
     Used by:
     - ContextBuilderService: To build complete trading context
@@ -421,16 +524,20 @@ class TradingContext(BaseModel):
     - DecisionValidator: To validate decisions
     - All API endpoints: For request/response validation
 
-    IMPORTANT: This schema was previously duplicated in app.schemas.context.TradingContext
-    which has been deleted. All code should use this canonical version.
+    MULTI-ASSET SUPPORT:
+    - symbols: List of asset symbols to analyze (e.g., ["BTCUSDT", "ETHUSDT", "SOLUSDT"])
+    - market_data: Contains AssetMarketData for each symbol
+    - recent_trades: Grouped by asset symbol for per-asset trade history
     """
 
-    symbol: str
+    symbols: List[str] = Field(..., description="List of asset symbols to analyze")
     account_id: int
     timeframes: List[str] = Field(..., description="Timeframes used for analysis [primary, long]")
     market_data: MarketContext
     account_state: AccountContext
-    recent_trades: List[TradeHistory] = Field(default_factory=list)
+    recent_trades: Dict[str, List[TradeHistory]] = Field(
+        default_factory=dict, description="Recent trades grouped by asset symbol"
+    )
     risk_metrics: RiskMetrics
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
@@ -438,12 +545,15 @@ class TradingContext(BaseModel):
         """Validate that context has sufficient data for decision making."""
         errors = []
 
-        # Check market data completeness
-        if not self.market_data.has_sufficient_indicators():
-            errors.append("Insufficient technical indicators for analysis")
+        # Check market data completeness for all assets
+        if not self.market_data.has_sufficient_data():
+            errors.append("Insufficient technical indicators for one or more assets")
 
-        if not self.market_data.validate_data_freshness():
-            errors.append("Market data is too old for reliable decisions")
+        # Check data freshness for all assets
+        freshness_results = self.market_data.validate_all_data_freshness()
+        stale_assets = [symbol for symbol, is_fresh in freshness_results.items() if not is_fresh]
+        if stale_assets:
+            errors.append(f"Market data is too old for assets: {', '.join(stale_assets)}")
 
         # Check account state
         if self.account_state.available_balance <= 0:
@@ -456,22 +566,49 @@ class TradingContext(BaseModel):
 
     def get_context_summary(self) -> dict:
         """Get a summary of the trading context for logging."""
+        # Get portfolio trends
+        trends = self.market_data.get_portfolio_trends()
+
+        # Calculate average price change across assets
+        avg_price_change = (
+            sum(asset_data.price_change_24h for asset_data in self.market_data.assets.values())
+            / len(self.market_data.assets)
+            if self.market_data.assets
+            else 0.0
+        )
+
         return {
-            "symbol": self.symbol,
+            "symbols": self.symbols,
             "account_id": self.account_id,
-            "current_price": self.market_data.current_price,
-            "price_change_24h": self.market_data.price_change_24h,
+            "num_assets": len(self.symbols),
+            "avg_price_change_24h": avg_price_change,
+            "portfolio_trends": trends,
             "available_balance": self.account_state.available_balance,
             "open_positions": len(self.account_state.open_positions),
             "strategy": self.account_state.active_strategy.strategy_name,
             "risk_exposure": self.account_state.risk_exposure,
-            "price_trend": self.market_data.get_price_trend(),
-            "data_age_valid": self.market_data.validate_data_freshness(),
+            "market_sentiment": self.market_data.market_sentiment,
         }
 
     def is_ready_for_decision(self) -> bool:
         """Check if context is ready for making trading decisions."""
         return len(self.validate_context_completeness()) == 0
+
+    def get_asset_context(self, symbol: str) -> Optional[Dict]:
+        """Get context data for a specific asset."""
+        asset_data = self.market_data.get_asset_data(symbol)
+        if not asset_data:
+            return None
+
+        return {
+            "symbol": symbol,
+            "current_price": asset_data.current_price,
+            "price_change_24h": asset_data.price_change_24h,
+            "volume_24h": asset_data.volume_24h,
+            "volatility": asset_data.volatility,
+            "trend": asset_data.get_price_trend(),
+            "recent_trades": self.recent_trades.get(symbol, []),
+        }
 
 
 class StrategyPerformance(BaseModel):

@@ -110,11 +110,11 @@ class DecisionValidator:
         self, decision: TradingDecision, context: TradingContext
     ) -> ValidationResult:
         """
-        Validate a trading decision against all validation rules.
+        Validate a multi-asset trading decision against all validation rules.
 
         Args:
-            decision: The trading decision to validate
-            context: The trading context for validation
+            decision: The multi-asset trading decision to validate
+            context: The multi-asset trading context for validation
 
         Returns:
             ValidationResult with validation status and details
@@ -128,22 +128,29 @@ class DecisionValidator:
             # Update metrics
             self.validation_metrics["total_validations"] += 1
 
-            # 1. Schema validation
-            schema_errors = await self._validate_schema(decision)
+            # 1. Schema validation for multi-asset decision
+            schema_errors = await self._validate_multi_asset_schema(decision, context)
             if schema_errors:
                 errors.extend(schema_errors)
-            rules_checked.append("schema_validation")
+            rules_checked.append("multi_asset_schema_validation")
 
-            # 2. Business rule validation
-            business_errors, business_warnings = await self._validate_business_rules(
+            # 2. Portfolio allocation validation
+            portfolio_errors = await self._validate_portfolio_allocation(decision, context)
+            errors.extend(portfolio_errors)
+            rules_checked.append("portfolio_allocation_validation")
+
+            # 3. Business rule validation for each asset
+            business_errors, business_warnings = await self._validate_multi_asset_business_rules(
                 decision, context
             )
             errors.extend(business_errors)
             warnings.extend(business_warnings)
             rules_checked.extend(self.business_rules.keys())
 
-            # 3. Risk management validation
-            risk_errors, risk_warnings = await self._validate_risk_rules(decision, context)
+            # 4. Risk management validation (portfolio-wide)
+            risk_errors, risk_warnings = await self._validate_portfolio_risk_rules(
+                decision, context
+            )
             errors.extend(risk_errors)
             warnings.extend(risk_warnings)
             rules_checked.extend(self.risk_rules.keys())
@@ -178,10 +185,9 @@ class DecisionValidator:
             )
 
             logger.info(
-                "Decision validation completed",
+                "Multi-asset decision validation completed",
                 extra={
-                    "symbol": decision.asset,
-                    "action": decision.action,
+                    "num_assets": len(decision.decisions),
                     "is_valid": result.is_valid,
                     "error_count": len(errors),
                     "warning_count": len(warnings),
@@ -203,12 +209,15 @@ class DecisionValidator:
                 rules_checked=rules_checked,
             )
 
-    async def _validate_schema(self, decision: TradingDecision) -> List[str]:
+    async def _validate_multi_asset_schema(
+        self, decision: TradingDecision, context: TradingContext
+    ) -> List[str]:
         """
-        Validate decision against JSON schema and Pydantic model constraints.
+        Validate multi-asset decision against JSON schema and Pydantic model constraints.
 
         Args:
-            decision: The trading decision to validate
+            decision: The multi-asset trading decision to validate
+            context: The trading context
 
         Returns:
             List of schema validation errors
@@ -216,41 +225,72 @@ class DecisionValidator:
         errors = []
 
         try:
-            # Pydantic validation is already done during model creation
-            # Additional custom schema validations
+            # Validate that we have decisions for all symbols
+            if not decision.decisions:
+                errors.append("schema_error: No asset decisions provided")
+                return errors
 
-            # Validate action-specific requirements
-            action_errors = decision.validate_action_requirements()
-            errors.extend([f"schema_error: {error}" for error in action_errors])
+            # Validate portfolio-level fields
+            if not decision.portfolio_rationale or not decision.portfolio_rationale.strip():
+                errors.append("schema_error: Portfolio rationale is required")
 
-            # Validate field constraints
-            if decision.confidence < 0 or decision.confidence > 100:
-                errors.append("schema_error: Confidence must be between 0 and 100")
+            if decision.total_allocation_usd < 0:
+                errors.append("schema_error: Total allocation cannot be negative")
 
-            if decision.allocation_usd < 0:
-                errors.append("schema_error: Allocation amount cannot be negative")
+            # Validate each asset decision
+            for asset_decision in decision.decisions:
+                # Validate action-specific requirements
+                action_errors = asset_decision.validate_action_requirements()
+                errors.extend(
+                    [f"schema_error ({asset_decision.asset}): {error}" for error in action_errors]
+                )
 
-            # Validate required fields based on action
-            if decision.action in ["buy", "sell"] and not decision.rationale.strip():
-                errors.append("schema_error: Rationale is required for buy/sell actions")
+                # Validate field constraints
+                if asset_decision.confidence < 0 or asset_decision.confidence > 100:
+                    errors.append(
+                        f"schema_error ({asset_decision.asset}): Confidence must be between 0 and 100"
+                    )
 
-            if decision.action in ["buy", "sell"] and not decision.exit_plan.strip():
-                errors.append("schema_error: Exit plan is required for buy/sell actions")
+                if asset_decision.allocation_usd < 0:
+                    errors.append(
+                        f"schema_error ({asset_decision.asset}): Allocation amount cannot be negative"
+                    )
 
-            # Validate position adjustment details
-            if decision.position_adjustment:
-                if decision.position_adjustment.adjustment_amount_usd <= 0:
-                    errors.append("schema_error: Position adjustment amount must be positive")
-
-            # Validate order adjustment details
-            if decision.order_adjustment:
-                if not (
-                    decision.order_adjustment.adjust_tp
-                    or decision.order_adjustment.adjust_sl
-                    or decision.order_adjustment.cancel_tp
-                    or decision.order_adjustment.cancel_sl
+                # Validate required fields based on action
+                if (
+                    asset_decision.action in ["buy", "sell"]
+                    and not asset_decision.rationale.strip()
                 ):
-                    errors.append("schema_error: Order adjustment must specify at least one action")
+                    errors.append(
+                        f"schema_error ({asset_decision.asset}): Rationale is required for buy/sell actions"
+                    )
+
+                if (
+                    asset_decision.action in ["buy", "sell"]
+                    and not asset_decision.exit_plan.strip()
+                ):
+                    errors.append(
+                        f"schema_error ({asset_decision.asset}): Exit plan is required for buy/sell actions"
+                    )
+
+                # Validate position adjustment details
+                if asset_decision.position_adjustment:
+                    if asset_decision.position_adjustment.adjustment_amount_usd <= 0:
+                        errors.append(
+                            f"schema_error ({asset_decision.asset}): Position adjustment amount must be positive"
+                        )
+
+                # Validate order adjustment details
+                if asset_decision.order_adjustment:
+                    if not (
+                        asset_decision.order_adjustment.adjust_tp
+                        or asset_decision.order_adjustment.adjust_sl
+                        or asset_decision.order_adjustment.cancel_tp
+                        or asset_decision.order_adjustment.cancel_sl
+                    ):
+                        errors.append(
+                            f"schema_error ({asset_decision.asset}): Order adjustment must specify at least one action"
+                        )
 
         except ValidationError as e:
             errors.append(f"schema_error: Pydantic validation failed: {str(e)}")
@@ -259,14 +299,43 @@ class DecisionValidator:
 
         return errors
 
-    async def _validate_business_rules(
+    async def _validate_portfolio_allocation(
+        self, decision: TradingDecision, context: TradingContext
+    ) -> List[str]:
+        """
+        Validate that portfolio allocation is consistent and within limits.
+
+        Args:
+            decision: The multi-asset trading decision
+            context: The trading context
+
+        Returns:
+            List of allocation validation errors
+        """
+        errors = []
+
+        # Validate total allocation matches sum of individual allocations
+        allocation_errors = decision.validate_portfolio_allocation()
+        errors.extend([f"portfolio_allocation: {error}" for error in allocation_errors])
+
+        # Validate total allocation against available capital
+        available_balance = context.account_state.available_balance
+        if decision.total_allocation_usd > available_balance:
+            errors.append(
+                f"portfolio_allocation: Total allocation ${decision.total_allocation_usd:.2f} "
+                f"exceeds available balance ${available_balance:.2f}"
+            )
+
+        return errors
+
+    async def _validate_multi_asset_business_rules(
         self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """
-        Validate decision against business rules.
+        Validate multi-asset decision against business rules for each asset.
 
         Args:
-            decision: The trading decision to validate
+            decision: The multi-asset trading decision to validate
             context: The trading context
 
         Returns:
@@ -275,25 +344,70 @@ class DecisionValidator:
         errors = []
         warnings = []
 
-        for rule_name, rule_func in self.business_rules.items():
-            try:
-                rule_errors, rule_warnings = await rule_func(decision, context)
-                errors.extend([f"business_rule: {error}" for error in rule_errors])
-                warnings.extend([f"business_rule: {warning}" for warning in rule_warnings])
-            except Exception as e:
-                logger.error(f"Error in business rule {rule_name}: {str(e)}", exc_info=True)
-                errors.append(f"business_rule: Error validating {rule_name}: {str(e)}")
+        # Validate each asset decision
+        for asset_decision in decision.decisions:
+            # Get market price for this asset
+            asset_data = context.market_data.get_asset_data(asset_decision.asset)
+            if not asset_data:
+                errors.append(f"business_rule ({asset_decision.asset}): No market data available")
+                continue
+
+            current_price = asset_data.current_price
+
+            # Validate price logic
+            price_errors = asset_decision.validate_price_logic(current_price)
+            errors.extend(
+                [f"business_rule ({asset_decision.asset}): {error}" for error in price_errors]
+            )
+
+            # Validate position size
+            max_position_size = context.account_state.max_position_size
+            if (
+                asset_decision.action in ["buy", "sell"]
+                and asset_decision.allocation_usd > max_position_size
+            ):
+                errors.append(
+                    f"business_rule ({asset_decision.asset}): Position size ${asset_decision.allocation_usd:.2f} "
+                    f"exceeds maximum allowed ${max_position_size:.2f}"
+                )
+
+            # Check if trying to adjust/close non-existent position
+            existing_position = context.account_state.get_position_for_symbol(asset_decision.asset)
+            if (
+                asset_decision.action in ["adjust_position", "close_position", "adjust_orders"]
+                and not existing_position
+            ):
+                errors.append(
+                    f"business_rule ({asset_decision.asset}): Cannot {asset_decision.action} - no existing position"
+                )
+
+        # Validate portfolio-level business rules
+        # Check position count limits for new positions
+        new_positions_count = sum(
+            1
+            for d in decision.decisions
+            if d.action in ["buy", "sell"]
+            and not context.account_state.get_position_for_symbol(d.asset)
+        )
+        max_positions = context.account_state.active_strategy.max_positions
+        current_positions = len(context.account_state.open_positions)
+
+        if current_positions + new_positions_count > max_positions:
+            errors.append(
+                f"business_rule: Total positions ({current_positions + new_positions_count}) "
+                f"would exceed maximum ({max_positions})"
+            )
 
         return errors, warnings
 
-    async def _validate_risk_rules(
+    async def _validate_portfolio_risk_rules(
         self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """
-        Validate decision against risk management rules.
+        Validate multi-asset decision against portfolio-wide risk management rules.
 
         Args:
-            decision: The trading decision to validate
+            decision: The multi-asset trading decision to validate
             context: The trading context
 
         Returns:
@@ -302,14 +416,63 @@ class DecisionValidator:
         errors = []
         warnings = []
 
-        for rule_name, rule_func in self.risk_rules.items():
-            try:
-                rule_errors, rule_warnings = await rule_func(decision, context)
-                errors.extend([f"risk_rule: {error}" for error in rule_errors])
-                warnings.extend([f"risk_rule: {warning}" for warning in rule_warnings])
-            except Exception as e:
-                logger.error(f"Error in risk rule {rule_name}: {str(e)}", exc_info=True)
-                errors.append(f"risk_rule: Error validating {rule_name}: {str(e)}")
+        # Validate total portfolio allocation against available capital
+        if not context.account_state.is_within_risk_limits(decision.total_allocation_usd):
+            errors.append("risk_rule: Portfolio allocation would exceed account risk limits")
+
+        # Validate portfolio concentration risk
+        if decision.total_allocation_usd > 0:
+            # Calculate concentration per asset
+            asset_concentrations = {}
+            for asset_decision in decision.decisions:
+                if asset_decision.allocation_usd > 0:
+                    concentration = (
+                        asset_decision.allocation_usd / decision.total_allocation_usd
+                    ) * 100
+                    asset_concentrations[asset_decision.asset] = concentration
+
+            # Check for over-concentration in single asset
+            max_concentration = max(asset_concentrations.values()) if asset_concentrations else 0
+            if max_concentration > 60:
+                errors.append(
+                    f"risk_rule: Single asset concentration ({max_concentration:.1f}%) exceeds safe limit (60%)"
+                )
+            elif max_concentration > 50:
+                warnings.append(
+                    f"risk_rule: High single asset concentration ({max_concentration:.1f}%)"
+                )
+
+        # Validate risk exposure
+        current_exposure = context.account_state.risk_exposure
+        if current_exposure > 80.0:
+            warnings.append(f"risk_rule: High risk exposure: {current_exposure:.1f}% of account")
+        elif current_exposure > 60.0:
+            warnings.append(
+                f"risk_rule: Elevated risk exposure: {current_exposure:.1f}% of account"
+            )
+
+        # Validate portfolio risk level consistency
+        high_risk_count = sum(1 for d in decision.decisions if d.risk_level == "high")
+        if high_risk_count > len(decision.decisions) / 2:
+            warnings.append(
+                f"risk_rule: More than half of decisions ({high_risk_count}/{len(decision.decisions)}) are high risk"
+            )
+
+        # Validate daily loss limits
+        strategy = context.account_state.active_strategy
+        max_daily_loss_pct = strategy.risk_parameters.max_daily_loss
+        balance = context.account_state.balance_usd
+        max_daily_loss = balance * (max_daily_loss_pct / 100)
+
+        current_unrealized_pnl = sum(
+            pos.unrealized_pnl for pos in context.account_state.open_positions
+        )
+
+        if current_unrealized_pnl < -max_daily_loss:
+            warnings.append(
+                f"risk_rule: Current unrealized loss ${abs(current_unrealized_pnl):.2f} "
+                f"approaches daily limit ${max_daily_loss:.2f}"
+            )
 
         return errors, warnings
 
@@ -641,37 +804,49 @@ class DecisionValidator:
         validation_errors: List[str],
     ) -> TradingDecision:
         """
-        Create a conservative fallback decision when validation fails.
+        Create a conservative multi-asset fallback decision when validation fails.
 
         Args:
-            original_decision: The original invalid decision
+            original_decision: The original invalid multi-asset decision
             context: The trading context
             validation_errors: List of validation errors
 
         Returns:
-            Conservative fallback trading decision
+            Conservative fallback multi-asset trading decision
         """
+        from ...schemas.trading_decision import AssetDecision
+
         logger.warning(
-            f"Creating fallback decision for {original_decision.asset}",
+            f"Creating multi-asset fallback decision for {len(original_decision.decisions)} assets",
             extra={
-                "original_action": original_decision.action,
                 "validation_errors": validation_errors,
             },
         )
 
-        # Create conservative fallback decision
+        # Create conservative fallback decisions for all assets
+        fallback_asset_decisions = []
+        for asset_decision in original_decision.decisions:
+            fallback_asset_decisions.append(
+                AssetDecision(
+                    asset=asset_decision.asset,
+                    action="hold",  # Conservative default
+                    allocation_usd=0.0,  # No allocation for hold
+                    tp_price=None,
+                    sl_price=None,
+                    exit_plan="Conservative hold due to validation failures. Monitor market conditions.",
+                    rationale=f"Fallback decision for {asset_decision.asset} due to validation errors",
+                    confidence=25.0,  # Low confidence for fallback
+                    risk_level="low",  # Conservative risk level
+                )
+            )
+
+        # Create portfolio-level fallback decision
         fallback_decision = TradingDecision(
-            asset=original_decision.asset,
-            action="hold",  # Conservative default
-            allocation_usd=0.0,  # No allocation for hold
-            tp_price=None,
-            sl_price=None,
-            exit_plan="Conservative hold due to validation failures. Monitor market conditions.",
-            rationale=f"Fallback decision created due to validation errors: {'; '.join(validation_errors[:3])}",
-            confidence=25.0,  # Low confidence for fallback
-            risk_level="low",  # Conservative risk level
-            position_adjustment=None,
-            order_adjustment=None,
+            decisions=fallback_asset_decisions,
+            portfolio_rationale=f"Portfolio-wide fallback decision created due to validation errors: {'; '.join(validation_errors[:3])}. "
+            "All positions set to hold for safety.",
+            total_allocation_usd=0.0,
+            portfolio_risk_level="low",
             timestamp=datetime.now(timezone.utc),
         )
 
