@@ -84,8 +84,25 @@ class TestDecisionValidator:
             ],
         )
 
+        # Create asset market data for ETHUSDT
+        eth_asset_data = AssetMarketData(
+            symbol="ETHUSDT",
+            current_price=3000.0,
+            price_change_24h=100.0,
+            volume_24h=500000.0,
+            funding_rate=0.012,
+            open_interest=25000000.0,
+            volatility=0.025,
+            technical_indicators=indicators,
+            price_history=[
+                PricePoint(timestamp=datetime.now(timezone.utc), price=2900.0, volume=5000.0),
+                PricePoint(timestamp=datetime.now(timezone.utc), price=2950.0, volume=5000.0),
+                PricePoint(timestamp=datetime.now(timezone.utc), price=3000.0, volume=5000.0),
+            ],
+        )
+
         market_context = MarketContext(
-            assets={"BTCUSDT": btc_asset_data},
+            assets={"BTCUSDT": btc_asset_data, "ETHUSDT": eth_asset_data},
             market_sentiment="neutral",
         )
 
@@ -135,7 +152,7 @@ class TestDecisionValidator:
         )
 
         return TradingContext(
-            symbols=["BTCUSDT"],
+            symbols=["BTCUSDT", "ETHUSDT"],
             account_id=1,
             timeframes=["1h", "4h"],
             market_data=market_context,
@@ -154,17 +171,28 @@ class TestDecisionValidator:
                 AssetDecision(
                     asset="BTCUSDT",
                     action="buy",
-                    allocation_usd=500.0,  # Reduced to avoid risk limit issues
+                    allocation_usd=150.0,  # 3% of 5k, well below 15% limit
                     tp_price=50000.0,
-                    sl_price=46000.0,
-                    exit_plan="Take profit at resistance, stop loss at support",
-                    rationale="Strong bullish momentum with RSI oversold",
+                    sl_price=47000.0,
+                    exit_plan="Take profit at resistance",
+                    rationale="Strong bullish momentum",
                     confidence=85.0,
-                    risk_level="low",  # Changed to low risk
-                )
+                    risk_level="low",
+                ),
+                AssetDecision(
+                    asset="ETHUSDT",
+                    action="buy",
+                    allocation_usd=100.0,  # 2% of 5k
+                    tp_price=3200.0,
+                    sl_price=2900.0,
+                    exit_plan="Take profit at resistance",
+                    rationale="Strong bullish momentum",
+                    confidence=85.0,
+                    risk_level="low",
+                ),
             ],
             portfolio_rationale="Overall bullish market conditions favor long positions",
-            total_allocation_usd=500.0,
+            total_allocation_usd=250.0,
             portfolio_risk_level="low",
         )
 
@@ -173,25 +201,27 @@ class TestDecisionValidator:
         self, validator, valid_buy_decision, sample_trading_context
     ):
         """Test that a valid decision passes all validation checks."""
-        # Add existing positions to reduce concentration risk
-        sample_trading_context.account_state.open_positions = [
-            PositionSummary(
-                symbol="ETHUSDT",
-                side="long",
-                size=500.0,
-                entry_price=3000.0,
-                current_price=3100.0,
-                unrealized_pnl=50.0,
-                percentage_pnl=3.33,
-            ),
-        ]
+        # Clear any existing positions to test the decision in isolation
+        sample_trading_context.account_state.open_positions = []
 
         result = await validator.validate_decision(valid_buy_decision, sample_trading_context)
 
-        assert result.is_valid
+        assert result.is_valid, f"Validation failed with errors: {result.errors}"
         assert len(result.errors) == 0
         assert result.validation_time_ms > 0
-        assert "schema_validation" in result.rules_checked
+        assert "multi_asset_schema_validation" in result.rules_checked
+        assert "portfolio_allocation_validation" in result.rules_checked
+        assert "allocation_validation" in result.rules_checked
+        assert "price_logic_validation" in result.rules_checked
+        assert "position_size_validation" in result.rules_checked
+        assert "leverage_validation" in result.rules_checked
+        assert "action_requirements_validation" in result.rules_checked
+        assert "strategy_specific_validation" in result.rules_checked
+        assert "risk_exposure_validation" in result.rules_checked
+        assert "position_limit_validation" in result.rules_checked
+        assert "daily_loss_validation" in result.rules_checked
+        assert "correlation_validation" in result.rules_checked
+        assert "concentration_validation" in result.rules_checked
 
     @pytest.mark.asyncio
     async def test_schema_validation_catches_invalid_confidence(
@@ -386,7 +416,18 @@ class TestDecisionValidator:
         )
 
         new_position_decision = TradingDecision(
-            decisions=[new_position_asset_decision],
+            decisions=[
+                new_position_asset_decision,
+                AssetDecision(
+                    asset="ETHUSDT",
+                    action="hold",
+                    allocation_usd=0.0,
+                    exit_plan="Wait for confirmation",
+                    rationale="Neutral momentum",
+                    confidence=70.0,
+                    risk_level="low",
+                ),
+            ],
             portfolio_rationale="Test",
             total_allocation_usd=1000.0,
             portfolio_risk_level="medium",
@@ -395,7 +436,7 @@ class TestDecisionValidator:
         result = await validator.validate_decision(new_position_decision, sample_trading_context)
 
         assert not result.is_valid
-        assert any("maximum positions" in error for error in result.errors)
+        assert any("would exceed maximum" in error for error in result.errors)
 
     @pytest.mark.asyncio
     async def test_adjust_position_without_existing_position(
@@ -485,6 +526,15 @@ class TestDecisionValidator:
                 unrealized_pnl=50.0,
                 percentage_pnl=2.86,
             ),
+            PositionSummary(
+                symbol="ETHBTC",
+                side="long",
+                size=10.0,
+                entry_price=0.06,
+                current_price=0.062,
+                unrealized_pnl=200.0,
+                percentage_pnl=3.33,
+            ),
         ]
 
         from app.schemas.trading_decision import AssetDecision
@@ -500,7 +550,18 @@ class TestDecisionValidator:
         )
 
         btc_decision = TradingDecision(
-            decisions=[btc_asset_decision],
+            decisions=[
+                btc_asset_decision,
+                AssetDecision(
+                    asset="ETHUSDT",
+                    action="hold",
+                    allocation_usd=0.0,
+                    exit_plan="Wait for confirmation",
+                    rationale="Neutral momentum",
+                    confidence=70.0,
+                    risk_level="low",
+                ),
+            ],
             portfolio_rationale="Test",
             total_allocation_usd=1000.0,
             portfolio_risk_level="medium",
@@ -509,7 +570,7 @@ class TestDecisionValidator:
         result = await validator.validate_decision(btc_decision, sample_trading_context)
 
         # Should have correlation risk warning
-        assert any("correlation risk" in warning.lower() for warning in result.warnings)
+        assert any("High correlation risk" in warning for warning in result.warnings)
 
     @pytest.mark.asyncio
     async def test_concentration_risk_validation(self, validator, sample_trading_context):
@@ -550,7 +611,7 @@ class TestDecisionValidator:
         """Test comprehensive risk checks."""
         from app.schemas.trading_decision import AssetDecision
 
-        asset_decision = AssetDecision(
+        asset_decision_1 = AssetDecision(
             asset="BTCUSDT",
             action="buy",
             allocation_usd=1000.0,
@@ -560,10 +621,20 @@ class TestDecisionValidator:
             risk_level="high",  # High risk
         )
 
+        asset_decision_2 = AssetDecision(
+            asset="ETHUSDT",
+            action="buy",
+            allocation_usd=500.0,
+            exit_plan="Test",
+            rationale="Test",
+            confidence=40.0,  # Low confidence
+            risk_level="high",  # High risk
+        )
+
         decision = TradingDecision(
-            decisions=[asset_decision],
+            decisions=[asset_decision_1, asset_decision_2],
             portfolio_rationale="Test",
-            total_allocation_usd=1000.0,
+            total_allocation_usd=1500.0,
             portfolio_risk_level="high",
         )
 
@@ -700,7 +771,18 @@ class TestDecisionValidator:
         )
 
         valid_order_adjustment = TradingDecision(
-            decisions=[valid_order_adjustment_asset],
+            decisions=[
+                valid_order_adjustment_asset,
+                AssetDecision(
+                    asset="ETHUSDT",
+                    action="hold",
+                    allocation_usd=0.0,
+                    exit_plan="Wait for confirmation",
+                    rationale="Neutral momentum",
+                    confidence=70.0,
+                    risk_level="low",
+                ),
+            ],
             portfolio_rationale="Adjust orders",
             total_allocation_usd=0.0,
             portfolio_risk_level="low",
@@ -708,7 +790,7 @@ class TestDecisionValidator:
 
         result = await validator.validate_decision(valid_order_adjustment, sample_trading_context)
 
-        assert result.is_valid
+        assert result.is_valid, f"Validation failed with errors: {result.errors}"
 
     @pytest.mark.asyncio
     async def test_strategy_specific_validation(self, validator, sample_trading_context):
@@ -727,7 +809,18 @@ class TestDecisionValidator:
         )
 
         excessive_risk_decision = TradingDecision(
-            decisions=[excessive_risk_asset_decision],
+            decisions=[
+                excessive_risk_asset_decision,
+                AssetDecision(
+                    asset="ETHUSDT",
+                    action="hold",
+                    allocation_usd=0.0,
+                    exit_plan="Wait for confirmation",
+                    rationale="Neutral momentum",
+                    confidence=70.0,
+                    risk_level="low",
+                ),
+            ],
             portfolio_rationale="Test",
             total_allocation_usd=2000.0,
             portfolio_risk_level="medium",
@@ -736,7 +829,7 @@ class TestDecisionValidator:
         result = await validator.validate_decision(excessive_risk_decision, sample_trading_context)
 
         assert not result.is_valid
-        assert any("strategy limit" in error for error in result.errors)
+        assert any("exceeds strategy limit" in error for error in result.errors)
 
     @pytest.mark.asyncio
     async def test_hold_action_validation(self, validator, sample_trading_context):
@@ -835,7 +928,7 @@ class TestDecisionValidator:
             asset="BTCUSDT",
             action="buy",
             allocation_usd=1000.0,
-            tp_price=48500.0,  # Small profit target
+            tp_price=48100.0,  # Very small profit target
             sl_price=46000.0,  # Large stop loss
             exit_plan="Test",
             rationale="Test",
@@ -844,7 +937,18 @@ class TestDecisionValidator:
         )
 
         poor_ratio_decision = TradingDecision(
-            decisions=[poor_ratio_asset_decision],
+            decisions=[
+                poor_ratio_asset_decision,
+                AssetDecision(
+                    asset="ETHUSDT",
+                    action="hold",
+                    allocation_usd=0.0,
+                    exit_plan="Wait for confirmation",
+                    rationale="Neutral momentum",
+                    confidence=70.0,
+                    risk_level="low",
+                ),
+            ],
             portfolio_rationale="Test",
             total_allocation_usd=1000.0,
             portfolio_risk_level="medium",
@@ -853,7 +957,7 @@ class TestDecisionValidator:
         result = await validator.validate_decision(poor_ratio_decision, sample_trading_context)
 
         # Should have warning about poor risk/reward ratio
-        assert any("risk/reward ratio" in warning.lower() for warning in result.warnings)
+        assert any("less than 1:1" in warning for warning in result.warnings)
 
     @pytest.mark.asyncio
     async def test_large_allocation_warning(self, validator, sample_trading_context):
@@ -863,7 +967,7 @@ class TestDecisionValidator:
         large_allocation_asset_decision = AssetDecision(
             asset="BTCUSDT",
             action="buy",
-            allocation_usd=5000.0,  # More than 50% of available balance
+            allocation_usd=7000.0,  # More than 50% of available balance
             exit_plan="Test",
             rationale="Test",
             confidence=70.0,
@@ -871,9 +975,20 @@ class TestDecisionValidator:
         )
 
         large_allocation_decision = TradingDecision(
-            decisions=[large_allocation_asset_decision],
+            decisions=[
+                large_allocation_asset_decision,
+                AssetDecision(
+                    asset="ETHUSDT",
+                    action="hold",
+                    allocation_usd=0.0,
+                    exit_plan="Wait for confirmation",
+                    rationale="Neutral momentum",
+                    confidence=70.0,
+                    risk_level="low",
+                ),
+            ],
             portfolio_rationale="Test",
-            total_allocation_usd=5000.0,
+            total_allocation_usd=7000.0,
             portfolio_risk_level="medium",
         )
 
@@ -882,4 +997,4 @@ class TestDecisionValidator:
         )
 
         # Should have warning about large allocation
-        assert any("large allocation" in warning.lower() for warning in result.warnings)
+        assert any("more than 50% of available balance" in warning for warning in result.warnings)
