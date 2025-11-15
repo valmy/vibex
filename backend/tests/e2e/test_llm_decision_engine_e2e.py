@@ -99,14 +99,22 @@ class TestLLMDecisionEngineE2E:
         # The method is async
         async def mock_generate_decision(*args, **kwargs):
             context = kwargs.get("context")
-            mock_decision = TradingDecision(
+            # Create a multi-asset decision
+            from app.schemas.trading_decision import AssetDecision
+
+            asset_decision = AssetDecision(
                 asset="BTCUSDT",
                 action="buy",
                 confidence=75.0,
                 risk_level="medium",
-                rationale="Mocked rationale.",
-                allocation_usd=0,
+                rationale="Mocked rationale for BTCUSDT.",
+                allocation_usd=1000,
                 exit_plan="Mocked exit plan.",
+            )
+            mock_decision = TradingDecision(
+                decisions=[asset_decision],
+                portfolio_rationale="Mocked portfolio rationale.",
+                total_allocation_usd=1000,
             )
             # Use model_construct to bypass validation for the mock
             mock_result = DecisionResult.model_construct(
@@ -456,7 +464,10 @@ class TestLLMDecisionEngineE2E:
             )
 
             # Create market context (no symbol field in new schema)
-            MarketContext(
+            from app.schemas.trading_decision import AssetMarketData
+
+            asset_market_data = AssetMarketData(
+                symbol="BTCUSDT",
                 current_price=50000.0,
                 price_change_24h=500.0,
                 volume_24h=1000000.0,
@@ -472,6 +483,11 @@ class TestLLMDecisionEngineE2E:
                 ],
                 volatility=1.5,
                 technical_indicators=technical_indicators,
+            )
+
+            multi_asset_market_context = MarketContext(
+                assets={"BTCUSDT": asset_market_data},
+                market_sentiment="neutral",
             )
 
             # Create a default trading strategy
@@ -843,8 +859,11 @@ class TestLLMDecisionEngineE2E:
 
                 # Update mock context with scenario-specific data
                 mock_context = mock_context_builder.build_trading_context.return_value
-                mock_context.market_data.technical_indicators = indicators_result
-                mock_context.market_data.current_price = market_data[-1].close
+                # The technical_indicators are now part of the AssetMarketData
+                mock_context.market_data.assets[
+                    "BTCUSDT"
+                ].technical_indicators = indicators_result
+                mock_context.market_data.assets["BTCUSDT"].current_price = market_data[-1].close
 
                 # Setup decision engine with mocks
                 decision_engine.context_builder = mock_context_builder
