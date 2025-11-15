@@ -409,7 +409,7 @@ class TestContextBuilderIntegration:
             context_builder,
             "get_market_context",
             new_callable=AsyncMock,
-            return_value=mock_market_context,
+            return_value=(mock_market_context, []),
         ):
             with patch.object(
                 context_builder,
@@ -565,7 +565,7 @@ class TestContextBuilderMultiAsset:
             context_builder,
             "get_market_context",
             new_callable=AsyncMock,
-            return_value=mock_market_context,
+            return_value=(mock_market_context, []),
         ):
             # Mock account context
             with patch.object(
@@ -901,7 +901,10 @@ class TestContextBuilderMultiAsset:
             context_builder,
             "get_market_context",
             new_callable=AsyncMock,
-            return_value=mock_market_context,
+            return_value=(
+                mock_market_context,
+                ["Failed to fetch data for ETHUSDT"],
+            ),
         ):
             with patch.object(
                 context_builder, "get_account_context", new_callable=AsyncMock

@@ -132,8 +132,8 @@ async def test_multiple_subscribers(manager):
         callback2_called = True
 
     # Subscribe both callbacks
-    sub1 = manager.subscribe_to_changes(callback1)
-    sub2 = manager.subscribe_to_changes(callback2)
+    manager.subscribe_to_changes(callback1)
+    manager.subscribe_to_changes(callback2)
 
     # Manually trigger notification
     config = manager.get_config()

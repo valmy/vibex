@@ -540,6 +540,7 @@ class TradingContext(BaseModel):
     )
     risk_metrics: RiskMetrics
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+    errors: List[str] = Field([], description="Errors encountered during context building")
 
     def validate_context_completeness(self) -> List[str]:
         """Validate that context has sufficient data for decision making."""

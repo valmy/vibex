@@ -75,7 +75,7 @@ def calculate_ema(close_prices: np.ndarray, period: int = 12) -> List[Optional[f
         raise
     except Exception as e:
         logger.error(f"EMA calculation failed: {e}")
-        raise _handle_calculation_error("EMA", e)
+        raise _handle_calculation_error("EMA", e) from e
 
 
 def calculate_macd(
@@ -108,7 +108,7 @@ def calculate_macd(
         raise
     except Exception as e:
         logger.error(f"MACD calculation failed: {e}")
-        raise _handle_calculation_error("MACD", e)
+        raise _handle_calculation_error("MACD", e) from e
 
 
 def calculate_rsi(close_prices: np.ndarray) -> List[Optional[float]]:
@@ -135,7 +135,7 @@ def calculate_rsi(close_prices: np.ndarray) -> List[Optional[float]]:
         raise
     except Exception as e:
         logger.error(f"RSI calculation failed: {e}")
-        raise _handle_calculation_error("RSI", e)
+        raise _handle_calculation_error("RSI", e) from e
 
 
 def calculate_bollinger_bands(
@@ -170,7 +170,7 @@ def calculate_bollinger_bands(
         raise
     except Exception as e:
         logger.error(f"Bollinger Bands calculation failed: {e}")
-        raise _handle_calculation_error("Bollinger Bands", e)
+        raise _handle_calculation_error("Bollinger Bands", e) from e
 
 
 def calculate_atr(
@@ -201,4 +201,4 @@ def calculate_atr(
         raise
     except Exception as e:
         logger.error(f"ATR calculation failed: {e}")
-        raise _handle_calculation_error("ATR", e)
+        raise _handle_calculation_error("ATR", e) from e

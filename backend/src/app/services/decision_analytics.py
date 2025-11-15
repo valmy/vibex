@@ -290,7 +290,7 @@ class DecisionAnalyticsService:
                 stats["validated_count"] += 1
 
         # Calculate averages
-        for model, stats in model_stats.items():
+        for _, stats in model_stats.items():
             if stats["confidences"]:
                 stats["avg_confidence"] = sum(stats["confidences"]) / len(stats["confidences"])
                 stats["avg_processing_time"] = sum(stats["processing_times"]) / len(
@@ -401,6 +401,55 @@ class DecisionAnalyticsService:
 
         return float(result.scalar() or 0)
 
+    def _get_performance_recommendations(self, performance_trend: str) -> List[str]:
+        """Get performance-based recommendations."""
+        if performance_trend == "declining":
+            return ["Consider reviewing strategy parameters - performance is declining"]
+        if performance_trend == "improving":
+            return ["Current strategy is performing well - maintain current approach"]
+        return []
+
+    def _get_action_recommendations(self, action_pnl: Dict[str, float]) -> List[str]:
+        """Get action-based recommendations."""
+        recommendations = []
+        if not action_pnl:
+            return recommendations
+
+        best_action = max(action_pnl.items(), key=lambda x: x[1])[0]
+        worst_action = min(action_pnl.items(), key=lambda x: x[1])[0]
+
+        if action_pnl[best_action] > 0:
+            recommendations.append(f"Focus on {best_action} actions - they're most profitable")
+        if action_pnl[worst_action] < -100:  # Significant losses
+            recommendations.append(f"Review {worst_action} strategy - causing significant losses")
+        return recommendations
+
+    def _get_error_recommendations(self, error_summary: Dict[str, int]) -> List[str]:
+        """Get error-based recommendations."""
+        if not error_summary:
+            return []
+        most_common_error = max(error_summary.items(), key=lambda x: x[1])[0]
+        return [f"Address validation issue: {most_common_error}"]
+
+    def _get_confidence_recommendations(self, decisions: List[Decision]) -> List[str]:
+        """Get confidence-based recommendations."""
+        if not decisions:
+            return []
+        avg_confidence = sum(d.confidence for d in decisions) / len(decisions)
+        if avg_confidence < 60:
+            return ["Low average confidence - consider adjusting strategy parameters"]
+        if avg_confidence > 85:
+            return ["High confidence decisions - consider increasing position sizes"]
+        return []
+
+    def _get_volume_recommendations(self, decisions: List[Decision]) -> List[str]:
+        """Get volume-based recommendations."""
+        if len(decisions) < 10:
+            return ["Low decision volume - consider more active strategy"]
+        if len(decisions) > 100:
+            return ["High decision volume - ensure quality over quantity"]
+        return []
+
     async def _generate_recommendations(
         self,
         decisions: List[Decision],
@@ -409,50 +458,10 @@ class DecisionAnalyticsService:
         performance_trend: str,
     ) -> List[str]:
         """Generate trading recommendations based on analysis."""
-
         recommendations = []
-
-        # Performance-based recommendations
-        if performance_trend == "declining":
-            recommendations.append(
-                "Consider reviewing strategy parameters - performance is declining"
-            )
-        elif performance_trend == "improving":
-            recommendations.append(
-                "Current strategy is performing well - maintain current approach"
-            )
-
-        # Action-based recommendations
-        if action_pnl:
-            best_action = max(action_pnl.items(), key=lambda x: x[1])[0]
-            worst_action = min(action_pnl.items(), key=lambda x: x[1])[0]
-
-            if action_pnl[best_action] > 0:
-                recommendations.append(f"Focus on {best_action} actions - they're most profitable")
-
-            if action_pnl[worst_action] < -100:  # Significant losses
-                recommendations.append(
-                    f"Review {worst_action} strategy - causing significant losses"
-                )
-
-        # Error-based recommendations
-        if error_summary:
-            most_common_error = max(error_summary.items(), key=lambda x: x[1])[0]
-            recommendations.append(f"Address validation issue: {most_common_error}")
-
-        # Confidence-based recommendations
-        avg_confidence = sum(d.confidence for d in decisions) / len(decisions) if decisions else 0
-        if avg_confidence < 60:
-            recommendations.append(
-                "Low average confidence - consider adjusting strategy parameters"
-            )
-        elif avg_confidence > 85:
-            recommendations.append("High confidence decisions - consider increasing position sizes")
-
-        # Volume-based recommendations
-        if len(decisions) < 10:
-            recommendations.append("Low decision volume - consider more active strategy")
-        elif len(decisions) > 100:
-            recommendations.append("High decision volume - ensure quality over quantity")
-
-        return recommendations[:5]  # Limit to top 5 recommendations
+        recommendations.extend(self._get_performance_recommendations(performance_trend))
+        recommendations.extend(self._get_action_recommendations(action_pnl))
+        recommendations.extend(self._get_error_recommendations(error_summary))
+        recommendations.extend(self._get_confidence_recommendations(decisions))
+        recommendations.extend(self._get_volume_recommendations(decisions))
+        return recommendations[:5]

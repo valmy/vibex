@@ -226,7 +226,9 @@ async def test_reloader_start_watching_nonexistent_file():
     """Test starting file watching on non-existent file."""
     reloader = ConfigReloader(config_path="/nonexistent/path/.env")
 
-    with pytest.raises(Exception):
+    from app.core.config_exceptions import FileWatchError
+
+    with pytest.raises(FileWatchError):
         await reloader.start_watching()
 
 

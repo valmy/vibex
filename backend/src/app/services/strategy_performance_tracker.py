@@ -177,7 +177,7 @@ class StrategyPerformanceTracker:
         """Get ranked list of all strategies."""
 
         # Get all active strategies
-        result = await self.db.execute(select(Strategy).where(Strategy.is_active == True))
+        result = await self.db.execute(select(Strategy).where(Strategy.is_active))
         strategies = result.scalars().all()
 
         rankings = []
@@ -284,14 +284,12 @@ class StrategyPerformanceTracker:
         """Update performance metrics for all active strategies."""
 
         # Get all active strategies
-        result = await self.db.execute(select(Strategy).where(Strategy.is_active == True))
+        result = await self.db.execute(select(Strategy).where(Strategy.is_active))
         strategies = result.scalars().all()
 
         # Get all accounts with strategy assignments
         result = await self.db.execute(
-            select(StrategyAssignment.account_id)
-            .distinct()
-            .where(StrategyAssignment.is_active == True)
+            select(StrategyAssignment.account_id).distinct().where(StrategyAssignment.is_active)
         )
         account_ids = [row[0] for row in result]
 
@@ -332,7 +330,6 @@ class StrategyPerformanceTracker:
 
         # Basic counts
         total_trades = len(decisions)
-        closed_positions = len(closed_results)
 
         if not closed_results:
             return {

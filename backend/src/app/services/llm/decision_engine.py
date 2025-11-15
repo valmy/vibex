@@ -299,63 +299,70 @@ class DecisionEngine:
         force_refresh: bool,
         ab_test_name: Optional[str],
     ) -> DecisionResult:
-        """
-        Internal method to process a multi-asset trading decision.
+        strategy = await self._get_strategy(account_id, strategy_override)
+        timeframes = self._get_timeframes(strategy)
+        context = await self._build_context(
+            symbols, account_id, timeframes, force_refresh, strategy_override
+        )
+        decision_result = await self._generate_decision(
+            symbols, context, strategy_override, ab_test_name
+        )
+        decision_result = await self._validate_and_handle_fallback(
+            decision_result, context, symbols, account_id
+        )
+        await self._persist_decision_if_repository_exists(
+            account_id, strategy.strategy_id, decision_result, context
+        )
+        return decision_result
 
-        This method orchestrates the complete decision-making workflow:
-        1. Build multi-asset trading context
-        2. Generate LLM decision for all assets
-        3. Validate decision
-        4. Return result with metadata
-        """
-        # Step 1: Get active strategy to determine timeframes
-        strategy = await self.strategy_manager.get_account_strategy(account_id)
+    async def _get_strategy(self, account_id, strategy_override):
         if strategy_override:
-            strategy_obj = await self.strategy_manager.get_strategy(strategy_override)
-            if not strategy_obj:
+            strategy = await self.strategy_manager.get_strategy(strategy_override)
+            if not strategy:
                 raise DecisionEngineError(f"Strategy '{strategy_override}' not found")
-            strategy = strategy_obj
+            return strategy
+        return await self.strategy_manager.get_account_strategy(account_id)
 
+    def _get_timeframes(self, strategy):
         timeframes = strategy.timeframe_preference or ["5m", "1h"]
         if len(timeframes) != 2:
             logger.warning(
                 f"Strategy '{strategy.strategy_id}' has {len(timeframes)} timeframes, expected 2. Defaulting to ['5m', '1h']."
             )
-            timeframes = ["5m", "1h"]
+            return ["5m", "1h"]
+        return timeframes
 
-        # Step 2: Build multi-asset trading context
+    async def _build_context(
+        self, symbols, account_id, timeframes, force_refresh, strategy_override
+    ):
         context = await self._build_multi_asset_context_with_recovery(
             symbols, account_id, timeframes, force_refresh
         )
-
-        # Step 3: Apply strategy override if provided (context's account_state might have default)
         if strategy_override:
             strategy = await self.strategy_manager.get_strategy(strategy_override)
-            if not strategy:
-                raise DecisionEngineError(f"Strategy '{strategy_override}' not found")
-            if not strategy.is_active:
-                raise DecisionEngineError(f"Strategy '{strategy_override}' is not active")
+            if not strategy or not strategy.is_active:
+                raise DecisionEngineError(
+                    f"Strategy '{strategy_override}' is not active or not found"
+                )
             context.account_state.active_strategy = strategy
+        return context
 
-        # Step 4: Generate LLM decision for all assets
-        decision_result = await self.llm_service.generate_trading_decision(
+    async def _generate_decision(self, symbols, context, strategy_override, ab_test_name):
+        return await self.llm_service.generate_trading_decision(
             symbols=symbols,
             context=context,
             strategy_override=strategy_override,
             ab_test_name=ab_test_name,
         )
 
-        # Step 5: Validate decision
+    async def _validate_and_handle_fallback(self, decision_result, context, symbols, account_id):
         if decision_result.validation_passed:
             validation_result = await self.decision_validator.validate_decision(
                 decision_result.decision, context
             )
-
-            # Update validation status
             decision_result.validation_passed = validation_result.is_valid
             decision_result.validation_errors = validation_result.errors
 
-        # Step 6: Handle validation failures with fallback
         if not decision_result.validation_passed:
             logger.warning(
                 "Multi-asset decision validation failed, creating fallback",
@@ -365,28 +372,26 @@ class DecisionEngine:
                     "errors": decision_result.validation_errors,
                 },
             )
-
             fallback_decision = await self.decision_validator.create_fallback_decision(
                 decision_result.decision, context, decision_result.validation_errors
             )
-
             decision_result.decision = fallback_decision
-            decision_result.validation_passed = True  # Fallback is always valid
+            decision_result.validation_passed = True
+        return decision_result
 
-        # Step 7: Persist decision to database
+    async def _persist_decision_if_repository_exists(
+        self, account_id, strategy_id, decision_result, context
+    ):
         if self.decision_repository:
             try:
                 await self._persist_decision(
                     account_id=account_id,
-                    strategy_id=strategy.strategy_id,
+                    strategy_id=strategy_id,
                     decision_result=decision_result,
                     context=context,
                 )
             except Exception as e:
                 logger.error(f"Failed to persist decision to database: {e}", exc_info=True)
-                # Don't fail the entire decision generation if persistence fails
-
-        return decision_result
 
     async def _build_multi_asset_context_with_recovery(
         self, symbols: List[str], account_id: int, timeframes: List[str], force_refresh: bool

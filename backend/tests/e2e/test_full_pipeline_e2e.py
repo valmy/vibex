@@ -101,8 +101,9 @@ class TestFullPipelineE2E:
             model_used="mock-model",
         )
 
-        mock_service.generate_trading_decision.return_value = mock_result
-        return mock_service
+        mock_llm_service = AsyncMock()
+        mock_llm_service.generate_trading_decision.return_value = mock_result
+        return mock_llm_service
 
     @pytest.fixture
     async def test_full_pipeline(self, db_session, real_market_data):
@@ -386,18 +387,6 @@ class TestFullPipelineE2E:
             rationale="Market conditions are neutral",
             confidence=50.0,
             risk_level="low",
-        )
-
-    @pytest.fixture
-    def mock_decision_result(self, mock_decision, mock_trading_context):
-        """Create a mock decision result."""
-        return DecisionResult(
-            decision=mock_decision,
-            context=mock_trading_context,
-            validation_passed=True,
-            validation_errors=[],
-            processing_time_ms=100.0,
-            model_used="mock-model",
         )
 
     @pytest.mark.asyncio
