@@ -73,13 +73,14 @@ class TestContextBuilderE2E:
         assert len(real_market_data) > 0, "Should have market data"
 
         try:
-            # Build market context for single asset
-            market_context = await context_builder_service.get_market_context(
+            # Build market context for single asset - now returns (context, errors)
+            market_context, errors = await context_builder_service.get_market_context(
                 ["BTCUSDT"], ["5m", "4h"]
             )
 
-            # Validate context structure - should be Dict[str, AssetMarketData]
+            # Validate successful context building
             assert market_context is not None, "Should build market context"
+            assert len(errors) == 0, "Should have no errors for successful asset"
             assert isinstance(market_context.assets, dict), "Should have assets dictionary"
             assert "BTCUSDT" in market_context.assets, "Should have BTCUSDT data"
 
@@ -222,14 +223,15 @@ class TestContextBuilderE2E:
         """Test context validation with real market data."""
         try:
             # Build market context and verify it returns valid data
-            market_context = await context_builder_service.get_market_context(
+            market_context, errors = await context_builder_service.get_market_context(
                 ["BTCUSDT"], ["5m", "4h"]
             )
 
             # Print log market_context
-            logger.info(f"Market context: {market_context}")
+            logger.info(f"Market context: {market_context}, Errors: {errors}")
 
             assert market_context is not None
+            assert len(errors) == 0
             assert "BTCUSDT" in market_context.assets
             btc_data = market_context.assets["BTCUSDT"]
             assert btc_data.current_price > 0
@@ -266,20 +268,24 @@ class TestContextBuilderE2E:
             context_builder_service.clear_cache()
 
             # Build context first time (should populate cache)
-            context1 = await context_builder_service.get_market_context(["BTCUSDT"], ["5m", "4h"])
-            assert context1 is not None, "Should build market context"
+            context1, errors1 = await context_builder_service.get_market_context(
+                ["BTCUSDT"], ["5m", "4h"]
+            )
+            assert context1 is not None and not errors1, "Should build market context"
             assert "BTCUSDT" in context1.assets, "Should have BTCUSDT data"
 
             # Build context second time (should use cache)
-            context2 = await context_builder_service.get_market_context(["BTCUSDT"], ["5m", "4h"])
-            assert context2 is not None, "Should build market context from cache"
+            context2, errors2 = await context_builder_service.get_market_context(
+                ["BTCUSDT"], ["5m", "4h"]
+            )
+            assert context2 is not None and not errors2, "Should build market context from cache"
             assert "BTCUSDT" in context2.assets, "Should have BTCUSDT data"
 
             # Build context with force_refresh (should bypass cache)
-            context3 = await context_builder_service.get_market_context(
+            context3, errors3 = await context_builder_service.get_market_context(
                 ["BTCUSDT"], ["5m", "4h"], force_refresh=True
             )
-            assert context3 is not None, "Should build fresh market context"
+            assert context3 is not None and not errors3, "Should build fresh market context"
             assert "BTCUSDT" in context3.assets, "Should have BTCUSDT data"
 
             # Verify contexts have valid data
@@ -298,11 +304,14 @@ class TestContextBuilderE2E:
         try:
             # Build market context for multiple assets
             symbols = ["BTCUSDT", "ETHUSDT"]
-            market_context = await context_builder_service.get_market_context(symbols, ["5m", "4h"])
+            market_context, errors = await context_builder_service.get_market_context(
+                symbols, ["5m", "4h"]
+            )
 
             # Validate context structure
             assert market_context is not None, "Should build market context"
             assert isinstance(market_context.assets, dict), "Should have assets dictionary"
+            assert len(errors) == 0, "Should have no errors for successful assets"
 
             # Validate we have data for requested assets (at least one should be present)
             available_assets = [s for s in symbols if s in market_context.assets]
@@ -350,4 +359,46 @@ class TestContextBuilderE2E:
             # Skip if insufficient market data
             if "Insufficient market data" in str(e) or "No market data" in str(e):
                 pytest.skip(f"Insufficient market data for multi-asset test: {e}")
+            raise
+
+    @pytest.mark.asyncio
+    async def test_partial_failure_context_building(self, context_builder_service, mocker):
+        """Test building market context with partial failures."""
+        # Mock the _fetch_indicators to simulate a failure for one asset
+        original_fetch = context_builder_service._fetch_indicators
+
+        async def mock_fetch_indicators(symbol, *args, **kwargs):
+            if symbol == "ETHUSDT":
+                raise ValueError("Simulated failure for ETHUSDT")
+            return await original_fetch(symbol, *args, **kwargs)
+
+        mocker.patch.object(
+            context_builder_service, "_fetch_indicators", side_effect=mock_fetch_indicators
+        )
+
+        try:
+            # Build market context for multiple assets
+            symbols = ["BTCUSDT", "ETHUSDT"]
+            market_context, errors = await context_builder_service.get_market_context(
+                symbols, ["5m", "4h"]
+            )
+
+            # Validate context structure
+            assert market_context is not None, "Should build market context"
+            assert isinstance(market_context.assets, dict), "Should have assets dictionary"
+
+            # Validate that we have data for the successful asset
+            assert "BTCUSDT" in market_context.assets, "Should have data for BTCUSDT"
+            assert "ETHUSDT" not in market_context.assets, "Should not have data for ETHUSDT"
+
+            # Validate that we have an error message for the failed asset
+            assert len(errors) == 1, "Should have one error message"
+            assert "ETHUSDT" in errors[0], "Error message should mention ETHUSDT"
+
+            logger.info(f"Successfully handled partial failure for {len(market_context.assets)} assets")
+
+        except Exception as e:
+            # Skip if insufficient market data for the successful asset
+            if "Insufficient market data" in str(e):
+                pytest.skip(f"Insufficient market data for partial failure test: {e}")
             raise
