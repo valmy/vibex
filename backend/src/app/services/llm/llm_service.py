@@ -453,7 +453,7 @@ Provide:
 
         except Exception as e:
             logger.error(f"Error switching to model {model_name}: {e}")
-            raise ModelSwitchError(f"Model switch failed: {e}")
+            raise ModelSwitchError(f"Model switch failed: {e}") from e
 
     async def validate_api_health(self) -> HealthStatus:
         """
@@ -917,7 +917,7 @@ Rules:
 
         except (PydanticValidationError, KeyError, TypeError) as e:
             logger.error(f"Multi-asset decision validation failed: {e}")
-            raise ValidationError(f"Invalid multi-asset decision format: {e}")
+            raise ValidationError(f"Invalid multi-asset decision format: {e}") from e
 
     def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
         """

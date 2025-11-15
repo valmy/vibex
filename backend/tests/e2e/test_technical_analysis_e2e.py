@@ -99,7 +99,9 @@ class TestTechnicalAnalysisE2E:
                 # EMA should be between BB upper and lower
                 assert all(
                     lower <= ema <= upper
-                    for lower, ema, upper in zip(result.bb_lower, result.ema_20, result.bb_upper)
+                    for lower, ema, upper in zip(
+                        result.bb_lower, result.ema_20, result.bb_upper, strict=True
+                    )
                 ), "EMA should be within Bollinger Bands"
 
     @pytest.mark.asyncio

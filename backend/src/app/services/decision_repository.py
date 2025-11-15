@@ -141,8 +141,8 @@ class DecisionRepository:
         """Get decisions that require execution."""
         query = select(Decision).where(
             and_(
-                Decision.validation_passed == True,
-                Decision.executed == False,
+                Decision.validation_passed,
+                ~Decision.executed,
                 Decision.action.in_(
                     ["buy", "sell", "adjust_position", "close_position", "adjust_orders"]
                 ),
@@ -301,69 +301,69 @@ class DecisionRepository:
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
     ) -> Dict[str, Dict]:
-        """Get performance metrics grouped by strategy."""
+        rows = await self._fetch_decision_results(account_id, start_date, end_date)
+        strategy_performance = self._group_results_by_strategy(rows)
+        self._calculate_strategy_averages(strategy_performance)
+        return strategy_performance
 
-        # Query decisions with their results
+    async def _fetch_decision_results(self, account_id, start_date, end_date):
         query = (
             select(Decision, DecisionResult)
             .outerjoin(DecisionResult, Decision.id == DecisionResult.decision_id)
             .where(Decision.account_id == account_id)
         )
-
         if start_date:
             query = query.where(Decision.timestamp >= start_date)
         if end_date:
             query = query.where(Decision.timestamp <= end_date)
-
         result = await self.db.execute(query)
-        rows = result.all()
+        return result.all()
 
-        # Group by strategy
+    def _group_results_by_strategy(self, rows):
         strategy_performance = {}
-
         for decision, decision_result in rows:
             strategy_id = decision.strategy_id
-
             if strategy_id not in strategy_performance:
-                strategy_performance[strategy_id] = {
-                    "total_decisions": 0,
-                    "executed_decisions": 0,
-                    "closed_positions": 0,
-                    "total_pnl": 0.0,
-                    "winning_trades": 0,
-                    "losing_trades": 0,
-                    "avg_confidence": 0.0,
-                    "confidences": [],
-                }
-
+                strategy_performance[strategy_id] = self._initialize_performance_dict()
             perf = strategy_performance[strategy_id]
             perf["total_decisions"] += 1
             perf["confidences"].append(decision.confidence)
-
             if decision.executed:
                 perf["executed_decisions"] += 1
-
             if decision_result and decision_result.is_closed:
-                perf["closed_positions"] += 1
-                if decision_result.realized_pnl:
-                    perf["total_pnl"] += decision_result.realized_pnl
-                    if decision_result.realized_pnl > 0:
-                        perf["winning_trades"] += 1
-                    else:
-                        perf["losing_trades"] += 1
+                self._update_performance_from_result(perf, decision_result)
+        return strategy_performance
 
-        # Calculate averages
-        for strategy_id, perf in strategy_performance.items():
+    def _initialize_performance_dict(self):
+        return {
+            "total_decisions": 0,
+            "executed_decisions": 0,
+            "closed_positions": 0,
+            "total_pnl": 0.0,
+            "winning_trades": 0,
+            "losing_trades": 0,
+            "avg_confidence": 0.0,
+            "confidences": [],
+        }
+
+    def _update_performance_from_result(self, perf, decision_result):
+        perf["closed_positions"] += 1
+        if decision_result.realized_pnl:
+            perf["total_pnl"] += decision_result.realized_pnl
+            if decision_result.realized_pnl > 0:
+                perf["winning_trades"] += 1
+            else:
+                perf["losing_trades"] += 1
+
+    def _calculate_strategy_averages(self, strategy_performance):
+        for perf in strategy_performance.values():
             if perf["confidences"]:
                 perf["avg_confidence"] = sum(perf["confidences"]) / len(perf["confidences"])
-            del perf["confidences"]  # Remove raw data
-
+            del perf["confidences"]
             total_trades = perf["winning_trades"] + perf["losing_trades"]
             perf["win_rate"] = (
                 (perf["winning_trades"] / total_trades * 100) if total_trades > 0 else 0
             )
-
-        return strategy_performance
 
     async def cleanup_old_decisions(self, days_to_keep: int = 90) -> int:
         """Clean up old decisions beyond retention period."""
@@ -412,7 +412,7 @@ class DecisionRepository:
         query = select(Decision).where(
             and_(
                 Decision.account_id == account_id,
-                Decision.validation_passed == False,
+                ~Decision.validation_passed,
                 Decision.validation_errors.isnot(None),
             )
         )

@@ -100,6 +100,8 @@ class BaseConfig(BaseSettings):
         "case_sensitive": True,
     }
 
+    MOCK_EXTERNAL_APIS: bool = Field(default=True, description="Mock external APIs")
+
 
 class DevelopmentConfig(BaseConfig):
     """Development environment configuration."""

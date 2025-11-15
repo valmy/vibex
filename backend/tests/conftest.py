@@ -21,7 +21,7 @@ async def db_session():
     """Create a database session for testing."""
     # Close any existing database connection from a different event loop
     try:
-        engine = get_async_engine()
+        get_async_engine()
         await close_db()
     except RuntimeError:
         # No existing engine, that's fine

@@ -212,92 +212,64 @@ class DecisionValidator:
     async def _validate_multi_asset_schema(
         self, decision: TradingDecision, context: TradingContext
     ) -> List[str]:
-        """
-        Validate multi-asset decision against JSON schema and Pydantic model constraints.
-
-        Args:
-            decision: The multi-asset trading decision to validate
-            context: The trading context
-
-        Returns:
-            List of schema validation errors
-        """
         errors = []
-
         try:
-            # Validate that we have decisions for all symbols
-            if not decision.decisions:
-                errors.append("schema_error: No asset decisions provided")
-                return errors
-
-            # Validate portfolio-level fields
-            if not decision.portfolio_rationale or not decision.portfolio_rationale.strip():
-                errors.append("schema_error: Portfolio rationale is required")
-
-            if decision.total_allocation_usd < 0:
-                errors.append("schema_error: Total allocation cannot be negative")
-
-            # Validate each asset decision
-            for asset_decision in decision.decisions:
-                # Validate action-specific requirements
-                action_errors = asset_decision.validate_action_requirements()
-                errors.extend(
-                    [f"schema_error ({asset_decision.asset}): {error}" for error in action_errors]
-                )
-
-                # Validate field constraints
-                if asset_decision.confidence < 0 or asset_decision.confidence > 100:
-                    errors.append(
-                        f"schema_error ({asset_decision.asset}): Confidence must be between 0 and 100"
-                    )
-
-                if asset_decision.allocation_usd < 0:
-                    errors.append(
-                        f"schema_error ({asset_decision.asset}): Allocation amount cannot be negative"
-                    )
-
-                # Validate required fields based on action
-                if (
-                    asset_decision.action in ["buy", "sell"]
-                    and not asset_decision.rationale.strip()
-                ):
-                    errors.append(
-                        f"schema_error ({asset_decision.asset}): Rationale is required for buy/sell actions"
-                    )
-
-                if (
-                    asset_decision.action in ["buy", "sell"]
-                    and not asset_decision.exit_plan.strip()
-                ):
-                    errors.append(
-                        f"schema_error ({asset_decision.asset}): Exit plan is required for buy/sell actions"
-                    )
-
-                # Validate position adjustment details
-                if asset_decision.position_adjustment:
-                    if asset_decision.position_adjustment.adjustment_amount_usd <= 0:
-                        errors.append(
-                            f"schema_error ({asset_decision.asset}): Position adjustment amount must be positive"
-                        )
-
-                # Validate order adjustment details
-                if asset_decision.order_adjustment:
-                    if not (
-                        asset_decision.order_adjustment.adjust_tp
-                        or asset_decision.order_adjustment.adjust_sl
-                        or asset_decision.order_adjustment.cancel_tp
-                        or asset_decision.order_adjustment.cancel_sl
-                    ):
-                        errors.append(
-                            f"schema_error ({asset_decision.asset}): Order adjustment must specify at least one action"
-                        )
-
+            self._validate_portfolio_level_fields(decision, errors)
+            self._validate_asset_level_fields(decision, errors)
         except ValidationError as e:
             errors.append(f"schema_error: Pydantic validation failed: {str(e)}")
         except Exception as e:
             errors.append(f"schema_error: Unexpected schema validation error: {str(e)}")
-
         return errors
+
+    def _validate_portfolio_level_fields(self, decision, errors):
+        if not decision.decisions:
+            errors.append("schema_error: No asset decisions provided")
+        if not decision.portfolio_rationale or not decision.portfolio_rationale.strip():
+            errors.append("schema_error: Portfolio rationale is required")
+        if decision.total_allocation_usd < 0:
+            errors.append("schema_error: Total allocation cannot be negative")
+
+    def _validate_asset_level_fields(self, decision, errors):
+        for asset_decision in decision.decisions:
+            action_errors = asset_decision.validate_action_requirements()
+            errors.extend(
+                [f"schema_error ({asset_decision.asset}): {err}" for err in action_errors]
+            )
+            if not 0 <= asset_decision.confidence <= 100:
+                errors.append(
+                    f"schema_error ({asset_decision.asset}): Confidence must be between 0 and 100"
+                )
+            if asset_decision.allocation_usd < 0:
+                errors.append(
+                    f"schema_error ({asset_decision.asset}): Allocation amount cannot be negative"
+                )
+            if asset_decision.action in ["buy", "sell"] and not asset_decision.rationale.strip():
+                errors.append(
+                    f"schema_error ({asset_decision.asset}): Rationale is required for buy/sell actions"
+                )
+            if asset_decision.action in ["buy", "sell"] and not asset_decision.exit_plan.strip():
+                errors.append(
+                    f"schema_error ({asset_decision.asset}): Exit plan is required for buy/sell actions"
+                )
+            if (
+                asset_decision.position_adjustment
+                and asset_decision.position_adjustment.adjustment_amount_usd <= 0
+            ):
+                errors.append(
+                    f"schema_error ({asset_decision.asset}): Position adjustment amount must be positive"
+                )
+            if asset_decision.order_adjustment and not any(
+                [
+                    asset_decision.order_adjustment.adjust_tp,
+                    asset_decision.order_adjustment.adjust_sl,
+                    asset_decision.order_adjustment.cancel_tp,
+                    asset_decision.order_adjustment.cancel_sl,
+                ]
+            ):
+                errors.append(
+                    f"schema_error ({asset_decision.asset}): Order adjustment must specify at least one action"
+                )
 
     async def _validate_portfolio_allocation(
         self, decision: TradingDecision, context: TradingContext
@@ -471,9 +443,6 @@ class DecisionValidator:
         """Validate leverage constraints."""
         errors = []
         warnings = []
-
-        strategy = context.account_state.active_strategy
-        max_leverage = strategy.risk_parameters.max_leverage
 
         # For now, we assume leverage is embedded in allocation calculation
         # This could be extended to include explicit leverage validation
@@ -733,7 +702,6 @@ class DecisionValidator:
                     break  # Only need to find one instance of high correlation
 
         # Leverage risk
-        max_leverage = strategy.risk_parameters.max_leverage
         leverage_exceeded = False  # This would need actual leverage calculation
 
         # Risk level assessment

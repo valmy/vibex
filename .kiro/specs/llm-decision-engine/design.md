@@ -384,6 +384,7 @@ class TradingContext(BaseModel):
     )
     risk_metrics: RiskMetrics
     timestamp: datetime
+    errors: List[str] = Field([], description="Errors encountered during context building")
 ```
 
 ### Market Context Schema

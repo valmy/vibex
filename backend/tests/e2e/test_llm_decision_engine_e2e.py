@@ -456,7 +456,7 @@ class TestLLMDecisionEngineE2E:
             )
 
             # Create market context (no symbol field in new schema)
-            market_context = MarketContext(
+            MarketContext(
                 current_price=50000.0,
                 price_change_24h=500.0,
                 volume_24h=1000000.0,
@@ -660,7 +660,7 @@ class TestLLMDecisionEngineE2E:
         mock_result.context = mock_context_builder.build_trading_context.return_value
 
         decisions = []
-        for i in range(3):
+        for _ in range(3):
             result = await decision_engine.make_trading_decision(
                 symbols=["BTCUSDT"], account_id=1, force_refresh=True
             )
