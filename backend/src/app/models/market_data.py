@@ -69,6 +69,11 @@ class MarketData(TimescaleBase):
     def close_price(self):
         return self.close
 
+    @hybrid_property
+    def timestamp(self):
+        """Return the time field as timestamp for API responses."""
+        return self.time.isoformat() if self.time else None
+
     def __repr__(self):
         """String representation."""
         return f"<MarketData(symbol={self.symbol}, time={self.time}, close={self.close})>"

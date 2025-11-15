@@ -417,7 +417,7 @@ class TestFullPipelineE2E:
         logger.info("Testing different market conditions with mock data")
 
         # Create a mock for the _build_context_with_recovery method
-        async def mock_build_context(symbol, account_id, force_refresh):
+        async def mock_build_context(symbol, account_id, timeframes, force_refresh):
             return mock_trading_context
 
         # Patch the _build_context_with_recovery method

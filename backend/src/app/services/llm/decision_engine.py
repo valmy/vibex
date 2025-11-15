@@ -263,6 +263,11 @@ class DecisionEngine:
                 # Clean up active task
                 self._active_decisions.pop(decision_key, None)
 
+        except RateLimitExceededError:
+            # Re-raise rate limit errors without wrapping
+            self.metrics["total_decisions"] += 1
+            self.metrics["failed_decisions"] += 1
+            raise
         except Exception as e:
             self.metrics["total_decisions"] += 1
             self.metrics["failed_decisions"] += 1
@@ -305,12 +310,17 @@ class DecisionEngine:
                 raise DecisionEngineError(f"Strategy '{strategy_override}' not found")
             strategy = strategy_obj
 
-        timeframes = strategy.timeframe_preference or ["5m", "1h"]
-        if len(timeframes) != 2:
-            logger.warning(
-                f"Strategy '{strategy.strategy_id}' has {len(timeframes)} timeframes, expected 2. Defaulting to ['5m', '1h']."
-            )
+        # If no strategy found, use default timeframes
+        if strategy is None:
+            logger.warning(f"No strategy found for account {account_id}, using default timeframes")
             timeframes = ["5m", "1h"]
+        else:
+            timeframes = strategy.timeframe_preference or ["5m", "1h"]
+            if len(timeframes) != 2:
+                logger.warning(
+                    f"Strategy '{strategy.strategy_id}' has {len(timeframes)} timeframes, expected 2. Defaulting to ['5m', '1h']."
+                )
+                timeframes = ["5m", "1h"]
 
         # Step 2: Build trading context
         context = await self._build_context_with_recovery(
