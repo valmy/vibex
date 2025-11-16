@@ -91,17 +91,17 @@ class ContextBuilderService:
     RECENT_TRADES_LIMIT = 20  # Number of recent trades to include
     PERFORMANCE_LOOKBACK_DAYS = 30  # Days to look back for performance metrics
 
-    def __init__(self, db_session: AsyncSession = None):
+    def __init__(self, session_factory=None):
         """Initialize the Context Builder Service.
 
         Args:
-            db_session: Optional database session. If not provided, will use AsyncSessionLocal.
+            session_factory: Optional database session factory.
         """
         self.market_data_service = get_market_data_service()
         self.technical_analysis_service = TechnicalAnalysisService()
         self._cache: Dict[str, Tuple[datetime, any]] = {}
         self._cache_ttl_seconds = 300  # 5 minutes cache TTL
-        self._db_session = db_session
+        self._session_factory = session_factory
 
         logger.info("ContextBuilderService initialized")
 
@@ -445,7 +445,6 @@ class ContextBuilderService:
         symbols: List[str],
         timeframes: List[str],
         force_refresh: bool = False,
-        db_session: AsyncSession = None,
     ) -> Tuple[MarketContext, List[str]]:
         """Build multi-asset market context with price data and technical indicators for multiple timeframes.
 
@@ -455,7 +454,6 @@ class ContextBuilderService:
             symbols: List of trading pair symbols
             timeframes: List of two timeframes to analyze
             force_refresh: Force refresh of cached data
-            db_session: Optional database session
 
         Returns:
             Tuple of (MarketContext with successful assets, list of error messages for failed assets)
@@ -463,9 +461,8 @@ class ContextBuilderService:
         if len(timeframes) != 2:
             raise ValueError("get_market_context expects exactly two timeframes.")
 
-        db = db_session or self._db_session
-        if db is None:
-            raise ContextBuilderError("No database session provided.")
+        if self._session_factory is None:
+            raise ContextBuilderError("No database session factory provided.")
 
         # Primary timeframe (for price, volume, etc.) is the shorter one
         primary_timeframe, long_timeframe = timeframes
@@ -475,21 +472,22 @@ class ContextBuilderService:
             if not force_refresh and (cached_data := self._get_cached_data(cache_key)):
                 return cached_data
 
-            interval_indicators, long_interval_indicators = await self._fetch_indicators(
-                symbol, primary_timeframe, long_timeframe, db
-            )
-            technical_indicators = TechnicalIndicators(
-                interval=interval_indicators, long_interval=long_interval_indicators
-            )
-            primary_market_data = await self._fetch_primary_market_data(
-                symbol, primary_timeframe, db
-            )
+            async with self._session_factory() as db:
+                interval_indicators, long_interval_indicators = await self._fetch_indicators(
+                    symbol, primary_timeframe, long_timeframe, db
+                )
+                technical_indicators = TechnicalIndicators(
+                    interval=interval_indicators, long_interval=long_interval_indicators
+                )
+                primary_market_data = await self._fetch_primary_market_data(
+                    symbol, primary_timeframe, db
+                )
 
-            asset_market_data = self._build_asset_market_data(
-                symbol, primary_market_data, technical_indicators
-            )
-            self._cache[cache_key] = (datetime.now(timezone.utc), asset_market_data)
-            return asset_market_data
+                asset_market_data = self._build_asset_market_data(
+                    symbol, primary_market_data, technical_indicators
+                )
+                self._cache[cache_key] = (datetime.now(timezone.utc), asset_market_data)
+                return asset_market_data
 
         asset_data_results = await asyncio.gather(
             *[_get_asset_market_data(symbol) for symbol in symbols], return_exceptions=True
@@ -520,10 +518,9 @@ class ContextBuilderService:
         return None
 
     async def _fetch_indicators(self, symbol, primary_timeframe, long_timeframe, db):
-        return await asyncio.gather(
-            self._get_indicator_set(symbol, primary_timeframe, db),
-            self._get_indicator_set(symbol, long_timeframe, db),
-        )
+        interval_indicators = await self._get_indicator_set(symbol, primary_timeframe, db)
+        long_interval_indicators = await self._get_indicator_set(symbol, long_timeframe, db)
+        return interval_indicators, long_interval_indicators
 
     async def _get_indicator_set(self, symbol, timeframe, db):
         market_data = await self.market_data_service.get_latest_market_data(
@@ -620,7 +617,7 @@ class ContextBuilderService:
         return assets, errors
 
     async def get_account_context(
-        self, account_id: int, force_refresh: bool = False, db_session: AsyncSession = None
+        self, account_id: int, force_refresh: bool = False
     ) -> AccountContext:
         """
         Build account context with balance, positions, and performance metrics.
@@ -628,7 +625,6 @@ class ContextBuilderService:
         Args:
             account_id: Account ID
             force_refresh: Force refresh of cached data
-            db_session: Optional database session to use
 
         Returns:
             AccountContext object
@@ -642,82 +638,81 @@ class ContextBuilderService:
                 logger.debug(f"Using cached account context for account {account_id}")
                 return cached_data
 
-        db = db_session or self._db_session
-        if db is None:
-            raise ContextBuilderError("No database session provided.")
-        should_close = False
+        if self._session_factory is None:
+            raise ContextBuilderError("No database session factory provided.")
 
-        try:
-            # Get account details
-            account_result = await db.execute(select(Account).where(Account.id == account_id))
-            account = account_result.scalar_one_or_none()
+        async with self._session_factory() as db:
+            try:
+                # Get account details
+                account_result = await db.execute(select(Account).where(Account.id == account_id))
+                account = await account_result.scalar_one_or_none()
 
-            if not account:
-                raise ContextBuilderError(f"Account {account_id} not found")
+                if not account:
+                    raise ContextBuilderError(f"Account {account_id} not found")
 
-            # Get open positions
-            positions_result = await db.execute(
-                select(Position)
-                .where(Position.account_id == account_id, Position.status == "open")
-                .order_by(desc(Position.created_at))
-            )
-            positions = positions_result.scalars().all()
-
-            # Convert positions to summaries (new schema uses 'size' instead of 'quantity')
-            position_summaries = []
-            for pos in positions:
-                position_summary = PositionSummary(
-                    symbol=pos.symbol,
-                    side=pos.side,
-                    size=pos.quantity,  # Map quantity to size
-                    entry_price=pos.entry_price,
-                    current_price=pos.current_price,
-                    unrealized_pnl=pos.unrealized_pnl,
-                    percentage_pnl=pos.unrealized_pnl_percent,  # Map unrealized_pnl_percent to percentage_pnl
+                # Get open positions
+                positions_result = await db.execute(
+                    select(Position)
+                    .where(Position.account_id == account_id, Position.status == "open")
+                    .order_by(desc(Position.created_at))
                 )
-                position_summaries.append(position_summary)
+                positions = positions_result.scalars().all()
 
-            # Calculate total unrealized PnL
-            total_pnl = sum(pos.unrealized_pnl for pos in positions)
+                # Convert positions to summaries (new schema uses 'size' instead of 'quantity')
+                position_summaries = []
+                for pos in positions:
+                    position_summary = PositionSummary(
+                        symbol=pos.symbol,
+                        side=pos.side,
+                        size=pos.quantity,  # Map quantity to size
+                        entry_price=pos.entry_price,
+                        current_price=pos.current_price,
+                        unrealized_pnl=pos.unrealized_pnl,
+                        percentage_pnl=pos.unrealized_pnl_percent,  # Map unrealized_pnl_percent to percentage_pnl
+                    )
+                    position_summaries.append(position_summary)
 
-            # Get recent performance metrics
-            performance_metrics = await self._calculate_performance_metrics(db, account_id)
+                # Calculate total unrealized PnL
+                total_pnl = sum(pos.unrealized_pnl for pos in positions)
 
-            # Calculate balance
-            balance_usd = float(account.balance_usd)
-            used_margin = sum(pos.entry_value / pos.leverage for pos in positions)
-            available_balance = balance_usd - used_margin
+                # Get recent performance metrics
+                performance_metrics = await self._calculate_performance_metrics(db, account_id)
 
-            # Calculate risk exposure as percentage
-            total_exposure = sum(pos.entry_value for pos in positions)
-            risk_exposure = (total_exposure / balance_usd * 100) if balance_usd > 0 else 0.0
+                # Calculate balance
+                balance_usd = float(account.balance_usd)
+                used_margin = sum(pos.entry_value / pos.leverage for pos in positions)
+                available_balance = balance_usd - used_margin
 
-            # Get or create default trading strategy
-            active_strategy = self._get_default_strategy()
+                # Calculate risk exposure as percentage
+                total_exposure = sum(pos.entry_value for pos in positions)
+                risk_exposure = (total_exposure / balance_usd * 100) if balance_usd > 0 else 0.0
 
-            account_context = AccountContext(
-                account_id=account_id,
-                balance_usd=balance_usd,
-                available_balance=max(0, available_balance),  # Ensure non-negative
-                total_pnl=total_pnl,
-                open_positions=position_summaries,
-                recent_performance=performance_metrics,
-                risk_exposure=min(100.0, risk_exposure),  # Cap at 100%
-                max_position_size=account.max_position_size_usd,
-                active_strategy=active_strategy,
-            )
+                # Get or create default trading strategy
+                active_strategy = self._get_default_strategy()
 
-            # Cache the result
-            self._cache[cache_key] = (datetime.now(timezone.utc), account_context)
+                account_context = AccountContext(
+                    account_id=account_id,
+                    balance_usd=balance_usd,
+                    available_balance=max(0, available_balance),  # Ensure non-negative
+                    total_pnl=total_pnl,
+                    open_positions=position_summaries,
+                    recent_performance=performance_metrics,
+                    risk_exposure=min(100.0, risk_exposure),  # Cap at 100%
+                    max_position_size=account.max_position_size_usd,
+                    active_strategy=active_strategy,
+                )
 
-            logger.debug(
-                f"Built account context: balance=${balance_usd:.2f}, positions={len(positions)}, pnl=${total_pnl:.2f}"
-            )
-            return account_context
+                # Cache the result
+                self._cache[cache_key] = (datetime.now(timezone.utc), account_context)
 
-        finally:
-            if should_close:
-                await db.close()
+                logger.debug(
+                    f"Built account context: balance=${balance_usd:.2f}, positions={len(positions)}, pnl=${total_pnl:.2f}"
+                )
+                return account_context
+
+            except Exception as e:
+                logger.error(f"Failed to get account context: {e}")
+                raise ContextBuilderError(f"Failed to get account context: {e}") from e
 
     def _get_default_strategy(self) -> TradingStrategy:
         """Get default trading strategy.
@@ -747,7 +742,7 @@ class ContextBuilderService:
         )
 
     async def get_recent_trades(
-        self, account_id: int, symbol: Optional[str] = None, db_session: AsyncSession = None
+        self, account_id: int, symbol: Optional[str] = None
     ) -> List[TradeHistory]:
         """
         Get recent trade history for the account.
@@ -755,48 +750,46 @@ class ContextBuilderService:
         Args:
             account_id: Account ID
             symbol: Optional symbol filter
-            db_session: Optional database session to use
 
         Returns:
            List of TradeHistory objects
         """
-        db = db_session or self._db_session
-        if db is None:
-            raise ContextBuilderError("No database session provided.")
-        should_close = False
+        if self._session_factory is None:
+            raise ContextBuilderError("No database session factory provided.")
 
-        try:
-            # Build the base query
-            query = select(Trade).where(Trade.account_id == account_id)
+        async with self._session_factory() as db:
+            try:
+                # Build the base query
+                query = select(Trade).where(Trade.account_id == account_id)
 
-            # Add symbol filter if provided
-            if symbol:
-                query = query.where(Trade.symbol == symbol)
+                # Add symbol filter if provided
+                if symbol:
+                    query = query.where(Trade.symbol == symbol)
 
-            # Order by most recent first and limit results
-            query = query.order_by(desc(Trade.created_at)).limit(self.RECENT_TRADES_LIMIT)
+                # Order by most recent first and limit results
+                query = query.order_by(desc(Trade.created_at)).limit(self.RECENT_TRADES_LIMIT)
 
-            # Execute the query
-            result = await db.execute(query)
-            trades = result.scalars().all()
+                # Execute the query
+                result = await db.execute(query)
+                trades = result.scalars().all()
 
-            # Convert to TradeHistory objects (new schema uses 'size' instead of 'quantity')
-            trade_history = [
-                TradeHistory(
-                    symbol=trade.symbol,
-                    side=trade.side,
-                    size=trade.quantity,  # Map quantity to size
-                    price=trade.price,
-                    timestamp=trade.created_at,
-                    pnl=trade.pnl,
-                )
-                for trade in trades
-            ]
+                # Convert to TradeHistory objects (new schema uses 'size' instead of 'quantity')
+                trade_history = [
+                    TradeHistory(
+                        symbol=trade.symbol,
+                        side=trade.side,
+                        size=trade.quantity,  # Map quantity to size
+                        price=trade.price,
+                        timestamp=trade.created_at,
+                        pnl=trade.pnl,
+                    )
+                    for trade in trades
+                ]
 
-            return trade_history
-        finally:
-            if should_close:
-                await db.close()
+                return trade_history
+            except Exception as e:
+                logger.error(f"Failed to get recent trades: {e}")
+                raise ContextBuilderError(f"Failed to get recent trades: {e}") from e
 
     async def _calculate_performance_metrics(
         self, db: AsyncSession, account_id: int
@@ -929,64 +922,73 @@ class ContextBuilderService:
         """
         missing_data = []
         warnings = []
-        db = self._db_session
 
-        if db is None:
+        if self._session_factory is None:
             return {
                 "is_valid": False,
-                "missing_data": ["Database session not available"],
+                "missing_data": ["Database session factory not available"],
                 "stale_data": [],
                 "warnings": [],
                 "data_age_seconds": 0,
             }
 
-        try:
-            # Check if account exists
-            account_result = await db.execute(select(Account).where(Account.id == account_id))
-            account = account_result.scalar_one_or_none()
+        async with self._session_factory() as db:
+            try:
+                # Check if account exists
+                account_query = select(Account).where(Account.id == account_id)
+                try:
+                    account_result = await db.execute(account_query)
+                    # In async SQLAlchemy, scalar_one_or_none is async and needs to be awaited
+                    account = await account_result.scalar_one_or_none()
+                except Exception as e:
+                    logger.error(f"Failed to query account {account_id}: {str(e)}")
+                    missing_data.append(f"Account {account_id} not found - query error: {str(e)}")
+                    account = None
 
-            if not account:
-                missing_data.append(f"Account {account_id} not found")
+                if not account:
+                    missing_data.append(f"Account {account_id} not found")
 
-            # Check market data availability
-            market_data = await self.market_data_service.get_latest_market_data(
-                db, symbol, "1h", 10
-            )
+                # Check market data availability
+                market_data = await self.market_data_service.get_latest_market_data(
+                    db, symbol, "1h", 10
+                )
 
-            if not market_data:
-                missing_data.append(f"No market data available for {symbol}")
-            elif len(market_data) < 10:
-                warnings.append(f"Limited market data for {symbol}: {len(market_data)} candles")
+                if not market_data:
+                    missing_data.append(f"No market data available for {symbol}")
+                elif len(market_data) < 10:
+                    warnings.append(f"Limited market data for {symbol}: {len(market_data)} candles")
 
-            # Check data freshness
-            data_age_seconds = 0
-            if market_data:
-                latest_candle = max(market_data, key=lambda x: x.timestamp)
-                is_fresh, age_minutes = self.validate_data_freshness(latest_candle.timestamp)
-                data_age_seconds = age_minutes * 60
+                # Check data freshness
+                data_age_seconds = 0
+                if market_data:
+                    latest_candle = max(market_data, key=lambda x: x.timestamp)
+                    is_fresh, age_minutes = self.validate_data_freshness(latest_candle.timestamp)
+                    data_age_seconds = age_minutes * 60
 
-                if not is_fresh:
-                    warnings.append(f"Market data for {symbol} is {age_minutes:.1f} minutes old")
+                    if not is_fresh:
+                        warnings.append(
+                            f"Market data for {symbol} is {age_minutes:.1f} minutes old"
+                        )
 
-            is_valid = len(missing_data) == 0
+                is_valid = len(missing_data) == 0
 
-            return {
-                "is_valid": is_valid,
-                "missing_data": missing_data,
-                "stale_data": [],
-                "warnings": warnings,
-                "data_age_seconds": data_age_seconds,
-            }
+                return {
+                    "is_valid": is_valid,
+                    "missing_data": missing_data,
+                    "stale_data": [],
+                    "warnings": warnings,
+                    "data_age_seconds": data_age_seconds,
+                }
 
-        except Exception as e:
-            logger.error(f"Failed to validate data availability: {e}")
-            return {
-                "is_valid": False,
-                "missing_data": [f"Data validation failed: {str(e)}"],
-                "stale_data": [],
-                "warnings": [],
-                "data_age_seconds": 0,
-            }
+            except Exception as e:
+                logger.error(f"Failed to validate data availability: {e}")
+                return {
+                    "is_valid": False,
+                    "missing_data": [f"Data validation failed: {str(e)}"],
+                    "stale_data": [],
+                    "warnings": [],
+                    "data_age_seconds": 0,
+                }
 
     def handle_data_unavailability(
         self, symbol: str, account_id: int, validation_result: dict
@@ -1043,17 +1045,17 @@ _context_builder_service: Optional[ContextBuilderService] = None
 
 
 def get_context_builder_service(
-    db_session: Optional[AsyncSession] = None,
+    session_factory: Optional[AsyncSession] = None,
 ) -> "ContextBuilderService":
     """Get or create the context builder service instance.
 
     Args:
-        db_session: Optional database session. If not provided, the service will create its own.
+        session_factory: Optional database session factory. If not provided, the service will create its own.
     """
     global _context_builder_service
     if _context_builder_service is None:
-        _context_builder_service = ContextBuilderService(db_session=db_session)
-    elif db_session is not None and _context_builder_service._db_session is None:
-        # Update the existing instance with the new session if needed
-        _context_builder_service._db_session = db_session
+        _context_builder_service = ContextBuilderService(session_factory=session_factory)
+    elif session_factory is not None and _context_builder_service._session_factory is None:
+        # Update the existing instance with the new session factory if needed
+        _context_builder_service._session_factory = session_factory
     return _context_builder_service

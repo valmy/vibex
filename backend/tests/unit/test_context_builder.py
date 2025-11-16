@@ -22,7 +22,7 @@ class TestContextBuilderService:
     @pytest.fixture
     def context_builder(self):
         """Create a ContextBuilderService instance for testing."""
-        return ContextBuilderService()
+        return ContextBuilderService(session_factory=None)
 
     @pytest.fixture
     def mock_market_data(self):
@@ -51,6 +51,7 @@ class TestContextBuilderService:
         mock_account.risk_per_trade = 0.02
         return mock_account
 
+    @pytest.mark.unit
     def test_service_initialization(self, context_builder):
         """Test service initialization."""
         assert context_builder is not None
@@ -58,12 +59,14 @@ class TestContextBuilderService:
         assert context_builder.MIN_CANDLES_FOR_INDICATORS == 50
         assert context_builder._cache_ttl_seconds == 300
 
+    @pytest.mark.unit
     def test_get_context_builder_service_singleton(self):
         """Test that get_context_builder_service returns singleton."""
         service1 = get_context_builder_service()
         service2 = get_context_builder_service()
         assert service1 is service2
 
+    @pytest.mark.unit
     def test_validate_data_freshness_fresh_data(self, context_builder):
         """Test data freshness validation with fresh data."""
         # Create a timestamp from 2 minutes ago (fresh)
@@ -178,20 +181,28 @@ class TestContextBuilderService:
         assert hasattr(result, "ema_20")
         assert hasattr(result, "rsi")
 
+    @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_validate_context_data_availability_missing_account(self, context_builder):
         """Test data availability validation with missing account."""
         # Set up a mock database session
         mock_db = AsyncMock()
-        context_builder._db_session = mock_db
+        mock_db.__aenter__ = AsyncMock(return_value=mock_db)
+        mock_db.__aexit__ = AsyncMock(return_value=None)
+        context_builder._session_factory = lambda: mock_db
 
         # Mock account not found
-        mock_result = Mock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_result
+        mock_execute_result = AsyncMock()
+        mock_execute_result.scalar_one_or_none.return_value = None
+        mock_db.execute.return_value = mock_execute_result
 
-        # Mock market data service
-        context_builder.market_data_service.get_latest_market_data = AsyncMock(return_value=[])
+        # Mock market data service to return some data
+        mock_market_data = [
+            Mock(timestamp=datetime.now(timezone.utc) - timedelta(minutes=i)) for i in range(50)
+        ]
+        context_builder.market_data_service.get_latest_market_data = AsyncMock(
+            return_value=mock_market_data
+        )
 
         result = await context_builder.validate_context_data_availability("BTCUSDT", 999)
 
@@ -204,7 +215,7 @@ class TestContextBuilderService:
         """Test data availability validation with no market data."""
         # Set up a mock database session
         mock_db = AsyncMock()
-        context_builder._db_session = mock_db
+        context_builder._session_factory = lambda: mock_db
 
         # Mock account found
         mock_account = Mock()
@@ -285,7 +296,7 @@ class TestContextBuilderIntegration:
     @pytest.fixture
     def context_builder(self):
         """Create a ContextBuilderService instance for testing."""
-        return ContextBuilderService()
+        return ContextBuilderService(session_factory=None)
 
     @pytest.mark.asyncio
     async def test_build_trading_context_insufficient_data(self, context_builder):
@@ -465,7 +476,7 @@ class TestContextBuilderMultiAsset:
     @pytest.fixture
     def context_builder(self):
         """Create a ContextBuilderService instance for testing."""
-        return ContextBuilderService()
+        return ContextBuilderService(session_factory=None)
 
     @pytest.mark.asyncio
     async def test_build_multi_asset_context(self, context_builder):

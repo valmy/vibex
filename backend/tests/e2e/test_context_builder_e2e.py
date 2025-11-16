@@ -21,9 +21,9 @@ class TestContextBuilderE2E:
     """E2E tests for context builder integration with real market data."""
 
     @pytest.fixture
-    def context_builder_service(self, db_session):
-        """Get context builder service instance with database session."""
-        return ContextBuilderService(db_session=db_session)
+    def context_builder_service(self, db_session_factory):
+        """Get context builder service instance with database session factory."""
+        return ContextBuilderService(session_factory=db_session_factory)
 
     @pytest.fixture
     async def real_market_data(self, db_session: AsyncSession):
@@ -66,6 +66,7 @@ class TestContextBuilderE2E:
         mock_position.current_value = 4600.0
         return [mock_position]
 
+    @pytest.mark.e2e
     @pytest.mark.asyncio
     async def test_real_market_context_building(self, context_builder_service, real_market_data):
         """Test building market context with real data for single asset."""
@@ -236,14 +237,13 @@ class TestContextBuilderE2E:
             btc_data = market_context.assets["BTCUSDT"]
             assert btc_data.current_price > 0
             # Note: data_freshness is not a field, use validate_data_freshness() method instead
-            assert market_context.validate_data_freshness(max_age_minutes=60), (
-                "Market data should be fresh"
-            )
+            freshness_results = market_context.validate_all_data_freshness(max_age_minutes=60)
+            assert all(freshness_results.values()), "Market data for all assets should be fresh"
 
             # Validate context data availability
             # Use account_id=1 for testing (may not exist, which is acceptable)
             validation_result = await context_builder_service.validate_context_data_availability(
-                symbols=["BTCUSDT"], account_id=1
+                symbol="BTCUSDT", account_id=1
             )
 
             assert validation_result is not None, "Should return validation result"
@@ -299,7 +299,7 @@ class TestContextBuilderE2E:
             raise
 
     @pytest.mark.asyncio
-    async def test_multi_asset_market_context_building(self, context_builder_service, db_session):
+    async def test_multi_asset_market_context_building(self, context_builder_service):
         """Test building market context with multiple assets."""
         try:
             # Build market context for multiple assets
@@ -395,7 +395,9 @@ class TestContextBuilderE2E:
             assert len(errors) == 1, "Should have one error message"
             assert "ETHUSDT" in errors[0], "Error message should mention ETHUSDT"
 
-            logger.info(f"Successfully handled partial failure for {len(market_context.assets)} assets")
+            logger.info(
+                f"Successfully handled partial failure for {len(market_context.assets)} assets"
+            )
 
         except Exception as e:
             # Skip if insufficient market data for the successful asset

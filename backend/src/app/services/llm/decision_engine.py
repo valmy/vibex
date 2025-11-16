@@ -131,14 +131,14 @@ class DecisionEngine:
     unified interface with caching and rate limiting.
     """
 
-    def __init__(self, db_session: Optional[AsyncSession] = None):
+    def __init__(self, session_factory: Optional[AsyncSession] = None):
         """Initialize the Decision Engine."""
-        self.db_session = db_session
+        self.session_factory = session_factory
         self.llm_service = get_llm_service()
-        self.context_builder = get_context_builder_service(db_session=db_session)
+        self.context_builder = get_context_builder_service(session_factory=session_factory)
         self.decision_validator = get_decision_validator()
         self.strategy_manager = StrategyManager()
-        self.decision_repository = DecisionRepository(db_session) if db_session else None
+        self.decision_repository = DecisionRepository(session_factory) if session_factory else None
 
         # Caching system
         self._decision_cache: Dict[str, CacheEntry] = {}
@@ -991,9 +991,9 @@ class DecisionEngine:
 _decision_engine: Optional[DecisionEngine] = None
 
 
-def get_decision_engine(db_session: Optional[AsyncSession] = None) -> DecisionEngine:
+def get_decision_engine(session_factory: Optional[AsyncSession] = None) -> DecisionEngine:
     """Get or create the decision engine instance."""
     global _decision_engine
     if _decision_engine is None:
-        _decision_engine = DecisionEngine(db_session=db_session)
+        _decision_engine = DecisionEngine(session_factory=session_factory)
     return _decision_engine
