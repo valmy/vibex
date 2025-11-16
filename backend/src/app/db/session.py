@@ -132,10 +132,14 @@ async def close_db():
     global async_engine, AsyncSessionLocal
 
     if async_engine:
-        await async_engine.dispose()
-        async_engine = None
-        AsyncSessionLocal = None
-        logger.info("Database engine closed")
+        try:
+            await async_engine.dispose()
+        except Exception as e:
+            logger.warning(f"Error disposing database engine: {e}")
+        finally:
+            async_engine = None
+            AsyncSessionLocal = None
+            logger.info("Database engine closed")
 
 
 # Health check
