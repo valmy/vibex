@@ -582,7 +582,7 @@ Provide:
                         {"role": "user", "content": prompt},
                     ],
                     temperature=0.3,  # Lower temperature for more consistent decisions
-                    max_tokens=2000,  # Increased for multi-asset decisions with more detailed analysis
+                    max_tokens=1000,
                 )
 
                 response_time_ms = (time.time() - start_time) * 1000

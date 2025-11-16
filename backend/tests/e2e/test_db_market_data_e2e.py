@@ -47,7 +47,9 @@ class TestDatabaseMarketDataE2E:
                 await market_data_service.sync_market_data(db_session, "BTC", "5m")
 
             # Fetch 100 latest 5m candles for BTCUSDT
-            data = await market_data_repository.get_latest(db_session, "BTCUSDT", "5m", 100)
+            data = await market_data_repository.get_latest(
+                db_session, "BTCUSDT", "5m", 100
+            )
         except Exception as e:
             pytest.skip(f"Database not available: {e}")
 

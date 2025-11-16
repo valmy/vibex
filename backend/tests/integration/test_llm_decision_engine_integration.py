@@ -328,7 +328,6 @@ class TestLLMDecisionEngineIntegration:
         mock_manager.switch_account_strategy.return_value = Mock()
         return mock_manager
 
-    @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_complete_decision_generation_workflow(
         self,

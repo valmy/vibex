@@ -46,9 +46,9 @@ class TestLLMDecisionEngineE2E:
         return get_market_data_service()
 
     @pytest.fixture
-    def decision_engine(self, db_session_factory: AsyncSession):
+    def decision_engine(self, db_session: AsyncSession):
         """Get decision engine instance with real dependencies."""
-        return get_decision_engine(session_factory=db_session_factory)
+        return get_decision_engine(db_session=db_session)
 
     @pytest.fixture
     async def real_market_data(
@@ -115,7 +115,6 @@ class TestLLMDecisionEngineE2E:
                 decisions=[asset_decision],
                 portfolio_rationale="Mocked portfolio rationale.",
                 total_allocation_usd=1000,
-                portfolio_risk_level="medium",
             )
             # Use model_construct to bypass validation for the mock
             mock_result = DecisionResult.model_construct(
@@ -232,9 +231,7 @@ class TestLLMDecisionEngineE2E:
         os.getenv("RUN_REAL_LLM_TESTS") != "1",
         reason="Requires RUN_REAL_LLM_TESTS=1 environment variable to run real LLM API tests",
     )
-    async def test_llm_integration_with_real_data(
-        self, db_session_factory, real_market_data, mocker
-    ):
+    async def test_llm_integration_with_real_data(self, db_session, real_market_data, mocker):
         """Test LLM integration with real market data and database.
 
         This test verifies that we can connect to the LLM API and get a response
@@ -254,7 +251,7 @@ class TestLLMDecisionEngineE2E:
         logger.info("Starting LLM integration test with real market data...")
 
         # Initialize services - they get their dependencies from the DI container
-        context_builder = ContextBuilderService(session_factory=db_session_factory)
+        context_builder = ContextBuilderService(db_session=db_session)
         llm_service = LLMService()
 
         # Create a mock trading strategy
@@ -298,15 +295,10 @@ class TestLLMDecisionEngineE2E:
         # Mock the get_account_context method
         context_builder.get_account_context = mocker.AsyncMock(return_value=mock_account_context)
 
-        # Use multiple assets as defined by the configuration
-        from app.core.config import config
+        # Use the real market data from the fixture
+        symbols = ["BTCUSDT"]
 
-        assets_str = getattr(config, "ASSETS", "BTC,ETH,SOL")  # Use the config value
-        symbols = [f"{asset.strip()}USDT" for asset in assets_str.split(",")]
-
-        logger.info(f"Building trading context for multi-assets: {symbols}")
-
-        # Build the complete trading context with real market data for all assets
+        # Build the complete trading context with real market data
         logger.info("Building trading context with real market data...")
         context = await context_builder.build_trading_context(
             symbols=symbols,
@@ -868,7 +860,9 @@ class TestLLMDecisionEngineE2E:
                 # Update mock context with scenario-specific data
                 mock_context = mock_context_builder.build_trading_context.return_value
                 # The technical_indicators are now part of the AssetMarketData
-                mock_context.market_data.assets["BTCUSDT"].technical_indicators = indicators_result
+                mock_context.market_data.assets[
+                    "BTCUSDT"
+                ].technical_indicators = indicators_result
                 mock_context.market_data.assets["BTCUSDT"].current_price = market_data[-1].close
 
                 # Setup decision engine with mocks

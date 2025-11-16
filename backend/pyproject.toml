@@ -128,7 +128,7 @@ strict_optional = true
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = "-ra -q --strict-markers"
+addopts = "-ra -q --strict-markers -s"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 asyncio_mode = "auto"
@@ -139,12 +139,6 @@ env = [
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::pytest.PytestConfigWarning",
-]
-markers = [
-    "unit: marks tests as unit tests",
-    "integration: marks tests as integration tests",
-    "e2e: marks tests as end-to-end tests",
-    "performance: marks tests as performance tests",
 ]
 
 [tool.coverage.run]

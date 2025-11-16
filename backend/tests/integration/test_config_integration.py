@@ -19,7 +19,6 @@ def manager():
     return get_config_manager()
 
 
-@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_full_initialization_workflow(manager):
     """Test full initialization workflow."""
