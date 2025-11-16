@@ -18,6 +18,7 @@ def manager():
     return get_config_manager()
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_manager_singleton(manager):
     """Test that ConfigurationManager is a singleton."""

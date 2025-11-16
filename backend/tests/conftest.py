@@ -17,8 +17,8 @@ from app.db.session import close_db, get_async_engine, get_session_factory, init
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_session():
-    """Create a database session for testing."""
+async def db_session_factory():
+    """Create a database session factory for testing."""
     # Close any existing database connection from a different event loop
     try:
         get_async_engine()
@@ -30,12 +30,16 @@ async def db_session():
     # Initialize database on the current event loop
     try:
         await init_db()
-        session_factory = get_session_factory()
+        yield get_session_factory()
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
+
+@pytest_asyncio.fixture(scope="function")
+async def db_session(db_session_factory):
+    """Create a database session for testing."""
     try:
-        async with session_factory() as session:
+        async with db_session_factory() as session:
             yield session
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
