@@ -298,10 +298,15 @@ class TestLLMDecisionEngineE2E:
         # Mock the get_account_context method
         context_builder.get_account_context = mocker.AsyncMock(return_value=mock_account_context)
 
-        # Use the real market data from the fixture
-        symbols = ["BTCUSDT"]
+        # Use multiple assets as defined by the configuration
+        from app.core.config import config
 
-        # Build the complete trading context with real market data
+        assets_str = getattr(config, "ASSETS", "BTC,ETH,SOL")  # Use the config value
+        symbols = [f"{asset.strip()}USDT" for asset in assets_str.split(",")]
+
+        logger.info(f"Building trading context for multi-assets: {symbols}")
+
+        # Build the complete trading context with real market data for all assets
         logger.info("Building trading context with real market data...")
         context = await context_builder.build_trading_context(
             symbols=symbols,
