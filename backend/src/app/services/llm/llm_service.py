@@ -308,22 +308,22 @@ Provide:
 
     async def generate_trading_decision(
         self,
-        symbol: str,
+        symbols: List[str],
         context: TradingContext,
         strategy_override: Optional[str] = None,
         ab_test_name: Optional[str] = None,
     ) -> DecisionResult:
         """
-        Generate structured trading decision using LLM analysis.
+        Generate structured multi-asset trading decision using LLM analysis.
 
         Args:
-            symbol: Trading pair symbol
-            context: Complete trading context
+            symbols: List of trading pair symbols to analyze
+            context: Complete multi-asset trading context
             strategy_override: Optional strategy to override account strategy
             ab_test_name: Optional A/B test name for model selection
 
         Returns:
-            DecisionResult with structured decision and validation status
+            DecisionResult with structured multi-asset decision and validation status
 
         Raises:
             LLMAPIError: When API call fails
@@ -345,22 +345,28 @@ Provide:
             if not self._validate_context(context):
                 raise InsufficientDataError("Insufficient context for decision generation")
 
-            # Build decision prompt
-            prompt = self._build_decision_prompt(symbol, context, strategy_override)
+            # Build multi-asset decision prompt
+            prompt = self._build_multi_asset_decision_prompt(symbols, context, strategy_override)
 
             # Generate decision with circuit breaker protection
             decision_data = await self.circuit_breaker.call(self._call_llm_for_decision, prompt)
 
-            # Parse and validate decision
-            decision = self._parse_decision_response(decision_data, symbol)
+            # Parse and validate multi-asset decision
+            decision = self._parse_multi_asset_decision_response(decision_data, symbols)
 
             processing_time_ms = (time.time() - start_time) * 1000
 
             # Record A/B testing metrics if applicable
             if ab_test_name and self.model != original_model:
+                # Calculate average confidence across all asset decisions
+                avg_confidence = (
+                    sum(d.confidence for d in decision.decisions) / len(decision.decisions)
+                    if decision.decisions
+                    else 0
+                )
                 self.ab_test_manager.record_decision_performance(
                     model_name=self.model,
-                    confidence=decision.confidence,
+                    confidence=avg_confidence,
                     response_time_ms=processing_time_ms,
                     cost=decision_data.get("cost"),
                     success=True,
@@ -377,12 +383,12 @@ Provide:
                 api_cost=decision_data.get("cost"),
             )
 
-            logger.info(f"Trading decision generated for {symbol}: {decision.action}")
+            logger.info(f"Multi-asset trading decision generated for {len(symbols)} assets")
             return result
 
         except Exception as e:
             processing_time_ms = (time.time() - start_time) * 1000
-            logger.error(f"Error generating trading decision for {symbol}: {e}")
+            logger.error(f"Error generating multi-asset trading decision: {e}")
 
             # Record A/B testing failure if applicable
             if ab_test_name and self.model != original_model:
@@ -394,7 +400,7 @@ Provide:
                 )
 
             # Return fallback decision
-            fallback_decision = self._create_fallback_decision(symbol)
+            fallback_decision = self._create_multi_asset_fallback_decision(symbols)
 
             # For the error case, we'll use the original context directly
             # as it's already a TradingContext object
@@ -447,7 +453,7 @@ Provide:
 
         except Exception as e:
             logger.error(f"Error switching to model {model_name}: {e}")
-            raise ModelSwitchError(f"Model switch failed: {e}")
+            raise ModelSwitchError(f"Model switch failed: {e}") from e
 
     async def validate_api_health(self) -> HealthStatus:
         """
@@ -576,7 +582,7 @@ Provide:
                         {"role": "user", "content": prompt},
                     ],
                     temperature=0.3,  # Lower temperature for more consistent decisions
-                    max_tokens=1000,
+                    max_tokens=2000,  # Increased for multi-asset decisions with more detailed analysis
                 )
 
                 response_time_ms = (time.time() - start_time) * 1000
@@ -633,7 +639,7 @@ Provide:
 
     def _validate_context(self, context: TradingContext) -> bool:
         """
-        Validate that context has sufficient data for decision generation.
+        Validate that context has sufficient data for multi-asset decision generation.
 
         Args:
             context: Trading context to validate
@@ -641,63 +647,89 @@ Provide:
         Returns:
             True if context is sufficient
         """
-        required_fields = [
-            context.market_data.current_price,
-            context.account_state.balance_usd,
-            context.account_state.available_balance,
-        ]
+        # Validate account state
+        if not context.account_state.balance_usd or context.account_state.balance_usd <= 0:
+            logger.warning("Invalid account balance")
+            return False
 
-        return all(field is not None and field > 0 for field in required_fields)
+        if (
+            not context.account_state.available_balance
+            or context.account_state.available_balance <= 0
+        ):
+            logger.warning("Invalid available balance")
+            return False
 
-    def _build_decision_prompt(
+        # Validate multi-asset market data
+        if not context.market_data.assets or len(context.market_data.assets) == 0:
+            logger.warning("No asset data in context")
+            return False
+
+        # Validate each asset has minimum required data
+        for symbol, asset_data in context.market_data.assets.items():
+            if not asset_data.current_price or asset_data.current_price <= 0:
+                logger.warning(f"Invalid price for {symbol}")
+                return False
+
+            if not asset_data.technical_indicators:
+                logger.warning(f"Missing technical indicators for {symbol}")
+                return False
+
+        return True
+
+    def _build_multi_asset_decision_prompt(
         self,
-        symbol: str,
+        symbols: List[str],
         context: TradingContext,
         strategy_override: Optional[str] = None,
     ) -> str:
         """
-        Build comprehensive prompt for trading decision generation.
+        Build comprehensive prompt for multi-asset trading decision generation.
 
         Args:
-            symbol: Trading pair symbol
-            context: Trading context
+            symbols: List of trading pair symbols
+            context: Multi-asset trading context
             strategy_override: Optional strategy override
 
         Returns:
-            Formatted prompt string
+            Formatted prompt string for multi-asset analysis
         """
         strategy = context.account_state.active_strategy
         if strategy_override:
-            # Use strategy override template if provided
             prompt_template = self._get_strategy_template(strategy_override)
         else:
             prompt_template = strategy.prompt_template
 
-        market_data = context.market_data
         account_state = context.account_state
 
-        # Format technical indicators
-        def format_indicator_set(indicator_set, name, interval):
-            lines = [f"--- {name} ({interval}) ---"]
-            for key, value in indicator_set.dict().items():
-                if value is not None:
-                    # Format list of floats to 2 decimal places
-                    formatted_values = [f"{v:.2f}" for v in value]
-                    lines.append(f"{key.upper()}: {', '.join(formatted_values)}")
-            return "\n".join(lines)
-
-        indicators = market_data.technical_indicators
-        indicators_text = f"""
-{format_indicator_set(indicators.interval, "Primary Interval", context.timeframes[0])}
-{format_indicator_set(indicators.long_interval, "Long-Term Interval", context.timeframes[1])}
+        # Build market data section for all assets
+        assets_data = []
+        for symbol in symbols:
+            asset_data = context.market_data.get_asset_data(symbol)
+            if asset_data:
+                # Format technical indicators for this asset
+                indicators = asset_data.technical_indicators
+                indicators_text = f"""
+  Primary Interval ({context.timeframes[0]}):
+    EMA-20: {", ".join([f"{v:.2f}" for v in indicators.interval.ema_20[-5:]]) if indicators.interval.ema_20 else "N/A"}
+    EMA-50: {", ".join([f"{v:.2f}" for v in indicators.interval.ema_50[-5:]]) if indicators.interval.ema_50 else "N/A"}
+    RSI: {", ".join([f"{v:.2f}" for v in indicators.interval.rsi[-5:]]) if indicators.interval.rsi else "N/A"}
+    MACD: {", ".join([f"{v:.4f}" for v in indicators.interval.macd[-5:]]) if indicators.interval.macd else "N/A"}
+  Long-Term Interval ({context.timeframes[1]}):
+    EMA-20: {", ".join([f"{v:.2f}" for v in indicators.long_interval.ema_20[-5:]]) if indicators.long_interval.ema_20 else "N/A"}
+    EMA-50: {", ".join([f"{v:.2f}" for v in indicators.long_interval.ema_50[-5:]]) if indicators.long_interval.ema_50 else "N/A"}
+    RSI: {", ".join([f"{v:.2f}" for v in indicators.long_interval.rsi[-5:]]) if indicators.long_interval.rsi else "N/A"}
 """
-        # Format price history
-        price_history_text = "\n".join(
-            [
-                f"- {ph.timestamp}: ${ph.price:.2f} (Vol: {ph.volume:.2f})"
-                for ph in market_data.price_history[-10:]
-            ]  # Last 10 price points
-        )
+
+                asset_text = f"""
+--- {symbol} ---
+Current Price: ${asset_data.current_price:.2f}
+24h Change: {asset_data.price_change_24h:.2f}%
+24h Volume: ${asset_data.volume_24h:,.2f}
+Volatility: {asset_data.volatility:.2f}%
+Trend: {asset_data.get_price_trend()}
+{indicators_text}
+"""
+                assets_data.append(asset_text)
 
         # Format account performance
         perf = account_state.recent_performance
@@ -711,8 +743,8 @@ Max Drawdown: {perf.max_drawdown:.1f}%
         risk_metrics = f"""
 Value at Risk (95%): ${context.risk_metrics.var_95:.2f}
 Max Drawdown: ${context.risk_metrics.max_drawdown:.2f}
-Correlation Risk: {context.risk_metrics.correlation_risk * 100:.1f}%
-Concentration Risk: {context.risk_metrics.concentration_risk * 100:.1f}%
+Correlation Risk: {context.risk_metrics.correlation_risk:.1f}%
+Concentration Risk: {context.risk_metrics.concentration_risk:.1f}%
 """
 
         # Format positions
@@ -735,16 +767,18 @@ Max Daily Loss: {strategy.risk_parameters.max_daily_loss}%
 Stop Loss: {strategy.risk_parameters.stop_loss_percentage}%
 Take Profit Ratio: {strategy.risk_parameters.take_profit_ratio}
 Max Leverage: {strategy.risk_parameters.max_leverage}x
+Max Positions: {strategy.max_positions}
 """
 
         # Build the complete prompt
         prompt = f"""
-=== MARKET DATA ===
-Symbol: {symbol}
-Current Price: ${market_data.current_price:.2f}
-24h Change: {market_data.price_change_24h:.2f}%
-24h Volume: ${market_data.volume_24h:,.2f}
-Volatility: {market_data.volatility:.2f}%
+=== MULTI-ASSET PORTFOLIO ANALYSIS ===
+Analyze the following {len(symbols)} perpetual futures assets and provide a comprehensive portfolio-level trading strategy.
+
+=== MARKET DATA FOR ALL ASSETS ===
+{"".join(assets_data)}
+
+Market Sentiment: {context.market_data.market_sentiment or "neutral"}
 
 === ACCOUNT INFO ===
 Balance: ${account_state.balance_usd:,.2f}
@@ -752,9 +786,6 @@ Available: ${account_state.available_balance:,.2f}
 Risk Exposure: {account_state.risk_exposure:.1f}%
 
 {performance_text}
-{price_history_text}
-{indicators_text}
-{strategy_params}
 
 === OPEN POSITIONS ===
 {positions_text}
@@ -762,49 +793,82 @@ Risk Exposure: {account_state.risk_exposure:.1f}%
 === RISK METRICS ===
 {risk_metrics}
 
+{strategy_params}
+
 === INSTRUCTIONS ===
 {prompt_template}
+
+IMPORTANT: Analyze ALL assets and provide decisions for each. Consider:
+1. Which assets show the strongest technical signals?
+2. How should capital be allocated across opportunities?
+3. What is the overall portfolio risk level?
+4. How do the assets correlate with each other?
+5. Which positions should be prioritized based on conviction and risk?
+
+Provide a portfolio-level rationale explaining your overall trading strategy across all assets.
 """
 
         return prompt.strip()
 
     def _get_decision_system_prompt(self) -> str:
-        """Get system prompt for decision generation."""
-        return """You are an expert cryptocurrency trading advisor. Generate structured trading decisions in JSON format.
+        """Get system prompt for multi-asset decision generation."""
+        return """You are an expert cryptocurrency trading advisor specializing in multi-asset portfolio management for perpetual futures. Generate structured trading decisions in JSON format.
 
-Your response must be valid JSON with the following structure:
+Your response must be valid JSON with the following structure for MULTI-ASSET decisions:
 {
-  "asset": "BTCUSDT",
-  "action": "buy|sell|hold|adjust_position|close_position|adjust_orders",
-  "allocation_usd": 100.0,
-  "tp_price": 50000.0,
-  "sl_price": 45000.0,
-  "exit_plan": "Take profit at resistance, stop loss below support",
-  "rationale": "Detailed reasoning for the decision",
-  "confidence": 85,
-  "risk_level": "low|medium|high"
+  "decisions": [
+    {
+      "asset": "BTCUSDT",
+      "action": "buy|sell|hold|adjust_position|close_position|adjust_orders",
+      "allocation_usd": 100.0,
+      "tp_price": 50000.0,
+      "sl_price": 45000.0,
+      "exit_plan": "Take profit at resistance, stop loss below support",
+      "rationale": "Detailed reasoning for this asset's decision",
+      "confidence": 85,
+      "risk_level": "low|medium|high"
+    },
+    {
+      "asset": "ETHUSDT",
+      "action": "hold",
+      "allocation_usd": 0.0,
+      "tp_price": null,
+      "sl_price": null,
+      "exit_plan": "Wait for better entry",
+      "rationale": "Detailed reasoning for this asset's decision",
+      "confidence": 60,
+      "risk_level": "low"
+    }
+  ],
+  "portfolio_rationale": "Overall strategy explaining how these decisions work together as a portfolio",
+  "total_allocation_usd": 100.0,
+  "portfolio_risk_level": "medium"
 }
 
 Rules:
-- allocation_usd must be positive number
+- Provide decisions for ALL assets in the analysis
+- allocation_usd must be positive number for buy/sell actions, 0 for hold
+- total_allocation_usd must equal the sum of individual allocations
 - tp_price and sl_price are optional but must be positive if provided
-- confidence must be 0-100
-- rationale must explain your reasoning clearly
-- Consider risk management and position sizing
+- confidence must be 0-100 for each asset
+- rationale must explain reasoning for each asset
+- portfolio_rationale must explain overall strategy across all assets
+- Consider portfolio-level risk management and capital allocation
+- Prioritize opportunities based on technical strength and conviction
 - Only recommend actions you can justify with the provided data"""
 
-    def _parse_decision_response(
-        self, response_data: Dict[str, Any], symbol: str
+    def _parse_multi_asset_decision_response(
+        self, response_data: Dict[str, Any], symbols: List[str]
     ) -> TradingDecision:
         """
-        Parse and validate LLM response into TradingDecision.
+        Parse and validate LLM response into multi-asset TradingDecision.
 
         Args:
             response_data: LLM response data
-            symbol: Trading symbol
+            symbols: List of trading symbols
 
         Returns:
-            Validated TradingDecision
+            Validated multi-asset TradingDecision
 
         Raises:
             ValidationError: When response cannot be parsed or validated
@@ -820,19 +884,40 @@ Rules:
                 # Try to extract JSON from text
                 decision_dict = self._extract_json_from_text(content)
 
-            # Validate required fields
-            if "asset" not in decision_dict:
-                decision_dict["asset"] = symbol
+            # Validate multi-asset structure
+            if "decisions" not in decision_dict:
+                raise ValidationError("Response missing 'decisions' field for multi-asset decision")
+
+            # Ensure all symbols have decisions
+            decision_symbols = {d.get("asset") for d in decision_dict.get("decisions", [])}
+            missing_symbols = set(symbols) - decision_symbols
+            if missing_symbols:
+                logger.warning(f"LLM did not provide decisions for: {missing_symbols}")
+                # Add hold decisions for missing symbols
+                for symbol in missing_symbols:
+                    decision_dict["decisions"].append(
+                        {
+                            "asset": symbol,
+                            "action": "hold",
+                            "allocation_usd": 0.0,
+                            "exit_plan": "No decision provided by LLM",
+                            "rationale": "LLM did not analyze this asset",
+                            "confidence": 0,
+                            "risk_level": "low",
+                        }
+                    )
 
             # Create TradingDecision with validation
             decision = TradingDecision(**decision_dict)
 
-            logger.debug(f"Successfully parsed decision: {decision.action} for {decision.asset}")
+            logger.debug(
+                f"Successfully parsed multi-asset decision with {len(decision.decisions)} asset decisions"
+            )
             return decision
 
         except (PydanticValidationError, KeyError, TypeError) as e:
-            logger.error(f"Decision validation failed: {e}")
-            raise ValidationError(f"Invalid decision format: {e}")
+            logger.error(f"Multi-asset decision validation failed: {e}")
+            raise ValidationError(f"Invalid multi-asset decision format: {e}") from e
 
     def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
         """
@@ -861,29 +946,41 @@ Rules:
 
         raise ValidationError("No valid JSON found in response")
 
-    def _create_fallback_decision(self, symbol: str) -> TradingDecision:
+    def _create_multi_asset_fallback_decision(self, symbols: List[str]) -> TradingDecision:
         """
-        Create conservative fallback decision when LLM fails.
+        Create conservative multi-asset fallback decision when LLM fails.
 
         Args:
-            symbol: Trading symbol
+            symbols: List of trading symbols
 
         Returns:
-            Conservative TradingDecision
+            Conservative multi-asset TradingDecision
         """
+        from ...schemas.trading_decision import AssetDecision
+
+        # Create hold decisions for all symbols
+        asset_decisions = []
+        for symbol in symbols:
+            asset_decisions.append(
+                AssetDecision(
+                    asset=symbol,
+                    action="hold",
+                    allocation_usd=0.0,
+                    tp_price=None,
+                    sl_price=None,
+                    exit_plan="Hold position due to analysis failure. Will reassess when conditions improve.",
+                    rationale="LLM analysis failed, defaulting to conservative hold position for this asset.",
+                    confidence=0,
+                    risk_level="low",
+                )
+            )
+
         return TradingDecision(
-            asset=symbol,
-            action="hold",
-            allocation_usd=0.0,
-            position_adjustment=None,
-            order_adjustment=None,
-            tp_price=None,
-            sl_price=None,
-            exit_plan="Hold position due to analysis failure. Will reassess when conditions improve.",
-            rationale="LLM analysis failed, defaulting to conservative hold position. "
+            decisions=asset_decisions,
+            portfolio_rationale="LLM analysis failed, defaulting to conservative hold positions across all assets. "
             "This is a safety measure to prevent unintended trades when the analysis service is unavailable.",
-            confidence=0,
-            risk_level="low",
+            total_allocation_usd=0.0,
+            portfolio_risk_level="low",
         )
 
     def _get_strategy_template(self, strategy_type: str) -> str:

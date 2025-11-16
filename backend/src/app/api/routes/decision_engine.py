@@ -26,9 +26,13 @@ router = APIRouter(prefix="/api/v1/decisions", tags=["Decision Engine"])
 
 # Request/Response Models
 class DecisionRequest(BaseModel):
-    """Request model for decision generation."""
+    """Request model for multi-asset decision generation."""
 
-    symbol: str = Field(..., description="Trading pair symbol (e.g., BTCUSDT)")
+    symbols: Optional[List[str]] = Field(
+        None,
+        description="List of trading pair symbols (e.g., ['BTCUSDT', 'ETHUSDT']). "
+        "If not provided, defaults to ASSETS environment variable.",
+    )
     account_id: int = Field(..., description="Account identifier")
     strategy_override: Optional[str] = Field(None, description="Optional strategy override")
     force_refresh: bool = Field(False, description="Force refresh of cached data")
@@ -79,22 +83,39 @@ class CacheStats(BaseModel):
 @router.post("/generate", response_model=DecisionResult)
 async def generate_decision(request: DecisionRequest):
     """
-    Generate a trading decision for a specific symbol and account.
+    Generate a multi-asset trading decision for the specified symbols and account.
 
     This endpoint orchestrates the complete decision-making process:
-    - Builds trading context from market data and account state
-    - Generates LLM-powered trading decision
+    - Builds trading context from market data and account state for all assets
+    - Generates LLM-powered multi-asset trading decision
     - Validates the decision against business rules
     - Returns structured decision with metadata
 
+    If symbols are not provided, defaults to assets defined in ASSETS environment variable.
+
     Rate limiting: 60 requests per minute per account.
     Caching: Results cached for 3-10 minutes depending on decision type.
+
+    Example request:
+    ```json
+    {
+        "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+        "account_id": 1,
+        "force_refresh": false
+    }
+    ```
+
+    Example response includes multi-asset TradingDecision with:
+    - Individual AssetDecision for each symbol
+    - Portfolio-level rationale explaining overall strategy
+    - Total allocation across all assets
+    - Portfolio risk assessment
     """
     try:
         decision_engine = get_decision_engine()
 
         result = await decision_engine.make_trading_decision(
-            symbol=request.symbol,
+            symbols=request.symbols,  # Now accepts optional list, defaults to ASSETS env var
             account_id=request.account_id,
             strategy_override=request.strategy_override,
             force_refresh=request.force_refresh,
@@ -153,7 +174,11 @@ async def generate_batch_decisions(request: BatchDecisionRequest):
 @router.get("/history/{account_id}", response_model=DecisionHistoryResponse)
 async def get_decision_history(
     account_id: int,
-    symbol: Optional[str] = Query(None, description="Filter by symbol"),
+    symbol: Optional[str] = Query(
+        None,
+        description="Optional symbol filter. Filters asset decisions within multi-asset decisions "
+        "to show only decisions for the specified symbol.",
+    ),
     limit: int = Query(100, ge=1, le=1000, description="Number of decisions to return"),
     page: int = Query(1, ge=1, description="Page number"),
     start_date: Optional[datetime] = Query(None, description="Start date filter"),
@@ -162,8 +187,20 @@ async def get_decision_history(
     """
     Get decision history for an account with optional filtering.
 
-    Returns paginated list of historical decisions with metadata.
+    Returns paginated list of historical multi-asset decisions with metadata.
     Supports filtering by symbol, date range, and pagination.
+
+    When symbol filter is provided:
+    - Returns all multi-asset decisions for the account
+    - Each decision's asset_decisions list is filtered to include only the specified symbol
+    - Portfolio-level rationale and metadata are preserved
+
+    Example:
+    - GET /api/v1/decisions/history/1?symbol=BTCUSDT
+      Returns all decisions for account 1, showing only BTC-related asset decisions
+
+    - GET /api/v1/decisions/history/1
+      Returns all decisions for account 1 with all asset decisions included
     """
     try:
         decision_engine = get_decision_engine()
@@ -173,7 +210,7 @@ async def get_decision_history(
 
         decisions = await decision_engine.get_decision_history(
             account_id=account_id,
-            symbol=symbol,
+            symbol=symbol,  # Symbol filter now filters asset decisions within multi-asset decisions
             limit=limit,
             start_date=start_date,
             end_date=end_date,
@@ -194,22 +231,59 @@ async def get_decision_history(
 @router.post("/validate", response_model=dict)
 async def validate_decision(decision: TradingDecision):
     """
-    Validate a trading decision without executing it.
+    Validate a multi-asset trading decision without executing it.
 
     This endpoint allows testing decision validation logic
     without generating a full decision through the LLM.
+
+    Accepts a multi-asset TradingDecision with:
+    - List of AssetDecision objects for each asset
+    - Portfolio-level rationale
+    - Total allocation across all assets
+    - Portfolio risk level
+
+    Returns validation results including:
+    - Overall validity status
+    - List of validation errors (if any)
+    - List of validation warnings
+    - Validation time in milliseconds
+    - Number of rules checked
+
+    Example request:
+    ```json
+    {
+        "decisions": [
+            {
+                "asset": "BTCUSDT",
+                "action": "buy",
+                "allocation_usd": 1000.0,
+                "tp_price": 52000.0,
+                "sl_price": 48000.0,
+                "exit_plan": "Take profit at resistance",
+                "rationale": "Strong bullish momentum",
+                "confidence": 75.0,
+                "risk_level": "medium"
+            }
+        ],
+        "portfolio_rationale": "Bullish market conditions",
+        "total_allocation_usd": 1000.0,
+        "portfolio_risk_level": "medium"
+    }
+    ```
     """
     try:
-        # Create minimal context for validation
+        # Create minimal multi-asset context for validation
         # In a real implementation, this would use actual account/market data
         from ...schemas.trading_decision import (
             AccountContext,
+            AssetMarketData,
             MarketContext,
             PerformanceMetrics,
             PricePoint,
             RiskMetrics,
             StrategyRiskParameters,
             TechnicalIndicators,
+            TechnicalIndicatorsSet,
             TradingContext,
             TradingStrategy,
         )
@@ -232,16 +306,34 @@ async def validate_decision(decision: TradingDecision):
             is_active=True,
         )
 
-        context = TradingContext(
-            symbol=decision.asset,
-            account_id=1,  # Placeholder
-            market_data=MarketContext(
+        # Extract symbols from decision
+        symbols = [asset_decision.asset for asset_decision in decision.decisions]
+
+        # Create placeholder market data for each asset
+        assets_market_data = {}
+        for symbol in symbols:
+            assets_market_data[symbol] = AssetMarketData(
+                symbol=symbol,
                 current_price=50000.0,  # Placeholder
                 price_change_24h=0.0,
                 volume_24h=1000000.0,
+                funding_rate=0.0001,
+                open_interest=1000000.0,
                 volatility=2.5,
                 price_history=[PricePoint(timestamp=datetime.now(timezone.utc), price=50000.0)],
-                technical_indicators=TechnicalIndicators(),
+                technical_indicators=TechnicalIndicators(
+                    interval=TechnicalIndicatorsSet(),
+                    long_interval=TechnicalIndicatorsSet(),
+                ),
+            )
+
+        context = TradingContext(
+            symbols=symbols,
+            account_id=1,  # Placeholder
+            timeframes=["5m", "1h"],
+            market_data=MarketContext(
+                assets=assets_market_data,
+                market_sentiment="neutral",
             ),
             account_state=AccountContext(
                 account_id=1,
@@ -260,6 +352,7 @@ async def validate_decision(decision: TradingDecision):
                 max_position_size=2000.0,
                 active_strategy=strategy,
             ),
+            recent_trades={symbol: [] for symbol in symbols},
             risk_metrics=RiskMetrics(
                 var_95=500.0,
                 max_drawdown=500.0,

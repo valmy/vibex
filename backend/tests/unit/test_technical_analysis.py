@@ -197,7 +197,9 @@ class TestTechnicalAnalysisService:
     def test_bollinger_bands_order(self, ta_service, valid_candles):
         """Test Bollinger Bands upper > middle > lower."""
         result = ta_service.calculate_all_indicators(valid_candles)
-        for upper, middle, lower in zip(result.bb_upper, result.bb_middle, result.bb_lower):
+        for upper, middle, lower in zip(
+            result.bb_upper, result.bb_middle, result.bb_lower, strict=True
+        ):
             if all([upper, middle, lower]):
                 assert upper >= middle >= lower
 
@@ -210,6 +212,6 @@ class TestTechnicalAnalysisService:
 
     def test_macd_histogram_calculation(self, ta_service, valid_candles):
         """Test MACD histogram = MACD - Signal."""
-        result = ta_service.calculate_all_indicators(valid_candles)
+        ta_service.calculate_all_indicators(valid_candles)
         # This test is no longer valid as the histogram is not part of the schema
         pass

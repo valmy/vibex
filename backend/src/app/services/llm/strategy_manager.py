@@ -368,12 +368,12 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
             logger.info(f"Loaded strategy '{strategy.strategy_id}' from {file_path}")
             return strategy
 
-        except FileNotFoundError:
-            raise ConfigurationError(f"Strategy file not found: {file_path}")
+        except FileNotFoundError as e:
+            raise ConfigurationError(f"Strategy file not found: {file_path}") from e
         except json.JSONDecodeError as e:
-            raise ConfigurationError(f"Invalid JSON in strategy file {file_path}: {e}")
+            raise ConfigurationError(f"Invalid JSON in strategy file {file_path}: {e}") from e
         except Exception as e:
-            raise ConfigurationError(f"Error loading strategy from {file_path}: {e}")
+            raise ConfigurationError(f"Error loading strategy from {file_path}: {e}") from e
 
     async def save_strategy_to_file(self, strategy: TradingStrategy, file_path: Path) -> None:
         """
@@ -398,7 +398,7 @@ Analyze market conditions for DCA opportunities. Focus on high-quality assets th
             logger.info(f"Saved strategy '{strategy.strategy_id}' to {file_path}")
 
         except Exception as e:
-            raise ConfigurationError(f"Error saving strategy to {file_path}: {e}")
+            raise ConfigurationError(f"Error saving strategy to {file_path}: {e}") from e
 
     async def create_custom_strategy(
         self,

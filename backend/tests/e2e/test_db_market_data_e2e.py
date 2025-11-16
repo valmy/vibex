@@ -8,9 +8,12 @@ import json
 import logging
 
 import pytest
+from sqlalchemy import text
 
+from app.core.config import config
 from app.models.market_data import MarketData
 from app.services.market_data.repository import MarketDataRepository
+from app.services.market_data.service import MarketDataService
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +26,26 @@ class TestDatabaseMarketDataE2E:
         """Create market data repository instance."""
         return MarketDataRepository()
 
+    @pytest.fixture
+    def market_data_service(self):
+        """Create market data service instance."""
+        return MarketDataService()
+
     @pytest.mark.asyncio
-    async def test_fetch_real_btcusdt_5m_data(self, db_session, market_data_repository):
+    async def test_fetch_real_btcusdt_5m_data(
+        self, db_session, market_data_repository, market_data_service
+    ):
         """Test fetching real BTCUSDT 5m data from database."""
         try:
+            # If not mocking, sync real data from the API
+            if not config.MOCK_EXTERNAL_APIS:
+                logger.warning("MOCK_EXTERNAL_APIS is false, fetching REAL data from API.")
+                # Truncate the table to ensure we're testing the sync
+                await db_session.execute(text("TRUNCATE TABLE trading.market_data"))
+                await db_session.commit()
+                # Sync data from external API
+                await market_data_service.sync_market_data(db_session, "BTC", "5m")
+
             # Fetch 100 latest 5m candles for BTCUSDT
             data = await market_data_repository.get_latest(db_session, "BTCUSDT", "5m", 100)
         except Exception as e:

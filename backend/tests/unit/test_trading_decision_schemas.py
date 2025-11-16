@@ -32,12 +32,14 @@ from app.schemas.trading_decision import (
 )
 
 
-class TestTradingDecision:
-    """Test TradingDecision model validation."""
+class TestAssetDecision:
+    """Test AssetDecision model validation."""
 
     def test_valid_buy_decision(self):
-        """Test creating a valid buy decision."""
-        decision = TradingDecision(
+        """Test creating a valid buy decision for a single asset."""
+        from app.schemas.trading_decision import AssetDecision
+
+        decision = AssetDecision(
             asset="BTCUSDT",
             action="buy",
             allocation_usd=1000.0,
@@ -54,9 +56,55 @@ class TestTradingDecision:
         assert decision.allocation_usd == 1000.0
         assert decision.confidence == 85.0
 
+
+class TestTradingDecision:
+    """Test multi-asset TradingDecision model validation."""
+
+    def test_valid_multi_asset_decision(self):
+        """Test creating a valid multi-asset trading decision."""
+        from app.schemas.trading_decision import AssetDecision
+
+        asset_decisions = [
+            AssetDecision(
+                asset="BTCUSDT",
+                action="buy",
+                allocation_usd=1000.0,
+                tp_price=50000.0,
+                sl_price=45000.0,
+                exit_plan="Take profit at resistance",
+                rationale="Strong bullish momentum",
+                confidence=85.0,
+                risk_level="medium",
+            ),
+            AssetDecision(
+                asset="ETHUSDT",
+                action="hold",
+                allocation_usd=0.0,
+                exit_plan="Wait for better entry",
+                rationale="Consolidating near support",
+                confidence=60.0,
+                risk_level="low",
+            ),
+        ]
+
+        decision = TradingDecision(
+            decisions=asset_decisions,
+            portfolio_rationale="Focusing on BTC strength while waiting for ETH setup",
+            total_allocation_usd=1000.0,
+            portfolio_risk_level="medium",
+        )
+
+        assert len(decision.decisions) == 2
+        assert decision.decisions[0].asset == "BTCUSDT"
+        assert decision.decisions[1].asset == "ETHUSDT"
+        assert decision.total_allocation_usd == 1000.0
+        assert decision.portfolio_risk_level == "medium"
+
     def test_adjust_position_requires_position_adjustment(self):
         """Test that adjust_position action requires position_adjustment."""
-        decision = TradingDecision(
+        from app.schemas.trading_decision import AssetDecision
+
+        asset_decision = AssetDecision(
             asset="BTCUSDT",
             action="adjust_position",
             allocation_usd=500.0,
@@ -66,12 +114,14 @@ class TestTradingDecision:
             risk_level="low",
         )
 
-        errors = decision.validate_action_requirements()
+        errors = asset_decision.validate_action_requirements()
         assert "position_adjustment is required for adjust_position action" in errors
 
     def test_adjust_orders_requires_order_adjustment(self):
         """Test that adjust_orders action requires order_adjustment."""
-        decision = TradingDecision(
+        from app.schemas.trading_decision import AssetDecision
+
+        asset_decision = AssetDecision(
             asset="BTCUSDT",
             action="adjust_orders",
             allocation_usd=0.0,
@@ -81,12 +131,14 @@ class TestTradingDecision:
             risk_level="low",
         )
 
-        errors = decision.validate_action_requirements()
+        errors = asset_decision.validate_action_requirements()
         assert "order_adjustment is required for adjust_orders action" in errors
 
     def test_price_logic_validation_buy(self):
         """Test price logic validation for buy orders."""
-        decision = TradingDecision(
+        from app.schemas.trading_decision import AssetDecision
+
+        asset_decision = AssetDecision(
             asset="BTCUSDT",
             action="buy",
             allocation_usd=1000.0,
@@ -99,7 +151,7 @@ class TestTradingDecision:
         )
 
         current_price = 48000.0
-        errors = decision.validate_price_logic(current_price)
+        errors = asset_decision.validate_price_logic(current_price)
 
         assert len(errors) == 2
         assert any("Take-profit price must be higher" in error for error in errors)
@@ -107,8 +159,10 @@ class TestTradingDecision:
 
     def test_invalid_confidence_range(self):
         """Test that confidence must be between 0 and 100."""
+        from app.schemas.trading_decision import AssetDecision
+
         with pytest.raises(ValidationError):
-            TradingDecision(
+            AssetDecision(
                 asset="BTCUSDT",
                 action="buy",
                 allocation_usd=1000.0,
@@ -117,6 +171,41 @@ class TestTradingDecision:
                 confidence=150.0,  # Invalid: > 100
                 risk_level="low",
             )
+
+    def test_portfolio_allocation_validation(self):
+        """Test that total_allocation_usd matches sum of asset allocations."""
+        from app.schemas.trading_decision import AssetDecision
+
+        asset_decisions = [
+            AssetDecision(
+                asset="BTCUSDT",
+                action="buy",
+                allocation_usd=1000.0,
+                exit_plan="Test",
+                rationale="Test",
+                confidence=85.0,
+                risk_level="medium",
+            ),
+            AssetDecision(
+                asset="ETHUSDT",
+                action="buy",
+                allocation_usd=500.0,
+                exit_plan="Test",
+                rationale="Test",
+                confidence=75.0,
+                risk_level="medium",
+            ),
+        ]
+
+        decision = TradingDecision(
+            decisions=asset_decisions,
+            portfolio_rationale="Diversified allocation",
+            total_allocation_usd=1500.0,  # Matches sum
+            portfolio_risk_level="medium",
+        )
+
+        assert decision.total_allocation_usd == 1500.0
+        assert sum(d.allocation_usd for d in decision.decisions) == 1500.0
 
 
 class TestPositionAdjustment:
@@ -280,10 +369,81 @@ class TestHealthStatus:
 
 
 class TestMarketContext:
-    """Test MarketContext model validation."""
+    """Test multi-asset MarketContext model validation."""
+
+    def test_multi_asset_market_context(self):
+        """Test creating multi-asset market context."""
+        from app.schemas.trading_decision import AssetMarketData
+
+        # Create indicators for BTC
+        btc_indicators = TechnicalIndicators(
+            interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+                ema_50=[47000.0],
+                rsi=[65.0],
+                macd=[100.0],
+            ),
+            long_interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+                ema_50=[47000.0],
+                rsi=[65.0],
+                macd=[100.0],
+            ),
+        )
+
+        # Create indicators for ETH
+        eth_indicators = TechnicalIndicators(
+            interval=TechnicalIndicatorsSet(
+                ema_20=[3000.0],
+                ema_50=[2900.0],
+                rsi=[55.0],
+                macd=[50.0],
+            ),
+            long_interval=TechnicalIndicatorsSet(
+                ema_20=[3000.0],
+                ema_50=[2900.0],
+                rsi=[55.0],
+                macd=[50.0],
+            ),
+        )
+
+        # Create asset market data
+        btc_data = AssetMarketData(
+            symbol="BTCUSDT",
+            current_price=48000.0,
+            price_change_24h=1000.0,
+            volume_24h=1000000.0,
+            volatility=0.02,
+            technical_indicators=btc_indicators,
+            price_history=[],
+        )
+
+        eth_data = AssetMarketData(
+            symbol="ETHUSDT",
+            current_price=3000.0,
+            price_change_24h=50.0,
+            volume_24h=500000.0,
+            volatility=0.03,
+            technical_indicators=eth_indicators,
+            price_history=[],
+        )
+
+        # Create multi-asset market context
+        market_context = MarketContext(
+            assets={"BTCUSDT": btc_data, "ETHUSDT": eth_data}, market_sentiment="bullish"
+        )
+
+        assert len(market_context.assets) == 2
+        assert "BTCUSDT" in market_context.assets
+        assert "ETHUSDT" in market_context.assets
+        assert market_context.assets["BTCUSDT"].current_price == 48000.0
+        assert market_context.assets["ETHUSDT"].current_price == 3000.0
+        assert market_context.market_sentiment == "bullish"
 
     def test_sufficient_indicators_check(self):
-        """Test sufficient indicators validation."""
+        """Test sufficient indicators validation for single asset."""
+        from app.schemas.trading_decision import AssetMarketData
+
         # Indicators with enough data
         indicators_sufficient = TechnicalIndicators(
             interval=TechnicalIndicatorsSet(
@@ -300,15 +460,17 @@ class TestMarketContext:
             ),
         )
 
-        market_context = MarketContext(
+        asset_data = AssetMarketData(
+            symbol="BTCUSDT",
             current_price=48000.0,
             price_change_24h=1000.0,
             volume_24h=1000000.0,
             volatility=0.02,
             technical_indicators=indicators_sufficient,
+            price_history=[],
         )
 
-        assert market_context.has_sufficient_indicators()
+        assert asset_data.has_sufficient_indicators()
 
         # Indicators with insufficient data
         indicators_insufficient = TechnicalIndicators(
@@ -322,18 +484,22 @@ class TestMarketContext:
             ),
         )
 
-        market_context_insufficient = MarketContext(
+        asset_data_insufficient = AssetMarketData(
+            symbol="BTCUSDT",
             current_price=48000.0,
             price_change_24h=1000.0,
             volume_24h=1000000.0,
             volatility=0.02,
             technical_indicators=indicators_insufficient,
+            price_history=[],
         )
 
-        assert not market_context_insufficient.has_sufficient_indicators()
+        assert not asset_data_insufficient.has_sufficient_indicators()
 
     def test_price_trend_detection(self):
-        """Test price trend detection."""
+        """Test price trend detection for individual asset."""
+        from app.schemas.trading_decision import AssetMarketData
+
         indicators = TechnicalIndicators(
             interval=TechnicalIndicatorsSet(
                 ema_20=[48000.0],
@@ -351,7 +517,8 @@ class TestMarketContext:
             PricePoint(timestamp=datetime.now(timezone.utc), price=48500.0),
         ]
 
-        market_context = MarketContext(
+        asset_data = AssetMarketData(
+            symbol="BTCUSDT",
             current_price=48500.0,
             price_change_24h=1500.0,
             volume_24h=1000000.0,
@@ -360,7 +527,7 @@ class TestMarketContext:
             price_history=price_points,
         )
 
-        trend = market_context.get_price_trend()
+        trend = asset_data.get_price_trend()
         assert trend == "bullish"
 
 
@@ -409,27 +576,46 @@ class TestAccountContext:
 
 
 class TestTradingContext:
-    """Test TradingContext model validation."""
+    """Test multi-asset TradingContext model validation."""
 
-    def test_context_summary_generation(self):
-        """Test trading context summary generation."""
-        # Create minimal valid context components
-        indicators = TechnicalIndicators(
-            interval=TechnicalIndicatorsSet(
-                ema_20=[48000.0],
-            ),
-            long_interval=TechnicalIndicatorsSet(
-                ema_20=[47000.0],
-            ),
+    def test_multi_asset_context_creation(self):
+        """Test creating multi-asset trading context."""
+        from app.schemas.trading_decision import AssetMarketData
+
+        # Create indicators for multiple assets
+        btc_indicators = TechnicalIndicators(
+            interval=TechnicalIndicatorsSet(ema_20=[48000.0]),
+            long_interval=TechnicalIndicatorsSet(ema_20=[47000.0]),
         )
 
-        market_context = MarketContext(
+        eth_indicators = TechnicalIndicators(
+            interval=TechnicalIndicatorsSet(ema_20=[3000.0]),
+            long_interval=TechnicalIndicatorsSet(ema_20=[2900.0]),
+        )
+
+        # Create asset market data
+        btc_data = AssetMarketData(
+            symbol="BTCUSDT",
             current_price=48000.0,
             price_change_24h=1000.0,
             volume_24h=1000000.0,
             volatility=0.02,
-            technical_indicators=indicators,
+            technical_indicators=btc_indicators,
             price_history=[PricePoint(timestamp=datetime.now(timezone.utc), price=48000.0)],
+        )
+
+        eth_data = AssetMarketData(
+            symbol="ETHUSDT",
+            current_price=3000.0,
+            price_change_24h=50.0,
+            volume_24h=500000.0,
+            volatility=0.03,
+            technical_indicators=eth_indicators,
+            price_history=[PricePoint(timestamp=datetime.now(timezone.utc), price=3000.0)],
+        )
+
+        market_context = MarketContext(
+            assets={"BTCUSDT": btc_data, "ETHUSDT": eth_data}, market_sentiment="bullish"
         )
 
         risk_params = StrategyRiskParameters(
@@ -465,21 +651,91 @@ class TestTradingContext:
         )
 
         trading_context = TradingContext(
-            symbol="BTCUSDT",
+            symbols=["BTCUSDT", "ETHUSDT"],
             account_id=1,
             timeframes=["1h", "4h"],
             market_data=market_context,
             account_state=account_context,
             risk_metrics=risk_metrics,
+            recent_trades={"BTCUSDT": [], "ETHUSDT": []},
+        )
+
+        assert trading_context.symbols == ["BTCUSDT", "ETHUSDT"]
+        assert len(trading_context.market_data.assets) == 2
+        assert "BTCUSDT" in trading_context.recent_trades
+        assert "ETHUSDT" in trading_context.recent_trades
+
+    def test_context_summary_generation(self):
+        """Test trading context summary generation for multi-asset context."""
+        from app.schemas.trading_decision import AssetMarketData
+
+        # Create minimal valid context components
+        btc_indicators = TechnicalIndicators(
+            interval=TechnicalIndicatorsSet(ema_20=[48000.0]),
+            long_interval=TechnicalIndicatorsSet(ema_20=[47000.0]),
+        )
+
+        btc_data = AssetMarketData(
+            symbol="BTCUSDT",
+            current_price=48000.0,
+            price_change_24h=1000.0,
+            volume_24h=1000000.0,
+            volatility=0.02,
+            technical_indicators=btc_indicators,
+            price_history=[PricePoint(timestamp=datetime.now(timezone.utc), price=48000.0)],
+        )
+
+        market_context = MarketContext(assets={"BTCUSDT": btc_data})
+
+        risk_params = StrategyRiskParameters(
+            max_risk_per_trade=2.0, max_daily_loss=5.0, stop_loss_percentage=1.5
+        )
+
+        strategy = TradingStrategy(
+            strategy_id="test",
+            strategy_name="Test Strategy",
+            strategy_type="conservative",
+            prompt_template="Test",
+            risk_parameters=risk_params,
+            is_active=True,
+        )
+
+        performance = PerformanceMetrics(
+            total_pnl=1000.0, win_rate=60.0, avg_win=150.0, avg_loss=-75.0, max_drawdown=-200.0
+        )
+
+        account_context = AccountContext(
+            account_id=1,
+            balance_usd=10000.0,
+            available_balance=8000.0,
+            total_pnl=1000.0,
+            recent_performance=performance,
+            risk_exposure=20.0,
+            max_position_size=2000.0,
+            active_strategy=strategy,
+        )
+
+        risk_metrics = RiskMetrics(
+            var_95=500.0, max_drawdown=1000.0, correlation_risk=15.0, concentration_risk=25.0
+        )
+
+        trading_context = TradingContext(
+            symbols=["BTCUSDT"],
+            account_id=1,
+            timeframes=["1h", "4h"],
+            market_data=market_context,
+            account_state=account_context,
+            risk_metrics=risk_metrics,
+            recent_trades={"BTCUSDT": []},
         )
 
         summary = trading_context.get_context_summary()
 
-        assert summary["symbol"] == "BTCUSDT"
+        assert summary["symbols"] == ["BTCUSDT"]
         assert summary["account_id"] == 1
-        assert summary["current_price"] == 48000.0
         assert summary["strategy"] == "Test Strategy"
-        assert "price_trend" in summary
+        assert summary["num_assets"] == 1
+        assert "portfolio_trends" in summary
 
 
 class TestStrategyPerformance:

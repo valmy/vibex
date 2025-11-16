@@ -70,6 +70,74 @@ class TestStrategyManager:
         for expected_id in expected_ids:
             assert expected_id in strategy_ids
 
+    async def test_multi_asset_prompt_templates(self, strategy_manager):
+        """Test that strategy prompt templates support multi-asset context."""
+        strategies = await strategy_manager.get_available_strategies()
+
+        for strategy in strategies:
+            # Verify prompt template exists and is not empty
+            assert strategy.prompt_template
+            assert len(strategy.prompt_template) > 0
+
+            # Verify prompt templates can handle multi-asset context
+            # They should not be symbol-specific
+            assert (
+                "symbol" not in strategy.prompt_template.lower()
+                or "symbols" in strategy.prompt_template.lower()
+            )
+
+            # Verify prompt templates mention analysis approach
+            prompt_lower = strategy.prompt_template.lower()
+            assert any(
+                keyword in prompt_lower
+                for keyword in ["analyze", "market", "trading", "strategy", "risk"]
+            )
+
+    async def test_strategy_works_with_multi_asset_decisions(self, strategy_manager):
+        """Test that strategies work correctly with multi-asset decision structure."""
+        # Get a strategy
+        conservative = await strategy_manager.get_strategy("conservative")
+        assert conservative is not None
+
+        # Verify strategy configuration supports multiple positions
+        assert conservative.max_positions >= 1
+
+        # Verify risk parameters are suitable for multi-asset trading
+        assert conservative.risk_parameters.max_risk_per_trade > 0
+        assert conservative.risk_parameters.max_daily_loss > 0
+
+        # Verify the strategy can handle multiple assets
+        # (max_positions should allow for multiple concurrent positions)
+        assert conservative.max_positions >= 2 or conservative.strategy_type == "dca"
+
+    async def test_strategy_prompt_template_multi_asset_context(self, strategy_manager):
+        """Test that prompt templates are designed for multi-asset analysis."""
+        strategies = await strategy_manager.get_available_strategies()
+
+        for strategy in strategies:
+            prompt = strategy.prompt_template
+
+            # Verify prompt doesn't assume single asset
+            # Should not have phrases like "the symbol" or "this asset"
+            assert "the symbol" not in prompt.lower()
+            assert "this asset" not in prompt.lower()
+
+            # Verify prompt is generic enough for multiple assets
+            # Should focus on market analysis, not specific to one symbol
+            assert len(prompt) > 100  # Substantial prompt
+
+            # Verify prompt includes strategy-specific guidance
+            if strategy.strategy_type == "conservative":
+                assert "conservative" in prompt.lower() or "capital preservation" in prompt.lower()
+            elif strategy.strategy_type == "aggressive":
+                assert "aggressive" in prompt.lower() or "momentum" in prompt.lower()
+            elif strategy.strategy_type == "scalping":
+                assert "scalping" in prompt.lower() or "quick" in prompt.lower()
+            elif strategy.strategy_type == "swing":
+                assert "swing" in prompt.lower() or "medium-term" in prompt.lower()
+            elif strategy.strategy_type == "dca":
+                assert "dca" in prompt.lower() or "dollar cost averaging" in prompt.lower()
+
     async def test_get_strategy(self, strategy_manager):
         """Test getting a specific strategy."""
         # Test existing strategy
@@ -103,6 +171,40 @@ class TestStrategyManager:
         retrieved = await strategy_manager.get_strategy("test_custom")
         assert retrieved is not None
         assert retrieved.strategy_id == "test_custom"
+
+    async def test_create_custom_strategy_multi_asset(
+        self, strategy_manager, sample_risk_parameters
+    ):
+        """Test creating a custom strategy designed for multi-asset trading."""
+        multi_asset_prompt = """
+        Analyze all provided assets and identify the best trading opportunities.
+        Consider:
+        - Relative strength across assets
+        - Correlation and diversification
+        - Portfolio-level risk management
+        - Capital allocation optimization
+
+        Provide decisions for each asset with portfolio-level rationale.
+        """
+
+        custom_strategy = await strategy_manager.create_custom_strategy(
+            strategy_id="multi_asset_custom",
+            strategy_name="Multi-Asset Custom Strategy",
+            prompt_template=multi_asset_prompt,
+            risk_parameters=sample_risk_parameters,
+            timeframe_preference=["1h", "4h"],
+            max_positions=5,  # Allow multiple concurrent positions
+            position_sizing="percentage",
+        )
+
+        assert custom_strategy.strategy_id == "multi_asset_custom"
+        assert custom_strategy.max_positions == 5
+        assert "assets" in custom_strategy.prompt_template.lower()
+        assert "portfolio" in custom_strategy.prompt_template.lower()
+
+        # Verify validation passes
+        errors = await strategy_manager.validate_strategy(custom_strategy)
+        assert len(errors) == 0
 
     async def test_create_duplicate_strategy(self, strategy_manager, sample_risk_parameters):
         """Test creating a strategy with duplicate ID."""
@@ -291,6 +393,31 @@ class TestStrategyManager:
         assert cached_metrics is not None
         assert cached_metrics.current_positions == 2
 
+    async def test_strategy_metrics_multi_asset_positions(self, strategy_manager):
+        """Test strategy metrics with multiple asset positions."""
+        strategy_id = "aggressive"
+        account_id = 456
+
+        # Test with multiple positions across different assets
+        metrics = await strategy_manager.update_strategy_metrics(
+            strategy_id=strategy_id,
+            account_id=account_id,
+            current_positions=3,  # Multiple assets
+            total_allocated=5000.0,  # Total across all assets
+            unrealized_pnl=250.0,  # Combined P&L
+            realized_pnl_today=100.0,
+            trades_today=5,
+            last_trade_time=datetime.now(timezone.utc) - timedelta(minutes=2),
+        )
+
+        assert metrics.current_positions == 3
+        assert metrics.total_allocated == 5000.0
+        assert metrics.unrealized_pnl == 250.0
+
+        # Verify strategy allows multiple positions
+        strategy = await strategy_manager.get_strategy(strategy_id)
+        assert strategy.max_positions >= metrics.current_positions
+
     async def test_calculate_strategy_performance(self, strategy_manager):
         """Test calculating strategy performance."""
         strategy_id = "conservative"
@@ -354,6 +481,70 @@ class TestStrategyManager:
         # Test performance grade
         grade = performance.get_performance_grade()
         assert grade in ["A+", "A", "B+", "B", "C+", "C", "D", "F"]
+
+    async def test_calculate_performance_multi_asset_trades(self, strategy_manager):
+        """Test calculating performance with trades across multiple assets."""
+        strategy_id = "aggressive"
+        start_date = datetime.now(timezone.utc) - timedelta(days=7)
+        end_date = datetime.now(timezone.utc)
+
+        # Sample multi-asset trade data (trades from BTC, ETH, SOL)
+        trades_data = [
+            {
+                "symbol": "BTCUSDT",
+                "pnl": 200.0,
+                "volume": 2000.0,
+                "entry_time": start_date,
+                "exit_time": start_date + timedelta(hours=3),
+            },
+            {
+                "symbol": "ETHUSDT",
+                "pnl": 150.0,
+                "volume": 1500.0,
+                "entry_time": start_date + timedelta(hours=1),
+                "exit_time": start_date + timedelta(hours=5),
+            },
+            {
+                "symbol": "SOLUSDT",
+                "pnl": -80.0,
+                "volume": 800.0,
+                "entry_time": start_date + timedelta(hours=2),
+                "exit_time": start_date + timedelta(hours=4),
+            },
+            {
+                "symbol": "BTCUSDT",
+                "pnl": 100.0,
+                "volume": 1000.0,
+                "entry_time": start_date + timedelta(days=1),
+                "exit_time": start_date + timedelta(days=1, hours=2),
+            },
+            {
+                "symbol": "ETHUSDT",
+                "pnl": -50.0,
+                "volume": 500.0,
+                "entry_time": start_date + timedelta(days=2),
+                "exit_time": start_date + timedelta(days=2, hours=1),
+            },
+        ]
+
+        performance = await strategy_manager.calculate_strategy_performance(
+            strategy_id=strategy_id,
+            start_date=start_date,
+            end_date=end_date,
+            trades_data=trades_data,
+        )
+
+        # Verify performance aggregates across all assets
+        assert performance.strategy_id == strategy_id
+        assert performance.total_trades == 5
+        assert performance.winning_trades == 3  # BTC x2, ETH x1
+        assert performance.losing_trades == 2  # SOL x1, ETH x1
+        assert performance.total_pnl == 320.0  # 200 + 150 - 80 + 100 - 50
+        assert performance.total_volume_traded == 5800.0
+
+        # Verify strategy supports multiple assets
+        strategy = await strategy_manager.get_strategy(strategy_id)
+        assert strategy.max_positions >= 3  # Should allow multiple concurrent positions
 
     async def test_calculate_performance_no_trades(self, strategy_manager):
         """Test calculating performance with no trades."""

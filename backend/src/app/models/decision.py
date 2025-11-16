@@ -25,7 +25,11 @@ from .base import BaseModel
 
 
 class Decision(BaseModel):
-    """Trading decision model for storing LLM-generated decisions."""
+    """Trading decision model for storing LLM-generated decisions.
+
+    Supports both single-asset (legacy) and multi-asset decision structures.
+    For multi-asset decisions, asset_decisions contains the list of per-asset decisions.
+    """
 
     __tablename__ = "decisions"
     __table_args__ = (
@@ -40,22 +44,28 @@ class Decision(BaseModel):
     account_id = Column(Integer, ForeignKey("trading.accounts.id"), nullable=False)
     strategy_id = Column(String(100), nullable=False, index=True)
 
-    # Decision core fields
-    symbol = Column(String(20), nullable=False, index=True)
-    action = Column(
-        String(20), nullable=False
-    )  # buy, sell, hold, adjust_position, close_position, adjust_orders
-    allocation_usd = Column(Float, nullable=False, default=0.0)
+    # Multi-asset decision fields
+    asset_decisions = Column(JSON, nullable=True)  # List of AssetDecision objects
+    portfolio_rationale = Column(Text, nullable=True)  # Overall portfolio strategy
+    total_allocation_usd = Column(Float, nullable=True)  # Total allocation across all assets
+    portfolio_risk_level = Column(String(10), nullable=True)  # Portfolio-wide risk level
 
-    # Price levels
+    # Legacy single-asset decision fields (kept for backward compatibility)
+    symbol = Column(String(20), nullable=True, index=True)  # Nullable for multi-asset decisions
+    action = Column(
+        String(20), nullable=True
+    )  # buy, sell, hold, adjust_position, close_position, adjust_orders
+    allocation_usd = Column(Float, nullable=True, default=0.0)
+
+    # Price levels (legacy single-asset)
     tp_price = Column(Float, nullable=True)
     sl_price = Column(Float, nullable=True)
 
-    # Decision metadata
-    exit_plan = Column(Text, nullable=False)
-    rationale = Column(Text, nullable=False)
-    confidence = Column(Float, nullable=False)  # 0-100
-    risk_level = Column(String(10), nullable=False)  # low, medium, high
+    # Decision metadata (legacy single-asset)
+    exit_plan = Column(Text, nullable=True)
+    rationale = Column(Text, nullable=True)
+    confidence = Column(Float, nullable=True)  # 0-100
+    risk_level = Column(String(10), nullable=True)  # low, medium, high
     timestamp = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     # Position and order adjustments (stored as JSON)
@@ -98,14 +108,32 @@ class Decision(BaseModel):
         )
 
     @property
+    def is_multi_asset(self) -> bool:
+        """Check if this is a multi-asset decision."""
+        return self.asset_decisions is not None and len(self.asset_decisions) > 0
+
+    @property
     def is_trade_action(self) -> bool:
         """Check if decision involves actual trading."""
+        if self.is_multi_asset:
+            # Check if any asset decision involves trading
+            return any(
+                ad.get("action")
+                in ["buy", "sell", "adjust_position", "close_position", "adjust_orders"]
+                for ad in self.asset_decisions
+            )
         return self.action in ["buy", "sell", "adjust_position", "close_position", "adjust_orders"]
 
     @property
     def requires_execution(self) -> bool:
         """Check if decision requires execution."""
         return self.is_trade_action and not self.executed and self.validation_passed
+
+    def get_symbols(self) -> list[str]:
+        """Get list of symbols in this decision."""
+        if self.is_multi_asset:
+            return [ad.get("asset") for ad in self.asset_decisions if ad.get("asset")]
+        return [self.symbol] if self.symbol else []
 
     def get_allocation_percentage(self, account_balance: float) -> Optional[float]:
         """Calculate allocation as percentage of account balance."""
