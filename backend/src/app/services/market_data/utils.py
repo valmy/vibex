@@ -101,4 +101,4 @@ def validate_interval(interval: str) -> bool:
     Returns:
         bool: True if interval is valid, False otherwise
     """
-    return interval in ["1m", "5m", "1h", "4h", "1d"]
+    return interval in ["1m", "3m", "5m", "1h", "4h", "1d"]

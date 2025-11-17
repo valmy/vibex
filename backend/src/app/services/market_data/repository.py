@@ -25,6 +25,9 @@ class MarketDataRepository:
         """
         Store market data in TimescaleDB with upsert to handle duplicates.
 
+        Note: This method does NOT commit the transaction. The caller is responsible
+        for calling db.commit() after this method returns.
+
         Args:
             db: Database session
             symbol: Trading pair symbol
@@ -39,7 +42,8 @@ class MarketDataRepository:
             for candle in data:
                 # Parse candle data from list format
                 # Format: [open_time, open, high, low, close, volume, close_time, quote_asset_volume,
-                #          number_of_trades, taker_buy_base_asset_volume, taker_buy_quote_asset_volume, ignore]
+                #          number_of_trades, taker_buy_base_asset_volume, taker_buy_quote_asset_volume, ignore, funding_rate (optional)]
+                # Note: funding_rate is appended as the last element when correlated with funding data
                 candle_time = datetime.fromtimestamp(candle[0] / 1000)  # open_time
 
                 # Check if record already exists
@@ -67,7 +71,12 @@ class MarketDataRepository:
                     existing.taker_buy_quote_asset_volume = (
                         float(candle[10]) if len(candle) > 10 else 0.0
                     )
-                    existing.funding_rate = float(candle[11]) if len(candle) > 11 else None
+                    # Funding rate is appended as the last element (index 12) when correlated
+                    existing.funding_rate = (
+                        float(candle[-1])
+                        if len(candle) > 11 and candle[-1] is not None
+                        else None
+                    )
                     logger.debug(f"Updated existing market data for {symbol} at {candle_time}")
                 else:
                     # Create new record
@@ -84,18 +93,18 @@ class MarketDataRepository:
                         number_of_trades=float(candle[8]) if len(candle) > 8 else 0.0,
                         taker_buy_base_asset_volume=float(candle[9]) if len(candle) > 9 else 0.0,
                         taker_buy_quote_asset_volume=float(candle[10]) if len(candle) > 10 else 0.0,
-                        funding_rate=float(candle[11]) if len(candle) > 11 else None,
+                        # Funding rate is appended as the last element (index 12) when correlated
+                        funding_rate=(
+                            float(candle[-1])
+                            if len(candle) > 11 and candle[-1] is not None
+                            else None
+                        ),
                     )
                     db.add(market_data)
                     logger.debug(f"Added new market data for {symbol} at {candle_time}")
 
                 count += 1
 
-                # Commit in batches to improve performance
-                if count % 100 == 0:
-                    await db.commit()
-
-            await db.commit()
             logger.info(f"Processed {count} market data records for {symbol}")
             return count
         except Exception as e:

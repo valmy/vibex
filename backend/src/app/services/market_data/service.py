@@ -147,15 +147,18 @@ class MarketDataService:
 
                         # The last candle is the most recent one
                         latest_candle = candles[-1]
-                        candle_time = datetime.fromtimestamp(latest_candle[0] / 1000, timezone.utc)
+                        candle_time_ms = latest_candle[6]  # Close time in milliseconds
+                        candle_time = datetime.fromtimestamp(candle_time_ms / 1000, timezone.utc)
 
-                        # Validate we got the latest candle
+                        # Validate we got the latest candle (must be closed)
+                        # Use integer millisecond comparison to avoid floating-point precision issues
                         expected_close = calculate_previous_candle_close(
                             interval, datetime.now(timezone.utc)
                         )
-                        if (
-                            abs((candle_time - expected_close).total_seconds()) > 60
-                        ):  # 1 min tolerance
+                        expected_close_ms = int(expected_close.timestamp() * 1000)
+
+                        # Only reject if candle is more than 1 second behind expected close
+                        if expected_close_ms - candle_time_ms > 1000:
                             raise ValueError(
                                 f"Received stale candle data for {symbol}. Expected close at {expected_close}, got {candle_time}"
                             )
@@ -459,6 +462,7 @@ class MarketDataService:
                                 data = [candle + [None] for candle in data]
 
                         count = await self.store_market_data(db, formatted_symbol, intv, data)
+                        await db.commit()
                         results[f"{formatted_symbol}_{intv}"] = count
                         logger.info(f"Synced {count} records for {formatted_symbol} ({intv})")
                     except Exception as e:
