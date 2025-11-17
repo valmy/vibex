@@ -720,13 +720,18 @@ Provide:
     RSI: {", ".join([f"{v:.2f}" for v in indicators.long_interval.rsi[-5:]]) if indicators.long_interval.rsi else "N/A"}
 """
 
+                # Format funding rate if available
+                funding_rate_text = ""
+                if asset_data.funding_rate is not None:
+                    funding_rate_text = f"Funding Rate: {asset_data.funding_rate:.4f}%\n"
+
                 asset_text = f"""
 --- {symbol} ---
 Current Price: ${asset_data.current_price:.2f}
 24h Change: {asset_data.price_change_24h:.2f}%
 24h Volume: ${asset_data.volume_24h:,.2f}
 Volatility: {asset_data.volatility:.2f}%
-Trend: {asset_data.get_price_trend()}
+{funding_rate_text}Trend: {asset_data.get_price_trend()}
 {indicators_text}
 """
                 assets_data.append(asset_text)

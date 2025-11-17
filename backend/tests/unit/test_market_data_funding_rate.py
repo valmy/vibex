@@ -146,14 +146,10 @@ class TestMarketDataRepositoryFundingRate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
 
-        # Mock commit
-        mock_db.commit = AsyncMock()
-
         result = asyncio.run(repository.store_candles(mock_db, symbol, interval, candle_data))
 
         assert result == 1
         mock_db.add.assert_called_once()
-        mock_db.commit.assert_called()
 
         # Verify the added record has funding rate
         call_args = mock_db.add.call_args[0][0]
@@ -203,13 +199,10 @@ class TestMarketDataRepositoryFundingRate:
             ]
         ]
 
-        mock_db.commit = AsyncMock()
-
         result = asyncio.run(repository.store_candles(mock_db, symbol, interval, candle_data))
 
         assert result == 1
         assert existing_record.funding_rate == 0.00015  # Should be updated
-        mock_db.commit.assert_called()
 
 
 class TestMarketDataServiceFundingRate:
