@@ -723,7 +723,7 @@ Provide:
                 # Format funding rate if available
                 funding_rate_text = ""
                 if asset_data.funding_rate is not None:
-                    funding_rate_text = f"Funding Rate: {asset_data.funding_rate:.4f}%\n"
+                    funding_rate_text = f"Funding Rate: {asset_data.funding_rate * 100:.4f}%\n"
 
                 asset_text = f"""
 --- {symbol} ---

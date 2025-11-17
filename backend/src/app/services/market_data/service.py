@@ -160,7 +160,7 @@ class MarketDataService:
                         # Only reject if candle is more than 1 second behind expected close
                         if expected_close_ms - candle_time_ms > 1000:
                             raise ValueError(
-                                f"Candle has not closed yet for {symbol}. Expected close at {expected_close}, got {candle_time}"
+                                f"Received stale candle data for {symbol}. Expected close at {expected_close}, got {candle_time}"
                             )
 
                         # Log that we're about to fetch funding rates

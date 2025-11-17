@@ -72,7 +72,11 @@ class MarketDataRepository:
                         float(candle[10]) if len(candle) > 10 else 0.0
                     )
                     # Funding rate is appended as the last element (index 12) when correlated
-                    existing.funding_rate = float(candle[-1]) if len(candle) > 11 else None
+                    existing.funding_rate = (
+                        float(candle[-1])
+                        if len(candle) > 11 and candle[-1] is not None
+                        else None
+                    )
                     logger.debug(f"Updated existing market data for {symbol} at {candle_time}")
                 else:
                     # Create new record
@@ -90,7 +94,11 @@ class MarketDataRepository:
                         taker_buy_base_asset_volume=float(candle[9]) if len(candle) > 9 else 0.0,
                         taker_buy_quote_asset_volume=float(candle[10]) if len(candle) > 10 else 0.0,
                         # Funding rate is appended as the last element (index 12) when correlated
-                        funding_rate=float(candle[-1]) if len(candle) > 11 else None,
+                        funding_rate=(
+                            float(candle[-1])
+                            if len(candle) > 11 and candle[-1] is not None
+                            else None
+                        ),
                     )
                     db.add(market_data)
                     logger.debug(f"Added new market data for {symbol} at {candle_time}")
