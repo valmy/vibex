@@ -915,6 +915,46 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
             period_days=period_days,
         )
 
+    async def delete_strategy(self, strategy_id: str) -> bool:
+        """
+        Delete a strategy and its associated assignments.
+
+        Args:
+            strategy_id: Strategy to delete
+
+        Returns:
+            bool: True if deleted, False if not found
+        """
+        if not self.session_factory:
+            return False
+
+        async with self.session_factory() as session:
+            try:
+                stmt = select(StrategyModel).where(StrategyModel.strategy_id == strategy_id)
+                result = await session.execute(stmt)
+                strategy = result.scalar_one_or_none()
+
+                if strategy:
+                    # Clear previous_strategy_id references to avoid FK constraint violation
+                    stmt = select(StrategyAssignmentModel).where(
+                        StrategyAssignmentModel.previous_strategy_id == strategy.id
+                    )
+                    result = await session.execute(stmt)
+                    assignments = result.scalars().all()
+                    for assignment in assignments:
+                        assignment.previous_strategy_id = None
+
+                    await session.delete(strategy)
+                    await session.commit()
+                    logger.info(f"Deleted strategy '{strategy_id}'")
+                    return True
+                return False
+            except Exception as e:
+                await session.rollback()
+                logger.error(f"Failed to delete strategy: {e}")
+                return False
+                return False
+
     def _map_db_to_pydantic(self, db_strategy: StrategyModel) -> TradingStrategy:
         """Map database model to Pydantic model."""
         return TradingStrategy(

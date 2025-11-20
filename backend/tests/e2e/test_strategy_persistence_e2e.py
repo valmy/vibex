@@ -50,6 +50,12 @@ class TestStrategyPersistenceE2E:
         if existing_account:
             await db_session.delete(existing_account)
 
+        # Clean up existing custom strategy with the same name
+        existing_strategies = await strategy_manager.get_available_strategies()
+        for strategy in existing_strategies:
+            if strategy.strategy_name == "Integration Test Strategy":
+                await strategy_manager.delete_strategy(strategy.strategy_id)
+
         existing_user = (
             await db_session.execute(select(User).where(User.id == 1))
         ).scalar_one_or_none()
@@ -135,6 +141,8 @@ class TestStrategyPersistenceE2E:
             assert context.active_strategy.strategy_id == conservative.strategy_id
 
         # Cleanup
+        deleted = await strategy_manager.delete_strategy(custom_strategy.strategy_id)
+        assert deleted, f"Failed to delete strategy {custom_strategy.strategy_id}"
         await db_session.delete(test_account)
         await db_session.delete(test_user)
         await db_session.commit()
