@@ -51,7 +51,6 @@ class Account(BaseModel):
     taker_fee_bps = Column(Float, default=20.0, nullable=False)  # 20 bps (0.20%)
     balance_usd = Column(Float, default=0.0, nullable=False)
 
-
     # Account settings
     is_paper_trading = Column(Boolean, default=False, nullable=False)
     is_multi_account = Column(Boolean, default=False, nullable=False)
@@ -68,6 +67,7 @@ class Account(BaseModel):
         "PerformanceMetric", back_populates="account", cascade="all, delete-orphan"
     )
     decisions = relationship("Decision", back_populates="account", cascade="all, delete-orphan")
+    strategy_assignments = relationship("StrategyAssignment", back_populates="account", cascade="all, delete-orphan")
 
     def __repr__(self):
         """String representation."""

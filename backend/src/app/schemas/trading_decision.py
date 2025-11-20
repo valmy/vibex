@@ -357,8 +357,12 @@ class StrategyRiskParameters(BaseModel):
     take_profit_ratio: float = Field(default=2.0, ge=1.0, description="Risk/reward ratio")
     max_leverage: float = Field(default=2.0, ge=1.0, le=10.0, description="Maximum leverage")
     cooldown_period: int = Field(default=300, ge=0, description="Cooldown between trades (seconds)")
-    max_funding_rate_bps: float = Field(default=0.0, ge=0, description="Max funding rate (bps) before blocking trades")
-    liquidation_buffer: float = Field(default=0.0, ge=0, description="Buffer from liquidation price for stop loss (%)")
+    max_funding_rate_bps: float = Field(
+        default=0.0, ge=0, description="Max funding rate (bps) before blocking trades"
+    )
+    liquidation_buffer: float = Field(
+        default=0.0, ge=0, description="Buffer from liquidation price for stop loss (%)"
+    )
 
 
 class TradingStrategy(BaseModel):
@@ -366,9 +370,19 @@ class TradingStrategy(BaseModel):
 
     strategy_id: str = Field(..., description="Unique strategy identifier")
     strategy_name: str = Field(..., description="Human-readable strategy name")
-    strategy_type: Literal["conservative", "aggressive", "scalping", "swing", "dca", "custom", "conservative_perps", "aggressive_perps", "scalping_perps", "swing_perps", "dca_hedge"] = (
-        Field(..., description="Strategy type classification")
-    )
+    strategy_type: Literal[
+        "conservative",
+        "aggressive",
+        "scalping",
+        "swing",
+        "dca",
+        "custom",
+        "conservative_perps",
+        "aggressive_perps",
+        "scalping_perps",
+        "swing_perps",
+        "dca_hedge",
+    ] = Field(..., description="Strategy type classification")
     prompt_template: str = Field(..., description="LLM prompt template for this strategy")
     risk_parameters: StrategyRiskParameters = Field(..., description="Risk management parameters")
     timeframe_preference: List[str] = Field(
@@ -382,7 +396,9 @@ class TradingStrategy(BaseModel):
         default="any", description="Preference for order types to manage fees"
     )
     funding_rate_threshold: float = Field(
-        default=0.0, ge=0, description="Funding rate threshold to consider before entering a trade (%)"
+        default=0.0,
+        ge=0,
+        description="Funding rate threshold to consider before entering a trade (%)",
     )
     is_active: bool = Field(default=True, description="Whether strategy is active")
 

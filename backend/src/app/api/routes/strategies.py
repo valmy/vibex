@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ...core.exceptions import ConfigurationError, ValidationError
+from ...db.session import get_session_factory
 from ...schemas.trading_decision import (
     StrategyAlert,
     StrategyAssignment,
@@ -23,7 +24,6 @@ from ...schemas.trading_decision import (
     TradingStrategy,
 )
 from ...services.llm.strategy_manager import StrategyManager
-from ...db.session import get_session_factory
 
 logger = logging.getLogger(__name__)
 

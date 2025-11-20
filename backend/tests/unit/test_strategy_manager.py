@@ -5,21 +5,19 @@ Tests strategy configuration, assignment, switching, and performance tracking.
 """
 
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.app.core.exceptions import ConfigurationError, ValidationError
+from src.app.core.exceptions import ValidationError
+from src.app.models.strategy import Strategy as StrategyModel
+from src.app.models.strategy import StrategyAssignment as StrategyAssignmentModel
 from src.app.schemas.trading_decision import (
-    StrategyAlert,
-    StrategyPerformance,
     StrategyRiskParameters,
     TradingStrategy,
 )
 from src.app.services.llm.strategy_manager import StrategyManager
-from src.app.models.strategy import Strategy as StrategyModel, StrategyAssignment as StrategyAssignmentModel
 
 
 class TestStrategyManager:
@@ -81,17 +79,27 @@ class TestStrategyManager:
             "max_leverage": 2.0,
             "cooldown_period": 600,
             "max_funding_rate_bps": 5.0,
-            "liquidation_buffer": 0.15
+            "liquidation_buffer": 0.15,
         }
 
     async def test_initialization(self, strategy_manager, mock_session, valid_risk_params):
         """Test StrategyManager initialization."""
+
         # Mock database response for get_available_strategies
         def create_mock_strategy(sid):
             return StrategyModel(
                 strategy_id=sid,
                 strategy_name=f"{sid.capitalize()} Strategy",
-                strategy_type=sid if sid in ["conservative_perps", "aggressive_perps", "scalping_perps", "swing_perps", "dca_hedge"] else "custom",
+                strategy_type=sid
+                if sid
+                in [
+                    "conservative_perps",
+                    "aggressive_perps",
+                    "scalping_perps",
+                    "swing_perps",
+                    "dca_hedge",
+                ]
+                else "custom",
                 prompt_template="template",
                 risk_parameters=valid_risk_params,
                 timeframe_preference=["1h"],
@@ -99,7 +107,7 @@ class TestStrategyManager:
                 position_sizing="fixed",
                 order_preference="any",
                 funding_rate_threshold=0.0,
-                is_active=True
+                is_active=True,
             )
 
         mock_strategies = [
@@ -133,7 +141,7 @@ class TestStrategyManager:
             position_sizing="percentage",
             order_preference="maker_only",
             funding_rate_threshold=0.05,
-            is_active=True
+            is_active=True,
         )
 
         mock_result = MagicMock()
@@ -151,7 +159,9 @@ class TestStrategyManager:
         non_existent = await strategy_manager.get_strategy("non_existent")
         assert non_existent is None
 
-    async def test_create_custom_strategy(self, strategy_manager, sample_risk_parameters, mock_session):
+    async def test_create_custom_strategy(
+        self, strategy_manager, sample_risk_parameters, mock_session
+    ):
         """Test creating a custom strategy."""
         # Mock check for existing strategy (returns None)
         mock_result = MagicMock()
@@ -166,7 +176,7 @@ class TestStrategyManager:
             max_positions=3,
             position_sizing="percentage",
             order_preference="maker_only",
-            funding_rate_threshold=0.01
+            funding_rate_threshold=0.01,
         )
 
         assert custom_strategy.strategy_id == "test_custom"
@@ -180,11 +190,15 @@ class TestStrategyManager:
         assert mock_session.add.called
         assert mock_session.commit.called
 
-    async def test_create_duplicate_strategy(self, strategy_manager, sample_risk_parameters, mock_session):
+    async def test_create_duplicate_strategy(
+        self, strategy_manager, sample_risk_parameters, mock_session
+    ):
         """Test creating a strategy with duplicate ID."""
         # Mock check for existing strategy (returns existing)
         mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = StrategyModel(strategy_id="conservative_perps")
+        mock_result.scalar_one_or_none.return_value = StrategyModel(
+            strategy_id="conservative_perps"
+        )
         mock_session.execute.return_value = mock_result
 
         with pytest.raises(ValidationError, match="Strategy 'conservative_perps' already exists"):
@@ -208,7 +222,9 @@ class TestStrategyManager:
         assert len(errors) > 0
         assert any("Invalid timeframe" in error for error in errors)
 
-    async def test_assign_strategy_to_account(self, strategy_manager, mock_session, valid_risk_params):
+    async def test_assign_strategy_to_account(
+        self, strategy_manager, mock_session, valid_risk_params
+    ):
         """Test assigning a strategy to an account."""
         account_id = 123
         strategy_id = "conservative_perps"
@@ -226,7 +242,7 @@ class TestStrategyManager:
             order_preference="maker_only",
             funding_rate_threshold=0.05,
             is_active=True,
-            risk_parameters=valid_risk_params
+            risk_parameters=valid_risk_params,
         )
 
         # Mock current assignment lookup (None)
@@ -285,7 +301,7 @@ class TestStrategyManager:
             order_preference="maker_only",
             funding_rate_threshold=0.05,
             is_active=True,
-            risk_parameters=valid_risk_params
+            risk_parameters=valid_risk_params,
         )
 
         # Mock get_strategy response (new strategy validation)
@@ -301,7 +317,7 @@ class TestStrategyManager:
             order_preference="taker_accepted",
             funding_rate_threshold=0.15,
             is_active=True,
-            risk_parameters=valid_risk_params
+            risk_parameters=valid_risk_params,
         )
 
         # Mock assignment flow
@@ -322,7 +338,7 @@ class TestStrategyManager:
             account_id=account_id,
             strategy_id=1,
             is_active=True,
-            assigned_at=datetime.now(timezone.utc)
+            assigned_at=datetime.now(timezone.utc),
         )
         res4 = MagicMock()
         res4.scalar_one_or_none.return_value = mock_assignment
@@ -360,7 +376,7 @@ class TestStrategyManager:
             order_preference="maker_only",
             funding_rate_threshold=0.05,
             is_active=True,
-            risk_parameters=valid_risk_params
+            risk_parameters=valid_risk_params,
         )
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_strategy
@@ -411,27 +427,9 @@ class TestStrategyManager:
 
         # Sample trade data
         trades_data = [
-            {
-                "pnl": 100.0,
-                "volume": 1000.0,
-                "fee": 1.0,
-                "funding": 0.5,
-                "is_liquidation": False
-            },
-            {
-                "pnl": -50.0,
-                "volume": 500.0,
-                "fee": 0.5,
-                "funding": 0.2,
-                "is_liquidation": False
-            },
-            {
-                "pnl": 75.0,
-                "volume": 750.0,
-                "fee": 0.75,
-                "funding": 0.3,
-                "is_liquidation": False
-            },
+            {"pnl": 100.0, "volume": 1000.0, "fee": 1.0, "funding": 0.5, "is_liquidation": False},
+            {"pnl": -50.0, "volume": 500.0, "fee": 0.5, "funding": 0.2, "is_liquidation": False},
+            {"pnl": 75.0, "volume": 750.0, "fee": 0.75, "funding": 0.3, "is_liquidation": False},
         ]
 
         performance = strategy_manager.calculate_strategy_performance(

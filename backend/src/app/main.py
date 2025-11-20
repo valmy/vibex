@@ -294,8 +294,8 @@ async def startup_event():
         logger.info("Database initialized")
 
         # Initialize Decision Engine and Strategies
-        from .services.llm.decision_engine import get_decision_engine
         from .db.session import get_session_factory
+        from .services.llm.decision_engine import get_decision_engine
 
         # Ensure Decision Engine is initialized with session factory
         decision_engine = get_decision_engine(session_factory=get_session_factory())

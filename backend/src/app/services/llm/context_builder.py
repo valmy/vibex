@@ -53,13 +53,13 @@ from ...schemas.trading_decision import (
     TradingContext,
     TradingStrategy,
 )
+from ...services.llm.strategy_manager import StrategyManager
 from ...services.market_data.service import get_market_data_service
 from ...services.technical_analysis.exceptions import (
     InsufficientDataError as TAInsufficientDataError,
 )
 from ...services.technical_analysis.schemas import TATechnicalIndicators
 from ...services.technical_analysis.service import TechnicalAnalysisService
-from ...services.llm.strategy_manager import StrategyManager
 
 logger = logging.getLogger(__name__)
 
@@ -803,7 +803,9 @@ class ContextBuilderService:
         """Calculate performance metrics for the account."""
         # Get trades from the last 30 days
         # Note: created_at in DB is naive timestamp (UTC), so we need naive datetime for comparison
-        cutoff_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=self.PERFORMANCE_LOOKBACK_DAYS)
+        cutoff_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
+            days=self.PERFORMANCE_LOOKBACK_DAYS
+        )
 
         result = await db.execute(
             select(Trade).where(

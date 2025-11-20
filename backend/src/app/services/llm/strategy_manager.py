@@ -5,22 +5,20 @@ Provides comprehensive strategy management including configuration loading,
 strategy assignment, switching, and performance tracking.
 """
 
-import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
 
-from sqlalchemy import select, update, and_
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from sqlalchemy.orm import selectinload
 
 from ...core.exceptions import ConfigurationError, ValidationError
-from ...models.strategy import Strategy as StrategyModel, StrategyAssignment as StrategyAssignmentModel
+from ...models.strategy import Strategy as StrategyModel
+from ...models.strategy import StrategyAssignment as StrategyAssignmentModel
 from ...schemas.trading_decision import (
     StrategyAlert,
     StrategyAssignment,
-    StrategyComparison,
     StrategyMetrics,
     StrategyPerformance,
     StrategyRiskParameters,
@@ -92,7 +90,7 @@ class StrategyManager:
                     "max_leverage": 3.0,
                     "cooldown_period": 600,
                     "max_funding_rate_bps": 5.0,
-                    "liquidation_buffer": 0.15 # Default for perps
+                    "liquidation_buffer": 0.15,  # Default for perps
                 },
                 "timeframe_preference": ["5m", "15m", "4h"],
                 "max_positions": 2,
@@ -114,7 +112,7 @@ class StrategyManager:
                     "max_leverage": 15.0,
                     "cooldown_period": 120,
                     "max_funding_rate_bps": 15.0,
-                    "liquidation_buffer": 0.15 # Default for perps
+                    "liquidation_buffer": 0.15,  # Default for perps
                 },
                 "timeframe_preference": ["5m", "15m", "1h"],
                 "max_positions": 4,
@@ -136,7 +134,7 @@ class StrategyManager:
                     "max_leverage": 10.0,
                     "cooldown_period": 30,
                     "max_funding_rate_bps": 3.0,
-                    "liquidation_buffer": 0.15 # Default for perps
+                    "liquidation_buffer": 0.15,  # Default for perps
                 },
                 "timeframe_preference": ["1m", "5m"],
                 "max_positions": 3,
@@ -158,7 +156,7 @@ class StrategyManager:
                     "max_leverage": 5.0,
                     "cooldown_period": 300,
                     "max_funding_rate_bps": 8.0,
-                    "liquidation_buffer": 0.15 # Default for perps
+                    "liquidation_buffer": 0.15,  # Default for perps
                 },
                 "timeframe_preference": ["5m", "15m", "4h"],
                 "max_positions": 3,
@@ -180,7 +178,7 @@ class StrategyManager:
                     "max_leverage": 1.0,
                     "cooldown_period": 900,
                     "max_funding_rate_bps": 10.0,
-                    "liquidation_buffer": 0.15 # Default for perps
+                    "liquidation_buffer": 0.15,  # Default for perps
                 },
                 "timeframe_preference": ["15m", "1h"],
                 "max_positions": 1,
@@ -190,6 +188,46 @@ class StrategyManager:
                 "is_active": True,
             },
         ]
+
+        async with self.session_factory() as session:
+            try:
+                for strategy_data in strategies_data:
+                    # Check if strategy already exists
+                    stmt = select(StrategyModel).where(
+                        StrategyModel.strategy_id == strategy_data["strategy_id"]
+                    )
+                    result = await session.execute(stmt)
+                    existing_strategy = result.scalar_one_or_none()
+
+                    if not existing_strategy:
+                        # Create new strategy
+                        db_strategy = StrategyModel(
+                            strategy_id=strategy_data["strategy_id"],
+                            strategy_name=strategy_data["strategy_name"],
+                            strategy_type=strategy_data["strategy_type"],
+                            prompt_template=strategy_data["prompt_template"],
+                            risk_parameters=strategy_data["risk_parameters"],
+                            timeframe_preference=strategy_data["timeframe_preference"],
+                            max_positions=strategy_data["max_positions"],
+                            position_sizing=strategy_data["position_sizing"],
+                            order_preference=strategy_data["order_preference"],
+                            funding_rate_threshold=strategy_data["funding_rate_threshold"],
+                            is_active=strategy_data["is_active"],
+                            created_by="system",
+                            version="1.0",
+                            description=f"Predefined {strategy_data['strategy_type']} strategy for perpetual futures trading",
+                        )
+                        session.add(db_strategy)
+                        logger.info(f"Added predefined strategy: {strategy_data['strategy_name']}")
+
+                await session.commit()
+                logger.info(
+                    f"Initialized {len([s for s in strategies_data if s])} predefined strategies"
+                )
+            except Exception as e:
+                await session.rollback()
+                logger.error(f"Failed to initialize predefined strategies: {e}")
+                raise ConfigurationError(f"Failed to initialize predefined strategies: {e}") from e
 
     def _get_conservative_prompt_template(self) -> str:
         """Get prompt template for conservative strategy."""
@@ -220,6 +258,7 @@ Swing trade {symbol} perps: use 5m for precision entry, 4h for trend direction. 
         return """
 Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments. Use 1x leverage ONLY. Current funding {funding_rate}bps - avoid if >10bps. Hedge spot exposure or build gradual directional position. Max 5 entry orders, then take profit at +3% from average entry. No stop loss - manual intervention only. Maker orders essential.
 """
+
     async def create_custom_strategy(
         self,
         name: str,
@@ -227,8 +266,12 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
         risk_parameters: StrategyRiskParameters,
         timeframe_preference: Optional[List[str]] = None,
         max_positions: Optional[int] = None,
-        position_sizing: Optional[Literal["fixed", "percentage", "kelly", "volatility_adjusted"]] = None,
-        order_preference: Optional[Literal["maker_only", "taker_accepted", "maker_preferred", "any"]] = None,
+        position_sizing: Optional[
+            Literal["fixed", "percentage", "kelly", "volatility_adjusted"]
+        ] = None,
+        order_preference: Optional[
+            Literal["maker_only", "taker_accepted", "maker_preferred", "any"]
+        ] = None,
         funding_rate_threshold: Optional[float] = None,
         created_by: Optional[str] = None,
     ) -> TradingStrategy:
@@ -264,7 +307,9 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
             max_positions=max_positions if max_positions is not None else 3,
             position_sizing=position_sizing if position_sizing is not None else "percentage",
             order_preference=order_preference if order_preference is not None else "any",
-            funding_rate_threshold=funding_rate_threshold if funding_rate_threshold is not None else 0.0,
+            funding_rate_threshold=funding_rate_threshold
+            if funding_rate_threshold is not None
+            else 0.0,
             is_active=True,
         )
 
@@ -415,7 +460,7 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 if current_assignment:
                     # Deactivate current assignment
                     current_assignment.is_active = False
-                    current_assignment.deactivated_at = datetime.now(timezone.utc)
+                    current_assignment.deactivated_at = datetime.utcnow()
                     current_assignment.deactivated_by = assigned_by
                     current_assignment.deactivation_reason = switch_reason
                     previous_strategy_id = current_assignment.strategy_id
@@ -428,21 +473,21 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                     previous_strategy_id=previous_strategy_id,
                     switch_reason=switch_reason,
                     is_active=True,
-                    assigned_at=datetime.now(timezone.utc),
+                    assigned_at=datetime.utcnow(),
                 )
                 session.add(new_assignment)
                 await session.commit()
                 await session.refresh(new_assignment)
 
-                logger.info(
-                    f"Assigned strategy '{strategy_id}' to account {account_id}"
-                )
+                logger.info(f"Assigned strategy '{strategy_id}' to account {account_id}")
 
                 return StrategyAssignment(
                     account_id=account_id,
                     strategy_id=strategy_id,
                     assigned_by=assigned_by,
-                    previous_strategy_id=str(previous_strategy_id) if previous_strategy_id else None,
+                    previous_strategy_id=str(previous_strategy_id)
+                    if previous_strategy_id
+                    else None,
                     switch_reason=switch_reason,
                     assigned_at=new_assignment.assigned_at,
                 )
@@ -471,7 +516,10 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 # Join StrategyAssignment with Strategy to get details
                 stmt = (
                     select(StrategyModel)
-                    .join(StrategyAssignmentModel, StrategyModel.id == StrategyAssignmentModel.strategy_id)
+                    .join(
+                        StrategyAssignmentModel,
+                        StrategyModel.id == StrategyAssignmentModel.strategy_id,
+                    )
                     .where(
                         and_(
                             StrategyAssignmentModel.account_id == account_id,
@@ -856,7 +904,7 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
             max_loss=max_loss,
             max_drawdown=0.0,  # Placeholder, requires equity curve
             sharpe_ratio=0.0,  # Placeholder
-            sortino_ratio=0.0, # Placeholder
+            sortino_ratio=0.0,  # Placeholder
             profit_factor=profit_factor,
             avg_trade_duration_hours=avg_duration,
             total_volume_traded=total_volume,

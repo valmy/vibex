@@ -42,8 +42,12 @@ class Strategy(BaseModel):
     timeframe_preference = Column(JSON, nullable=False)
     max_positions = Column(Integer, nullable=False, default=3)
     position_sizing = Column(String(50), nullable=False, default="percentage")
-    order_preference = Column(String(50), nullable=False, default="any") # "maker_only", "taker_accepted", "maker_preferred", "any"
-    funding_rate_threshold = Column(Float, nullable=False, default=0.0) # In percentage (e.g., 0.05 for 0.05%)
+    order_preference = Column(
+        String(50), nullable=False, default="any"
+    )  # "maker_only", "taker_accepted", "maker_preferred", "any"
+    funding_rate_threshold = Column(
+        Float, nullable=False, default=0.0
+    )  # In percentage (e.g., 0.05 for 0.05%)
     risk_parameters = Column(JSON, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
     is_default = Column(Boolean, nullable=False, default=False)

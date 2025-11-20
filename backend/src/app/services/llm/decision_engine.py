@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...db.session import get_session_factory
 from ...schemas.trading_decision import (
     DecisionResult,
     HealthStatus,
@@ -43,7 +44,6 @@ from .decision_repository import DecisionRepository
 from .decision_validator import get_decision_validator
 from .llm_service import get_llm_service
 from .strategy_manager import StrategyManager
-from ...db.session import get_session_factory
 
 logger = logging.getLogger(__name__)
 

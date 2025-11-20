@@ -1,16 +1,15 @@
 import pytest
 from sqlalchemy import select
-from app.services.llm.strategy_manager import StrategyManager
-from app.services.llm.context_builder import ContextBuilderService
-from app.models.account import Account, User
-from app.models.strategy import Strategy
-from app.schemas.trading_decision import StrategyRiskParameters
+
 from app.db.session import get_session_factory, init_db
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.account import Account, User
+from app.schemas.trading_decision import StrategyRiskParameters
+from app.services.llm.context_builder import ContextBuilderService
+from app.services.llm.strategy_manager import StrategyManager
+
 
 @pytest.mark.e2e
 class TestStrategyPersistenceE2E:
-
     @pytest.fixture
     async def db_session(self):
         """Create database session."""
@@ -45,11 +44,15 @@ class TestStrategyPersistenceE2E:
         # 2. Create a Test Account
         # Clean up existing test data first
         await db_session.execute(select(Account).where(Account.id == 999))
-        existing_account = (await db_session.execute(select(Account).where(Account.id == 999))).scalar_one_or_none()
+        existing_account = (
+            await db_session.execute(select(Account).where(Account.id == 999))
+        ).scalar_one_or_none()
         if existing_account:
             await db_session.delete(existing_account)
 
-        existing_user = (await db_session.execute(select(User).where(User.id == 1))).scalar_one_or_none()
+        existing_user = (
+            await db_session.execute(select(User).where(User.id == 1))
+        ).scalar_one_or_none()
         if existing_user:
             await db_session.delete(existing_user)
         await db_session.commit()
@@ -85,7 +88,7 @@ class TestStrategyPersistenceE2E:
             stop_loss_percentage=2.0,
             take_profit_ratio=3.0,
             max_leverage=5.0,
-            cooldown_period=60
+            cooldown_period=60,
         )
 
         custom_strategy = await strategy_manager.create_custom_strategy(
@@ -93,14 +96,13 @@ class TestStrategyPersistenceE2E:
             prompt_template="Test Prompt",
             risk_parameters=risk_params,
             timeframe_preference=["15m", "1h"],
-            created_by="tester"
+            created_by="tester",
         )
         assert custom_strategy.strategy_id is not None
 
         # 5. Assign Strategy to Account
         assignment = await strategy_manager.assign_strategy_to_account(
-            account_id=999,
-            strategy_id=custom_strategy.strategy_id
+            account_id=999, strategy_id=custom_strategy.strategy_id
         )
         assert assignment.strategy_id == custom_strategy.strategy_id
         assert assignment.account_id == 999
@@ -108,7 +110,7 @@ class TestStrategyPersistenceE2E:
 
         # 6. Verify ContextBuilder picks up the new strategy
         # We might need to clear cache if ContextBuilder caches it
-        context_builder.clear_cache(f"account_context_999")
+        context_builder.clear_cache("account_context_999")
 
         context = await context_builder.get_account_context(account_id=999)
         assert context.active_strategy.strategy_id == custom_strategy.strategy_id
@@ -125,10 +127,10 @@ class TestStrategyPersistenceE2E:
             await strategy_manager.switch_account_strategy(
                 account_id=999,
                 new_strategy_id=conservative.strategy_id,
-                switch_reason="Testing switch"
+                switch_reason="Testing switch",
             )
 
-            context_builder.clear_cache(f"account_context_999")
+            context_builder.clear_cache("account_context_999")
             context = await context_builder.get_account_context(account_id=999)
             assert context.active_strategy.strategy_id == conservative.strategy_id
 

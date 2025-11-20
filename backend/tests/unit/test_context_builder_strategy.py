@@ -1,25 +1,29 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from app.schemas.trading_decision import StrategyRiskParameters, TradingStrategy
 from app.services.llm.context_builder import ContextBuilderService
-from app.schemas.trading_decision import TradingStrategy, StrategyRiskParameters
+
 
 @pytest.mark.asyncio
 class TestContextBuilderStrategy:
-
     @pytest.fixture
     def mock_strategy_manager(self):
         return AsyncMock()
 
     @pytest.fixture
     def context_builder(self, mock_strategy_manager):
-        with patch('app.services.llm.context_builder.StrategyManager') as MockStrategyManager:
+        with patch("app.services.llm.context_builder.StrategyManager") as MockStrategyManager:
             MockStrategyManager.return_value = mock_strategy_manager
             service = ContextBuilderService(session_factory=None)
             # Manually set the mock because __init__ creates a new instance
             service.strategy_manager = mock_strategy_manager
             return service
 
-    async def test_get_account_context_uses_assigned_strategy(self, context_builder, mock_strategy_manager):
+    async def test_get_account_context_uses_assigned_strategy(
+        self, context_builder, mock_strategy_manager
+    ):
         from app.schemas.trading_decision import PerformanceMetrics
 
         # Mock dependencies
@@ -61,12 +65,12 @@ class TestContextBuilderStrategy:
                 stop_loss_percentage=1.0,
                 take_profit_ratio=2.0,
                 max_leverage=5.0,
-                cooldown_period=60
+                cooldown_period=60,
             ),
             timeframe_preference=["1h"],
             max_positions=5,
             position_sizing="fixed",
-            is_active=True
+            is_active=True,
         )
         mock_strategy_manager.get_account_strategy.return_value = mock_strategy
 
@@ -77,7 +81,7 @@ class TestContextBuilderStrategy:
             avg_win=10.0,
             avg_loss=5.0,
             max_drawdown=10.0,
-            sharpe_ratio=1.5
+            sharpe_ratio=1.5,
         )
         context_builder._calculate_performance_metrics = AsyncMock(return_value=mock_metrics)
 
@@ -88,7 +92,9 @@ class TestContextBuilderStrategy:
         assert context.active_strategy.strategy_id == "custom_strategy"
         mock_strategy_manager.get_account_strategy.assert_called_once_with(1)
 
-    async def test_get_account_context_fallbacks_to_default(self, context_builder, mock_strategy_manager):
+    async def test_get_account_context_fallbacks_to_default(
+        self, context_builder, mock_strategy_manager
+    ):
         from app.schemas.trading_decision import PerformanceMetrics
 
         # Mock dependencies
@@ -128,7 +134,7 @@ class TestContextBuilderStrategy:
             avg_win=10.0,
             avg_loss=5.0,
             max_drawdown=10.0,
-            sharpe_ratio=1.5
+            sharpe_ratio=1.5,
         )
         context_builder._calculate_performance_metrics = AsyncMock(return_value=mock_metrics)
 
