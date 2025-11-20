@@ -44,14 +44,21 @@ class TestContextBuilderStrategy:
         mock_account.taker_fee_bps = 20
 
         mock_account_result = MagicMock()
-        mock_account_result.scalar_one_or_none = AsyncMock(return_value=mock_account)
+        mock_account_result.scalar_one_or_none = MagicMock(return_value=mock_account)
 
         # Mock positions query result
         mock_positions_result = MagicMock()
         mock_positions_result.scalars.return_value.all.return_value = []
 
-        # Configure execute side effects
-        mock_db.execute.side_effect = [mock_account_result, mock_positions_result]
+        # Configure execute to return results
+        call_count = [0]
+
+        async def mock_execute_impl(*args, **kwargs):
+            result = mock_account_result if call_count[0] == 0 else mock_positions_result
+            call_count[0] += 1
+            return result
+
+        mock_db.execute = AsyncMock(side_effect=mock_execute_impl)
 
         # Mock StrategyManager response
         mock_strategy = TradingStrategy(
@@ -115,14 +122,21 @@ class TestContextBuilderStrategy:
         mock_account.taker_fee_bps = 20
 
         mock_account_result = MagicMock()
-        mock_account_result.scalar_one_or_none = AsyncMock(return_value=mock_account)
+        mock_account_result.scalar_one_or_none = MagicMock(return_value=mock_account)
 
         # Mock positions query result
         mock_positions_result = MagicMock()
         mock_positions_result.scalars.return_value.all.return_value = []
 
-        # Configure execute side effects
-        mock_db.execute.side_effect = [mock_account_result, mock_positions_result]
+        # Configure execute to return results
+        call_count = [0]
+
+        async def mock_execute_impl(*args, **kwargs):
+            result = mock_account_result if call_count[0] == 0 else mock_positions_result
+            call_count[0] += 1
+            return result
+
+        mock_db.execute = AsyncMock(side_effect=mock_execute_impl)
 
         # Mock StrategyManager response (None)
         mock_strategy_manager.get_account_strategy.return_value = None
