@@ -172,18 +172,6 @@ class TestLLMDecisionEngineE2E:
             return_value=mock_account_context
         )
 
-        # Mock the _validate_context method to return dict
-        mock_validation_result = {
-            "is_valid": True,
-            "missing_data": [],
-            "stale_data": [],
-            "warnings": [],
-            "data_age_seconds": 0,
-        }
-        decision_engine.context_builder._validate_context = mocker.Mock(
-            return_value=mock_validation_result
-        )
-
         # The context_builder is real and should use the db_session from the DI container
         # The decision_engine fixture should be correctly wired
         result = await decision_engine.make_trading_decision(

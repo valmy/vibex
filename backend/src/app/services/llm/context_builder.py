@@ -36,7 +36,6 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...models.account import Account
-from ...models.market_data import MarketData
 from ...models.position import Position
 from ...models.trade import Trade
 from ...schemas.trading_decision import (
@@ -120,32 +119,6 @@ class ContextBuilderService:
 
         if expired_keys:
             logger.info(f"Cleaned up {len(expired_keys)} expired cache entries.")
-
-    def validate_data_freshness(
-        self, timestamp: datetime, max_age_minutes: int = None
-    ) -> Tuple[bool, float]:
-        """Validate that data is fresh enough for trading decisions.
-
-        Args:
-            timestamp: Timestamp of the data
-            max_age_minutes: Maximum age in minutes (uses MAX_DATA_AGE_MINUTES if not provided)
-
-        Returns:
-            Tuple of (is_fresh: bool, age_minutes: float)
-        """
-        if max_age_minutes is None:
-            max_age_minutes = self.MAX_DATA_AGE_MINUTES
-
-        # Handle both timezone-aware and timezone-naive datetimes
-        now = datetime.now(timezone.utc)
-        check_timestamp = timestamp
-        if check_timestamp.tzinfo is None:
-            check_timestamp = check_timestamp.replace(tzinfo=timezone.utc)
-
-        age_minutes = (now - check_timestamp).total_seconds() / 60
-        is_fresh = age_minutes <= max_age_minutes
-
-        return is_fresh, age_minutes
 
     def _convert_technical_indicators(
         self, indicators: TATechnicalIndicators
@@ -275,65 +248,6 @@ class ContextBuilderService:
             concentration_risk=concentration_risk,
         )
 
-    def _validate_market_context(
-        self,
-        asset_market_data: AssetMarketData,
-        missing_data: list,
-        stale_data: list,
-        warnings: list,
-    ):
-        if asset_market_data is None:
-            missing_data.append("Asset market data is None")
-        else:
-            if asset_market_data.current_price <= 0:
-                missing_data.append("Invalid current price")
-            if asset_market_data.technical_indicators is None:
-                warnings.append("No technical indicators available")
-            if not asset_market_data.validate_data_freshness(
-                max_age_minutes=self.MAX_DATA_AGE_MINUTES
-            ):
-                if asset_market_data.price_history:
-                    latest_data = max(asset_market_data.price_history, key=lambda x: x.timestamp)
-                    latest_timestamp = latest_data.timestamp
-                    if latest_timestamp.tzinfo is None:
-                        latest_timestamp = latest_timestamp.replace(tzinfo=timezone.utc)
-                    data_age = (datetime.now(timezone.utc) - latest_timestamp).total_seconds()
-                    stale_data.append(f"Market data is {data_age / 60:.1f} minutes old")
-
-    def _validate_account_context(self, account_context: AccountContext, missing_data: list):
-        if account_context is None:
-            missing_data.append("Account context is None")
-        else:
-            if account_context.balance_usd < 0:
-                missing_data.append("Invalid account balance")
-            if account_context.available_balance < 0:
-                missing_data.append("Invalid available balance")
-
-    def _calculate_data_age(self, asset_market_data: AssetMarketData) -> float:
-        if asset_market_data and asset_market_data.price_history:
-            latest_data = max(asset_market_data.price_history, key=lambda x: x.timestamp)
-            latest_timestamp = latest_data.timestamp
-            if latest_timestamp.tzinfo is None:
-                latest_timestamp = latest_timestamp.replace(tzinfo=timezone.utc)
-            return (datetime.now(timezone.utc) - latest_timestamp).total_seconds()
-        return 0.0
-
-    def _validate_context(
-        self, asset_market_data: AssetMarketData, account_context: AccountContext
-    ) -> dict:
-        missing_data, stale_data, warnings = [], [], []
-        self._validate_market_context(asset_market_data, missing_data, stale_data, warnings)
-        self._validate_account_context(account_context, missing_data)
-        data_age_seconds = self._calculate_data_age(asset_market_data)
-        is_valid = not missing_data and not stale_data
-        return {
-            "is_valid": is_valid,
-            "missing_data": missing_data,
-            "stale_data": stale_data,
-            "warnings": warnings,
-            "data_age_seconds": data_age_seconds,
-        }
-
     async def build_trading_context(
         self,
         symbols: List[str],
@@ -428,19 +342,15 @@ class ContextBuilderService:
         return market_context, account_context, recent_trades_by_symbol
 
     def _validate_full_context(self, market_context, account_context):
-        first_asset_data = (
-            next(iter(market_context.assets.values())) if market_context.assets else None
-        )
-        if first_asset_data:
-            validation_result = self._validate_context(first_asset_data, account_context)
-            if not validation_result["is_valid"]:
-                logger.warning(f"Context validation warnings: {validation_result['warnings']}")
-                if validation_result["missing_data"]:
-                    raise InsufficientMarketDataError(
-                        f"Missing data: {validation_result['missing_data']}"
-                    )
-                if validation_result["stale_data"]:
-                    raise StaleDataError(f"Stale data: {validation_result['stale_data']}")
+        """Validate that we have sufficient context data."""
+        if not market_context.assets:
+            raise InsufficientMarketDataError("No market data available for any assets")
+
+        if account_context.balance_usd <= 0:
+            raise ContextBuilderError("Invalid account balance")
+
+        if account_context.available_balance < 0:
+            raise ContextBuilderError("Invalid available balance")
 
     async def get_market_context(
         self,
@@ -870,167 +780,6 @@ class ContextBuilderService:
             max_drawdown=max_drawdown,
             sharpe_ratio=sharpe_ratio,
         )
-
-    def _create_partial_indicators(self, market_data: List[MarketData]) -> TechnicalIndicatorsSet:
-        """Create partial technical indicators with available data, returning a set."""
-        try:
-            if len(market_data) < 20:
-                return TechnicalIndicatorsSet()
-
-            close_prices = [candle.close for candle in market_data]
-
-            # Calculate SMA as a fallback for EMA
-            ema_20 = None
-            if len(close_prices) >= 20:
-                ema_20 = [
-                    sum(close_prices[i - 20 : i]) / 20 for i in range(20, len(close_prices) + 1)
-                ]
-                ema_20 = ema_20[-10:]  # Last 10 points
-
-            rsi = None
-            if len(close_prices) >= 15:
-                # Simplified RSI calculation for the last 10 points
-                rsi_values = []
-                for i in range(len(close_prices) - 14, len(close_prices)):
-                    period_prices = close_prices[i - 14 : i + 1]
-                    gains = sum(
-                        c2 - c1
-                        for c1, c2 in zip(period_prices, period_prices[1:], strict=False)
-                        if c2 > c1
-                    )
-                    losses = sum(
-                        abs(c2 - c1)
-                        for c1, c2 in zip(period_prices, period_prices[1:], strict=False)
-                        if c2 < c1
-                    )
-                    avg_gain = gains / 14
-                    avg_loss = losses / 14 if losses > 0 else 1
-                    rs = avg_gain / avg_loss if avg_loss > 0 else 0
-                    rsi_val = 100 - (100 / (1 + rs))
-                    rsi_values.append(rsi_val)
-                rsi = rsi_values[-10:]
-
-            return TechnicalIndicatorsSet(
-                ema_20=ema_20,
-                rsi=rsi,
-            )
-        except Exception as e:
-            logger.error(f"Failed to create partial indicators: {e}")
-            return TechnicalIndicatorsSet()
-
-    async def validate_context_data_availability(self, symbol: str, account_id: int) -> dict:
-        """
-        Validate data availability before building context.
-
-        Args:
-            symbol: Trading pair symbol
-            account_id: Account ID
-
-        Returns:
-            Dict with availability status (is_valid, missing_data, stale_data, warnings, data_age_seconds)
-        """
-        missing_data = []
-        warnings = []
-
-        if self._session_factory is None:
-            return {
-                "is_valid": False,
-                "missing_data": ["Database session factory not available"],
-                "stale_data": [],
-                "warnings": [],
-                "data_age_seconds": 0,
-            }
-
-        async with self._session_factory() as db:
-            try:
-                # Check if account exists
-                account_query = select(Account).where(Account.id == account_id)
-                try:
-                    account_result = await db.execute(account_query)
-                    # In async SQLAlchemy, scalar_one_or_none is async and needs to be awaited
-                    account = await account_result.scalar_one_or_none()
-                except Exception as e:
-                    logger.error(f"Failed to query account {account_id}: {str(e)}")
-                    missing_data.append(f"Account {account_id} not found - query error: {str(e)}")
-                    account = None
-
-                if not account:
-                    missing_data.append(f"Account {account_id} not found")
-
-                # Check market data availability
-                market_data = await self.market_data_service.get_latest_market_data(
-                    db, symbol, "1h", 10
-                )
-
-                if not market_data:
-                    missing_data.append(f"No market data available for {symbol}")
-                elif len(market_data) < 10:
-                    warnings.append(f"Limited market data for {symbol}: {len(market_data)} candles")
-
-                # Check data freshness
-                data_age_seconds = 0
-                if market_data:
-                    latest_candle = max(market_data, key=lambda x: x.timestamp)
-                    is_fresh, age_minutes = self.validate_data_freshness(latest_candle.timestamp)
-                    data_age_seconds = age_minutes * 60
-
-                    if not is_fresh:
-                        warnings.append(
-                            f"Market data for {symbol} is {age_minutes:.1f} minutes old"
-                        )
-
-                is_valid = len(missing_data) == 0
-
-                return {
-                    "is_valid": is_valid,
-                    "missing_data": missing_data,
-                    "stale_data": [],
-                    "warnings": warnings,
-                    "data_age_seconds": data_age_seconds,
-                }
-
-            except Exception as e:
-                logger.error(f"Failed to validate data availability: {e}")
-                return {
-                    "is_valid": False,
-                    "missing_data": [f"Data validation failed: {str(e)}"],
-                    "stale_data": [],
-                    "warnings": [],
-                    "data_age_seconds": 0,
-                }
-
-    def handle_data_unavailability(
-        self, symbol: str, account_id: int, validation_result: dict
-    ) -> Optional[TradingContext]:
-        """
-        Handle data unavailability with graceful degradation.
-
-        Args:
-            symbol: Trading pair symbol
-            account_id: Account ID
-            validation_result: Validation result dict with issues
-
-        Returns:
-            Degraded TradingContext or None if critical data missing
-        """
-        if not validation_result["is_valid"]:
-            logger.warning(
-                f"Cannot create context for {symbol}: {validation_result['missing_data']}"
-            )
-            return None
-
-        # If we have warnings but data is valid, we can create a degraded context
-        if validation_result["warnings"]:
-            logger.warning(
-                f"Creating degraded context for {symbol}: {validation_result['warnings']}"
-            )
-
-            # Create minimal context with available data
-            # This would be implemented based on specific degradation strategies
-            # For now, return None to indicate degradation is not implemented
-            return None
-
-        return None
 
     def clear_cache(self, pattern: Optional[str] = None):
         """

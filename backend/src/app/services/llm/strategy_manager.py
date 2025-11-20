@@ -680,8 +680,7 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 assignments = result.all()
 
                 return {
-                    assignment[0].account_id: strategy_id
-                    for assignment, strategy_id in assignments
+                    assignment[0].account_id: strategy_id for assignment, strategy_id in assignments
                 }
             except Exception as e:
                 logger.error(f"Failed to get strategy assignments: {e}")

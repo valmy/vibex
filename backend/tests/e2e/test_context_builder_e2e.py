@@ -236,22 +236,9 @@ class TestContextBuilderE2E:
             assert "BTCUSDT" in market_context.assets
             btc_data = market_context.assets["BTCUSDT"]
             assert btc_data.current_price > 0
-            # Note: data_freshness is not a field, use validate_data_freshness() method instead
+            # Validate market data freshness
             freshness_results = market_context.validate_all_data_freshness(max_age_minutes=60)
             assert all(freshness_results.values()), "Market data for all assets should be fresh"
-
-            # Validate context data availability
-            # Use account_id=1 for testing (may not exist, which is acceptable)
-            validation_result = await context_builder_service.validate_context_data_availability(
-                symbol="BTCUSDT", account_id=1
-            )
-
-            assert validation_result is not None, "Should return validation result"
-
-            # Check validation result properties (now returns dict instead of object)
-            assert "is_valid" in validation_result, "Should have is_valid key"
-            assert "data_age_seconds" in validation_result, "Should have data_age_seconds key"
-            assert validation_result["data_age_seconds"] >= 0, "Data age should be non-negative"
         except Exception as e:
             # Skip if insufficient market data (test isolation issue when running all tests)
             if "Insufficient market data" in str(e):
