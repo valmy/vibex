@@ -355,7 +355,7 @@ class StrategyRiskParameters(BaseModel):
     max_daily_loss: float = Field(..., ge=0, le=100, description="Max daily loss (%)")
     stop_loss_percentage: float = Field(..., ge=0, le=50, description="Default stop loss (%)")
     take_profit_ratio: float = Field(default=2.0, ge=1.0, description="Risk/reward ratio")
-    max_leverage: float = Field(default=2.0, ge=1.0, le=10.0, description="Maximum leverage")
+    max_leverage: float = Field(default=2.0, ge=1.0, le=20.0, description="Maximum leverage")
     cooldown_period: int = Field(default=300, ge=0, description="Cooldown between trades (seconds)")
     max_funding_rate_bps: float = Field(
         default=0.0, ge=0, description="Max funding rate (bps) before blocking trades"

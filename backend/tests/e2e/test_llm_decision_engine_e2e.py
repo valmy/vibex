@@ -246,8 +246,6 @@ class TestLLMDecisionEngineE2E:
         from app.schemas.trading_decision import (
             AccountContext,
             PerformanceMetrics,
-            StrategyRiskParameters,
-            TradingStrategy,
         )
         from app.services.llm.llm_service import LLMService
 
@@ -257,22 +255,22 @@ class TestLLMDecisionEngineE2E:
         context_builder = ContextBuilderService(session_factory=db_session_factory)
         llm_service = LLMService()
 
-        # Create a mock trading strategy
-        mock_strategy = TradingStrategy(
-            strategy_id="test_strategy_1",
-            strategy_name="test_strategy",
-            strategy_type="conservative",
-            prompt_template="Test prompt template for {symbol}",
-            risk_parameters=StrategyRiskParameters(
-                max_risk_per_trade=2.0,
-                max_daily_loss=5.0,
-                stop_loss_percentage=5.0,
-                take_profit_ratio=2.0,
-                max_leverage=1.0,
-                cooldown_period=300,
-            ),
-            is_active=True,
-            description="Test strategy for integration testing",
+        # Get the actual trading strategy from the database
+        from app.services.llm.strategy_manager import StrategyManager
+
+        strategy_manager = StrategyManager(session_factory=db_session_factory)
+        actual_strategy = await strategy_manager.get_strategy("aggressive_perps")
+
+        if actual_strategy is None:
+            pytest.fail("Strategy 'aggressive_perps' not found in database")
+
+        # Update the strategy to comply with validation rules (max_leverage <= 10)
+        # Since the original aggressive strategy has max_leverage=15 which violates the validation
+        from copy import deepcopy
+
+        mock_strategy = deepcopy(actual_strategy)
+        mock_strategy.risk_parameters.max_leverage = (
+            10.0  # Change from 15.0 to 10.0 to pass validation
         )
 
         # Mock the account context to avoid requiring a real trading account
