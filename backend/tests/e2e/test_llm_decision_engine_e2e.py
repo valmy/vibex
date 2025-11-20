@@ -259,19 +259,10 @@ class TestLLMDecisionEngineE2E:
         from app.services.llm.strategy_manager import StrategyManager
 
         strategy_manager = StrategyManager(session_factory=db_session_factory)
-        actual_strategy = await strategy_manager.get_strategy("aggressive_perps")
+        mock_strategy = await strategy_manager.get_strategy("aggressive_perps")
 
-        if actual_strategy is None:
+        if mock_strategy is None:
             pytest.fail("Strategy 'aggressive_perps' not found in database")
-
-        # Update the strategy to comply with validation rules (max_leverage <= 10)
-        # Since the original aggressive strategy has max_leverage=15 which violates the validation
-        from copy import deepcopy
-
-        mock_strategy = deepcopy(actual_strategy)
-        mock_strategy.risk_parameters.max_leverage = (
-            10.0  # Change from 15.0 to 10.0 to pass validation
-        )
 
         # Mock the account context to avoid requiring a real trading account
         mock_account_context = AccountContext(
