@@ -1,7 +1,7 @@
 """add_balance_usd_to_account
 
 Revision ID: 8228259bbdbf
-Revises: 2779b8a86eec
+Revises: bd90195a9f69
 Create Date: 2025-11-20 10:00:49.511699
 """
 
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "8228259bbdbf"
-down_revision = "2779b8a86eec"
+down_revision = "bd90195a9f69"
 branch_labels = None
 depends_on = None
 

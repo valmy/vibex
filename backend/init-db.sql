@@ -233,7 +233,11 @@ CREATE TABLE IF NOT EXISTS trading.performance_metrics (
     total_pnl_percent REAL NOT NULL DEFAULT 0.0,
     average_win REAL,
     average_loss REAL,
-    profit_factor REAL
+    profit_factor REAL,
+    max_drawdown REAL,
+    max_drawdown_percent REAL,
+    sharpe_ratio REAL,
+    sortino_ratio REAL
 );
 CREATE INDEX IF NOT EXISTS idx_performance_account_id ON trading.performance_metrics (account_id);
 CREATE INDEX IF NOT EXISTS idx_performance_period ON trading.performance_metrics (period);
