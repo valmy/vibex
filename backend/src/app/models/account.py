@@ -47,6 +47,10 @@ class Account(BaseModel):
     leverage = Column(Float, default=2.0, nullable=False)
     max_position_size_usd = Column(Float, default=10000.0, nullable=False)
     risk_per_trade = Column(Float, default=0.02, nullable=False)  # 2% risk per trade
+    maker_fee_bps = Column(Float, default=5.0, nullable=False)  # 5 bps (0.05%)
+    taker_fee_bps = Column(Float, default=20.0, nullable=False)  # 20 bps (0.20%)
+    balance_usd = Column(Float, default=0.0, nullable=False)
+
 
     # Account settings
     is_paper_trading = Column(Boolean, default=False, nullable=False)

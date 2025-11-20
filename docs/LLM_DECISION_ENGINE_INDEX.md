@@ -138,13 +138,13 @@ See: [API Documentation - Switch Strategy](LLM_DECISION_ENGINE_API.md#6-switch-a
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Decision Engine                              │
-│  • Multi-Asset Analysis                                        │
-│  • Portfolio-Level Decisions                                   │
-│  • Strategy Management                                         │
+│  • Multi-Asset Analysis                                         │
+│  • Portfolio-Level Decisions                                    │
+│  • Strategy Management                                          │
 └─────────────────────────────────────────────────────────────────┘
                                 │
                 ┌───────────────┼───────────────┐
-                ▼               ▼               ▼
+                ▼               ▼              ▼
 ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
 │  Context Builder │  │   LLM Service    │  │    Validator     │
 │  • Market Data   │  │  • OpenRouter    │  │  • Schema Check  │

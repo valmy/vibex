@@ -59,6 +59,7 @@ from ...services.technical_analysis.exceptions import (
 )
 from ...services.technical_analysis.schemas import TATechnicalIndicators
 from ...services.technical_analysis.service import TechnicalAnalysisService
+from ...services.llm.strategy_manager import StrategyManager
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,7 @@ class ContextBuilderService:
         self._cache: Dict[str, Tuple[datetime, any]] = {}
         self._cache_ttl_seconds = 300  # 5 minutes cache TTL
         self._session_factory = session_factory
+        self.strategy_manager = StrategyManager(session_factory=session_factory)
 
         logger.info("ContextBuilderService initialized")
 
@@ -645,7 +647,7 @@ class ContextBuilderService:
             try:
                 # Get account details
                 account_result = await db.execute(select(Account).where(Account.id == account_id))
-                account = await account_result.scalar_one_or_none()
+                account = account_result.scalar_one_or_none()
 
                 if not account:
                     raise ContextBuilderError(f"Account {account_id} not found")
@@ -687,8 +689,10 @@ class ContextBuilderService:
                 total_exposure = sum(pos.entry_value for pos in positions)
                 risk_exposure = (total_exposure / balance_usd * 100) if balance_usd > 0 else 0.0
 
-                # Get or create default trading strategy
-                active_strategy = self._get_default_strategy()
+                # Get active trading strategy
+                active_strategy = await self.strategy_manager.get_account_strategy(account_id)
+                if not active_strategy:
+                    active_strategy = self._get_default_strategy()
 
                 account_context = AccountContext(
                     account_id=account_id,
@@ -699,6 +703,8 @@ class ContextBuilderService:
                     recent_performance=performance_metrics,
                     risk_exposure=min(100.0, risk_exposure),  # Cap at 100%
                     max_position_size=account.max_position_size_usd,
+                    maker_fee_bps=account.maker_fee_bps,
+                    taker_fee_bps=account.taker_fee_bps,
                     active_strategy=active_strategy,
                 )
 
@@ -796,7 +802,8 @@ class ContextBuilderService:
     ) -> PerformanceMetrics:
         """Calculate performance metrics for the account."""
         # Get trades from the last 30 days
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.PERFORMANCE_LOOKBACK_DAYS)
+        # Note: created_at in DB is naive timestamp (UTC), so we need naive datetime for comparison
+        cutoff_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=self.PERFORMANCE_LOOKBACK_DAYS)
 
         result = await db.execute(
             select(Trade).where(

@@ -292,8 +292,20 @@ async def startup_event():
 
         await init_db()
         logger.info("Database initialized")
+
+        # Initialize Decision Engine and Strategies
+        from .services.llm.decision_engine import get_decision_engine
+        from .db.session import get_session_factory
+
+        # Ensure Decision Engine is initialized with session factory
+        decision_engine = get_decision_engine(session_factory=get_session_factory())
+
+        # Initialize strategies (seed DB)
+        await decision_engine.strategy_manager.initialize()
+        logger.info("Strategy Manager initialized")
+
     except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
+        logger.error(f"Failed to initialize database or services: {e}")
         raise
 
     # Initialize market data service with candle-close scheduling

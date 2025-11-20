@@ -9,12 +9,14 @@ The design focuses on creating a robust, scalable, and maintainable system that 
 ## Schema Unification (2025-11-02)
 
 **IMPORTANT**: The codebase previously had two different `TradingContext` schemas:
+
 1. `app.schemas.context.TradingContext` (used by ContextBuilderService) - **DEPRECATED**
 2. `app.schemas.trading_decision.TradingContext` (used by LLMService) - **CANONICAL**
 
 These schemas have been unified to use `app.schemas.trading_decision.TradingContext` as the single canonical schema throughout the codebase.
 
-### Key Changes:
+### Key Changes
+
 - **Deleted**: `backend/src/app/schemas/context.py` (entire file removed)
 - **Updated**: `ContextBuilderService` now uses schemas from `app.schemas.trading_decision`
 - **TechnicalIndicators**: Changed from nested structure (EMAOutput, MACDOutput, etc.) to flat structure (ema_20, ema_50, macd, macd_signal, rsi, bb_upper, bb_middle, bb_lower, atr)
@@ -25,7 +27,8 @@ These schemas have been unified to use `app.schemas.trading_decision.TradingCont
 - **PositionSummary**: Uses 'size' instead of 'quantity', 'percentage_pnl' instead of 'unrealized_pnl_percent'
 - **TradeHistory**: Uses 'size' instead of 'quantity'
 
-### Migration Impact:
+### Migration Impact
+
 - All services now use the same schema definitions
 - Tests updated to use canonical schemas
 - Adapter methods added to convert between nested and flat TechnicalIndicators structures
@@ -50,6 +53,7 @@ backend/src/app/services/llm/
 ```
 
 This organization provides:
+
 - **Clear Separation**: LLM components are isolated from other services
 - **Easy Maintenance**: Related functionality is grouped together
 - **Clean Imports**: Package interface provides clean access to services
@@ -70,6 +74,7 @@ The LLM Decision Engine is designed to analyze and make perpetual futures tradin
 ### Decision Structure
 
 Each trading decision contains:
+
 - **Individual Asset Decisions**: Specific actions (buy/sell/hold/adjust) for each perpetual futures contract
 - **Portfolio Rationale**: Overall strategy explaining the multi-asset trading approach
 - **Total Allocation**: Aggregate capital allocation across all active positions
@@ -78,6 +83,7 @@ Each trading decision contains:
 ### Context Building
 
 The Context Builder aggregates data for all configured assets:
+
 - Market data (price, volume, funding rate) for each perpetual futures contract
 - Technical indicators for each asset across multiple timeframes
 - Overall market sentiment analysis
@@ -87,6 +93,7 @@ The Context Builder aggregates data for all configured assets:
 ### LLM Prompt Strategy
 
 The LLM receives comprehensive multi-asset context and is prompted to:
+
 1. Analyze each asset individually based on technical indicators and market conditions
 2. Identify the strongest trading opportunities across all assets
 3. Optimize capital allocation across opportunities based on conviction and risk
@@ -146,6 +153,7 @@ The LLM receives comprehensive multi-asset context and is prompted to:
 **File**: `backend/src/app/services/llm/llm_service.py` (Enhanced)
 
 **Responsibilities**:
+
 - Manage OpenRouter API connections with multiple model support
 - Generate structured trading decisions using advanced prompts
 - Handle API failures with exponential backoff and circuit breaker patterns
@@ -153,6 +161,7 @@ The LLM receives comprehensive multi-asset context and is prompted to:
 - Support A/B testing between different models
 
 **Key Methods**:
+
 ```python
 async def generate_trading_decision(
     self,
@@ -172,6 +181,7 @@ async def switch_model(self, model_name: str) -> bool
 **File**: `backend/src/app/services/llm/context_builder.py` (New)
 
 **Responsibilities**:
+
 - Aggregate market data from multiple timeframes
 - Integrate technical analysis indicators
 - Include account state and position information
@@ -179,6 +189,7 @@ async def switch_model(self, model_name: str) -> bool
 - Handle data freshness validation
 
 **Key Methods**:
+
 ```python
 async def build_trading_context(
     self,
@@ -200,6 +211,7 @@ async def get_account_context(self, account_id: int) -> AccountContext
 **File**: `backend/src/app/services/llm/decision_validator.py` (New)
 
 **Responsibilities**:
+
 - Validate trading decisions against JSON schema
 - Apply business rule validation
 - Enforce risk management constraints
@@ -207,6 +219,7 @@ async def get_account_context(self, account_id: int) -> AccountContext
 - Track validation metrics and errors
 
 **Key Methods**:
+
 ```python
 async def validate_decision(
     self,
@@ -228,6 +241,7 @@ async def get_validation_metrics(self) -> ValidationMetrics
 **File**: `backend/src/app/services/llm/strategy_manager.py` (New)
 
 **Responsibilities**:
+
 - Manage trading strategies for each account
 - Load and validate strategy configurations
 - Handle strategy switching and updates
@@ -235,6 +249,7 @@ async def get_validation_metrics(self) -> ValidationMetrics
 - Track strategy performance metrics
 
 **Key Methods**:
+
 ```python
 async def get_account_strategy(self, account_id: int) -> TradingStrategy
 
@@ -263,6 +278,7 @@ async def get_strategy_performance(
 **File**: `backend/src/app/services/llm/decision_engine.py` (New)
 
 **Responsibilities**:
+
 - Orchestrate the complete decision-making workflow
 - Coordinate between context building, LLM analysis, and validation
 - Manage decision caching and rate limiting
@@ -270,6 +286,7 @@ async def get_strategy_performance(
 - Provide unified interface for trading decisions
 
 **Key Methods**:
+
 ```python
 async def make_trading_decision(
     self,
@@ -447,6 +464,8 @@ class AccountContext(BaseModel):
     risk_exposure: float
     max_position_size: float
     active_strategy: TradingStrategy
+    maker_fee_bps: float
+    taker_fee_bps: float
 
 class TradingStrategy(BaseModel):
     """Trading strategy configuration."""
@@ -538,36 +557,42 @@ class InsufficientDataError(DecisionEngineError):
 ## Implementation Phases
 
 ### Phase 1: Enhanced LLM Service (Week 1)
+
 - Extend existing LLMService with structured decision generation
 - Implement multi-model support and model switching
 - Add comprehensive error handling and retry logic
 - Create usage metrics and monitoring
 
 ### Phase 2: Context Builder Service (Week 1)
+
 - Create context aggregation service
 - Integrate with technical analysis service
 - Implement account state integration
 - Add data freshness validation
 
 ### Phase 3: Decision Validator Service (Week 2)
+
 - Implement schema validation
 - Add business rule validation
 - Create risk management checks
 - Implement fallback mechanisms
 
 ### Phase 4: Strategy Manager Service (Week 2)
+
 - Create strategy management service
 - Implement predefined trading strategies
 - Add strategy switching capabilities
 - Create strategy performance tracking
 
 ### Phase 5: Decision Engine Orchestrator (Week 2)
+
 - Create orchestration service
 - Implement decision caching
 - Add multi-account support with strategy awareness
 - Create unified API interface
 
 ### Phase 6: Integration and Testing (Week 3)
+
 - Integrate with existing trading pipeline
 - Implement comprehensive testing
 - Add monitoring and alerting
