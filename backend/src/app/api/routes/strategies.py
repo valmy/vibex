@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ...core.exceptions import ConfigurationError, ValidationError
+from ...db.session import get_session_factory
 from ...schemas.trading_decision import (
     StrategyAlert,
     StrategyAssignment,
@@ -90,7 +91,11 @@ class PerformanceRequest(BaseModel):
 # Dependency to get strategy manager
 def get_strategy_manager() -> StrategyManager:
     """Get strategy manager instance."""
-    return StrategyManager()
+    try:
+        return StrategyManager(session_factory=get_session_factory())
+    except RuntimeError:
+        # Fallback for tests or when DB not initialized
+        return StrategyManager()
 
 
 # API Endpoints

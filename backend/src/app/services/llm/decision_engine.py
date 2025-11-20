@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...db.session import get_session_factory
 from ...schemas.trading_decision import (
     DecisionResult,
     HealthStatus,
@@ -137,7 +138,7 @@ class DecisionEngine:
         self.llm_service = get_llm_service()
         self.context_builder = get_context_builder_service(session_factory=session_factory)
         self.decision_validator = get_decision_validator()
-        self.strategy_manager = StrategyManager()
+        self.strategy_manager = StrategyManager(session_factory=session_factory)
         self.decision_repository = DecisionRepository(session_factory) if session_factory else None
 
         # Caching system
@@ -991,9 +992,16 @@ class DecisionEngine:
 _decision_engine: Optional[DecisionEngine] = None
 
 
-def get_decision_engine(session_factory: Optional[AsyncSession] = None) -> DecisionEngine:
+def get_decision_engine(session_factory: Optional[Any] = None) -> DecisionEngine:
     """Get or create the decision engine instance."""
     global _decision_engine
     if _decision_engine is None:
+        if session_factory is None:
+            try:
+                session_factory = get_session_factory()
+            except RuntimeError:
+                # DB might not be initialized yet in tests or early startup
+                logger.warning("Database not initialized when creating DecisionEngine")
+                pass
         _decision_engine = DecisionEngine(session_factory=session_factory)
     return _decision_engine

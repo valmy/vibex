@@ -172,18 +172,6 @@ class TestLLMDecisionEngineE2E:
             return_value=mock_account_context
         )
 
-        # Mock the _validate_context method to return dict
-        mock_validation_result = {
-            "is_valid": True,
-            "missing_data": [],
-            "stale_data": [],
-            "warnings": [],
-            "data_age_seconds": 0,
-        }
-        decision_engine.context_builder._validate_context = mocker.Mock(
-            return_value=mock_validation_result
-        )
-
         # The context_builder is real and should use the db_session from the DI container
         # The decision_engine fixture should be correctly wired
         result = await decision_engine.make_trading_decision(
@@ -246,8 +234,6 @@ class TestLLMDecisionEngineE2E:
         from app.schemas.trading_decision import (
             AccountContext,
             PerformanceMetrics,
-            StrategyRiskParameters,
-            TradingStrategy,
         )
         from app.services.llm.llm_service import LLMService
 
@@ -257,23 +243,14 @@ class TestLLMDecisionEngineE2E:
         context_builder = ContextBuilderService(session_factory=db_session_factory)
         llm_service = LLMService()
 
-        # Create a mock trading strategy
-        mock_strategy = TradingStrategy(
-            strategy_id="test_strategy_1",
-            strategy_name="test_strategy",
-            strategy_type="conservative",
-            prompt_template="Test prompt template for {symbol}",
-            risk_parameters=StrategyRiskParameters(
-                max_risk_per_trade=2.0,
-                max_daily_loss=5.0,
-                stop_loss_percentage=5.0,
-                take_profit_ratio=2.0,
-                max_leverage=1.0,
-                cooldown_period=300,
-            ),
-            is_active=True,
-            description="Test strategy for integration testing",
-        )
+        # Get the actual trading strategy from the database
+        from app.services.llm.strategy_manager import StrategyManager
+
+        strategy_manager = StrategyManager(session_factory=db_session_factory)
+        mock_strategy = await strategy_manager.get_strategy("aggressive_perps")
+
+        if mock_strategy is None:
+            pytest.fail("Strategy 'aggressive_perps' not found in database")
 
         # Mock the account context to avoid requiring a real trading account
         mock_account_context = AccountContext(

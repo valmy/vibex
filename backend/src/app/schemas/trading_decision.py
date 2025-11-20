@@ -355,8 +355,14 @@ class StrategyRiskParameters(BaseModel):
     max_daily_loss: float = Field(..., ge=0, le=100, description="Max daily loss (%)")
     stop_loss_percentage: float = Field(..., ge=0, le=50, description="Default stop loss (%)")
     take_profit_ratio: float = Field(default=2.0, ge=1.0, description="Risk/reward ratio")
-    max_leverage: float = Field(default=2.0, ge=1.0, le=10.0, description="Maximum leverage")
+    max_leverage: float = Field(default=2.0, ge=1.0, le=20.0, description="Maximum leverage")
     cooldown_period: int = Field(default=300, ge=0, description="Cooldown between trades (seconds)")
+    max_funding_rate_bps: float = Field(
+        default=0.0, ge=0, description="Max funding rate (bps) before blocking trades"
+    )
+    liquidation_buffer: float = Field(
+        default=0.0, ge=0, description="Buffer from liquidation price for stop loss (%)"
+    )
 
 
 class TradingStrategy(BaseModel):
@@ -364,9 +370,19 @@ class TradingStrategy(BaseModel):
 
     strategy_id: str = Field(..., description="Unique strategy identifier")
     strategy_name: str = Field(..., description="Human-readable strategy name")
-    strategy_type: Literal["conservative", "aggressive", "scalping", "swing", "dca", "custom"] = (
-        Field(..., description="Strategy type classification")
-    )
+    strategy_type: Literal[
+        "conservative",
+        "aggressive",
+        "scalping",
+        "swing",
+        "dca",
+        "custom",
+        "conservative_perps",
+        "aggressive_perps",
+        "scalping_perps",
+        "swing_perps",
+        "dca_hedge",
+    ] = Field(..., description="Strategy type classification")
     prompt_template: str = Field(..., description="LLM prompt template for this strategy")
     risk_parameters: StrategyRiskParameters = Field(..., description="Risk management parameters")
     timeframe_preference: List[str] = Field(
@@ -375,6 +391,14 @@ class TradingStrategy(BaseModel):
     max_positions: int = Field(default=3, ge=1, description="Maximum concurrent positions")
     position_sizing: Literal["fixed", "percentage", "kelly", "volatility_adjusted"] = Field(
         default="percentage", description="Position sizing method"
+    )
+    order_preference: Literal["maker_only", "taker_accepted", "maker_preferred", "any"] = Field(
+        default="any", description="Preference for order types to manage fees"
+    )
+    funding_rate_threshold: float = Field(
+        default=0.0,
+        ge=0,
+        description="Funding rate threshold to consider before entering a trade (%)",
     )
     is_active: bool = Field(default=True, description="Whether strategy is active")
 
@@ -444,6 +468,8 @@ class AccountContext(BaseModel):
     recent_performance: PerformanceMetrics
     risk_exposure: float = Field(..., ge=0, le=100)
     max_position_size: float = Field(..., gt=0)
+    maker_fee_bps: float = Field(default=5.0, ge=0)
+    taker_fee_bps: float = Field(default=20.0, ge=0)
     active_strategy: TradingStrategy
 
     def can_open_new_position(self, allocation_usd: float) -> bool:
@@ -630,7 +656,12 @@ class StrategyPerformance(BaseModel):
     sortino_ratio: Optional[float] = None
     profit_factor: float = Field(..., gt=0)
     avg_trade_duration_hours: float = Field(..., ge=0)
+    avg_trade_duration_hours: float = Field(..., ge=0)
     total_volume_traded: float = Field(..., ge=0)
+    total_fees_paid: float = Field(default=0.0, ge=0)
+    total_funding_paid: float = Field(default=0.0)
+    total_liquidations: int = Field(default=0, ge=0)
+    start_date: datetime
     start_date: datetime
     end_date: datetime
     period_days: int = Field(..., gt=0)

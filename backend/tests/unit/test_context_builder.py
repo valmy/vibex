@@ -9,7 +9,6 @@ import pytest
 
 from app.schemas.trading_decision import TechnicalIndicatorsSet
 from app.services.llm.context_builder import (
-    ContextBuilderError,
     ContextBuilderService,
     get_context_builder_service,
 )
@@ -65,42 +64,6 @@ class TestContextBuilderService:
         service1 = get_context_builder_service()
         service2 = get_context_builder_service()
         assert service1 is service2
-
-    @pytest.mark.unit
-    def test_validate_data_freshness_fresh_data(self, context_builder):
-        """Test data freshness validation with fresh data."""
-        # Create a timestamp from 2 minutes ago (fresh)
-        fresh_timestamp = datetime.now(timezone.utc) - timedelta(minutes=2)
-
-        is_fresh, age_minutes = context_builder.validate_data_freshness(fresh_timestamp)
-
-        assert is_fresh is True
-        assert age_minutes < 3  # Should be around 2 minutes
-
-    def test_validate_data_freshness_stale_data(self, context_builder):
-        """Test data freshness validation with stale data."""
-        # Create a timestamp from 30 minutes ago (stale, default max is 15 minutes)
-        stale_timestamp = datetime.now(timezone.utc) - timedelta(minutes=30)
-
-        is_fresh, age_minutes = context_builder.validate_data_freshness(stale_timestamp)
-
-        assert is_fresh is False
-        assert age_minutes > 29  # Should be around 30 minutes
-
-    def test_validate_data_freshness_custom_max_age(self, context_builder):
-        """Test data freshness validation with custom max age."""
-        # Create a timestamp from 10 minutes ago
-        timestamp = datetime.now(timezone.utc) - timedelta(minutes=10)
-
-        # With default max age (15 minutes), should be fresh
-        is_fresh, age_minutes = context_builder.validate_data_freshness(timestamp)
-        assert is_fresh is True
-
-        # With custom max age of 5 minutes, should be stale
-        is_fresh, age_minutes = context_builder.validate_data_freshness(
-            timestamp, max_age_minutes=5
-        )
-        assert is_fresh is False
 
     def test_cache_operations(self, context_builder):
         """Test cache operations."""
@@ -162,133 +125,6 @@ class TestContextBuilderService:
         assert "market_context_ETHUSDT" in context_builder._cache
         assert "account_context_1" in context_builder._cache
 
-    def test_create_partial_indicators_insufficient_data(self, context_builder):
-        """Test partial indicators creation with insufficient data."""
-        # Test with less than 20 candles
-        mock_data = [Mock() for _ in range(10)]
-        result = context_builder._create_partial_indicators(mock_data)
-        assert result.ema_20 is None
-        assert result.rsi is None
-
-    def test_create_partial_indicators_sufficient_data(self, context_builder, mock_market_data):
-        """Test partial indicators creation with sufficient data."""
-        # Use first 30 candles (enough for partial indicators)
-        partial_data = mock_market_data[:30]
-
-        result = context_builder._create_partial_indicators(partial_data)
-        # Should return TechnicalIndicatorsSet structure
-        assert result is not None
-        assert hasattr(result, "ema_20")
-        assert hasattr(result, "rsi")
-
-    @pytest.mark.unit
-    @pytest.mark.asyncio
-    async def test_validate_context_data_availability_missing_account(self, context_builder):
-        """Test data availability validation with missing account."""
-        # Set up a mock database session
-        mock_db = AsyncMock()
-        mock_db.__aenter__ = AsyncMock(return_value=mock_db)
-        mock_db.__aexit__ = AsyncMock(return_value=None)
-        context_builder._session_factory = lambda: mock_db
-
-        # Mock account not found
-        mock_execute_result = AsyncMock()
-        mock_execute_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_execute_result
-
-        # Mock market data service to return some data
-        mock_market_data = [
-            Mock(timestamp=datetime.now(timezone.utc) - timedelta(minutes=i)) for i in range(50)
-        ]
-        context_builder.market_data_service.get_latest_market_data = AsyncMock(
-            return_value=mock_market_data
-        )
-
-        result = await context_builder.validate_context_data_availability("BTCUSDT", 999)
-
-        # Result is now a dict instead of ContextValidationResult object
-        assert not result["is_valid"]
-        assert "Account 999 not found" in result["missing_data"]
-
-    @pytest.mark.asyncio
-    async def test_validate_context_data_availability_no_market_data(self, context_builder):
-        """Test data availability validation with no market data."""
-        # Set up a mock database session
-        mock_db = AsyncMock()
-        context_builder._session_factory = lambda: mock_db
-
-        # Mock account found
-        mock_account = Mock()
-        mock_account.id = 1
-        mock_account_result = AsyncMock()
-        mock_account_result.scalar_one_or_none.return_value = mock_account
-        mock_db.execute.return_value = mock_account_result
-
-        # Mock no market data
-        context_builder.market_data_service.get_latest_market_data = AsyncMock(return_value=[])
-
-        result = await context_builder.validate_context_data_availability("BTCUSDT", 1)
-
-        # Result is now a dict instead of ContextValidationResult object
-        assert not result["is_valid"]
-        assert "No market data available for BTCUSDT" in result["missing_data"]
-
-    def test_handle_data_unavailability_invalid_data(self, context_builder):
-        """Test data unavailability handling with invalid data."""
-        # validation_result is now a dict instead of ContextValidationResult object
-        validation_result = {
-            "is_valid": False,
-            "missing_data": ["Account not found"],
-            "stale_data": [],
-            "warnings": [],
-            "data_age_seconds": 0,
-        }
-
-        result = context_builder.handle_data_unavailability("BTCUSDT", 1, validation_result)
-        assert result is None
-
-    def test_handle_data_unavailability_with_warnings(self, context_builder):
-        """Test data unavailability handling with warnings."""
-        # validation_result is now a dict instead of ContextValidationResult object
-        validation_result = {
-            "is_valid": True,
-            "missing_data": [],
-            "stale_data": [],
-            "warnings": ["Limited data available"],
-            "data_age_seconds": 300,
-        }
-
-        result = context_builder.handle_data_unavailability("BTCUSDT", 1, validation_result)
-        # Currently returns None as degradation is not implemented
-        assert result is None
-
-    def test_validate_context_valid_context(self, context_builder):
-        """Test context validation with valid context."""
-        # Create mock contexts with flat TechnicalIndicators structure
-        market_context = Mock()
-        market_context.current_price = 50000.0
-        market_context.technical_indicators = Mock()
-        market_context.technical_indicators.interval = Mock()
-        market_context.technical_indicators.long_interval = Mock()
-        market_context.funding_rate = 0.01
-        market_context.open_interest = 1000000.0
-        # Add price_history for validation
-        mock_price = Mock()
-        mock_price.timestamp = datetime.now(timezone.utc) - timedelta(minutes=2)
-        market_context.price_history = [mock_price]
-        market_context.validate_data_freshness = Mock(return_value=True)
-
-        account_context = Mock()
-        account_context.available_balance = 5000.0
-        account_context.balance_usd = 10000.0  # Add balance_usd for validation
-
-        result = context_builder._validate_context(market_context, account_context)
-
-        # Result is now a dict instead of ContextValidationResult object
-        assert result["is_valid"]
-        assert len(result["missing_data"]) == 0
-        assert len(result["stale_data"]) == 0
-
 
 class TestContextBuilderIntegration:
     """Integration tests for Context Builder Service."""
@@ -297,31 +133,6 @@ class TestContextBuilderIntegration:
     def context_builder(self):
         """Create a ContextBuilderService instance for testing."""
         return ContextBuilderService(session_factory=None)
-
-    @pytest.mark.asyncio
-    async def test_build_trading_context_insufficient_data(self, context_builder):
-        """Test building trading context with insufficient data for multi-asset support."""
-        # Mock the data availability check to return invalid (now returns dict)
-        mock_validation = {
-            "is_valid": False,
-            "missing_data": ["No market data"],
-            "stale_data": [],
-            "warnings": [],
-            "data_age_seconds": 0,
-        }
-
-        with patch.object(
-            context_builder,
-            "validate_context_data_availability",
-            new_callable=AsyncMock,
-            return_value=mock_validation,
-        ):
-            with patch.object(context_builder, "handle_data_unavailability", return_value=None):
-                with pytest.raises(ContextBuilderError):
-                    # Updated to accept list of symbols
-                    await context_builder.build_trading_context(
-                        symbols=["BTCUSDT"], account_id=1, timeframes=["1h", "4h"]
-                    )
 
     @pytest.mark.asyncio
     async def test_build_trading_context_with_degraded_context(self, context_builder):

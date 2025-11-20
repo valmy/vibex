@@ -73,9 +73,7 @@ class MarketDataRepository:
                     )
                     # Funding rate is appended as the last element (index 12) when correlated
                     existing.funding_rate = (
-                        float(candle[-1])
-                        if len(candle) > 11 and candle[-1] is not None
-                        else None
+                        float(candle[-1]) if len(candle) > 11 and candle[-1] is not None else None
                     )
                     logger.debug(f"Updated existing market data for {symbol} at {candle_time}")
                 else:

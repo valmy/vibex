@@ -710,14 +710,20 @@ Provide:
                 indicators = asset_data.technical_indicators
                 indicators_text = f"""
   Primary Interval ({context.timeframes[0]}):
-    EMA-20: {", ".join([f"{v:.2f}" for v in indicators.interval.ema_20[-5:]]) if indicators.interval.ema_20 else "N/A"}
-    EMA-50: {", ".join([f"{v:.2f}" for v in indicators.interval.ema_50[-5:]]) if indicators.interval.ema_50 else "N/A"}
-    RSI: {", ".join([f"{v:.2f}" for v in indicators.interval.rsi[-5:]]) if indicators.interval.rsi else "N/A"}
-    MACD: {", ".join([f"{v:.4f}" for v in indicators.interval.macd[-5:]]) if indicators.interval.macd else "N/A"}
+    EMA-20: {", ".join([f"{v:.2f}" for v in indicators.interval.ema_20[-10:]]) if indicators.interval.ema_20 else "N/A"}
+    EMA-50: {", ".join([f"{v:.2f}" for v in indicators.interval.ema_50[-10:]]) if indicators.interval.ema_50 else "N/A"}
+    RSI: {", ".join([f"{v:.2f}" for v in indicators.interval.rsi[-10:]]) if indicators.interval.rsi else "N/A"}
+    MACD: {", ".join([f"{v:.4f}" for v in indicators.interval.macd[-10:]]) if indicators.interval.macd else "N/A"}
+    Bollinger Bands Upper: {", ".join([f"{v:.2f}" for v in indicators.interval.bb_upper[-10:]]) if indicators.interval.bb_upper else "N/A"}
+    Bollinger Bands Middle: {", ".join([f"{v:.2f}" for v in indicators.interval.bb_middle[-10:]]) if indicators.interval.bb_middle else "N/A"}
+    Bollinger Bands Lower: {", ".join([f"{v:.2f}" for v in indicators.interval.bb_lower[-10:]]) if indicators.interval.bb_lower else "N/A"}
   Long-Term Interval ({context.timeframes[1]}):
-    EMA-20: {", ".join([f"{v:.2f}" for v in indicators.long_interval.ema_20[-5:]]) if indicators.long_interval.ema_20 else "N/A"}
-    EMA-50: {", ".join([f"{v:.2f}" for v in indicators.long_interval.ema_50[-5:]]) if indicators.long_interval.ema_50 else "N/A"}
-    RSI: {", ".join([f"{v:.2f}" for v in indicators.long_interval.rsi[-5:]]) if indicators.long_interval.rsi else "N/A"}
+    EMA-20: {", ".join([f"{v:.2f}" for v in indicators.long_interval.ema_20[-10:]]) if indicators.long_interval.ema_20 else "N/A"}
+    EMA-50: {", ".join([f"{v:.2f}" for v in indicators.long_interval.ema_50[-10:]]) if indicators.long_interval.ema_50 else "N/A"}
+    RSI: {", ".join([f"{v:.2f}" for v in indicators.long_interval.rsi[-10:]]) if indicators.long_interval.rsi else "N/A"}
+    Bollinger Bands Upper: {", ".join([f"{v:.2f}" for v in indicators.long_interval.bb_upper[-10:]]) if indicators.long_interval.bb_upper else "N/A"}
+    Bollinger Bands Middle: {", ".join([f"{v:.2f}" for v in indicators.long_interval.bb_middle[-10:]]) if indicators.long_interval.bb_middle else "N/A"}
+    Bollinger Bands Lower: {", ".join([f"{v:.2f}" for v in indicators.long_interval.bb_lower[-10:]]) if indicators.long_interval.bb_lower else "N/A"}
 """
 
                 # Format funding rate if available
