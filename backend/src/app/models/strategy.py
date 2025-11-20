@@ -42,6 +42,8 @@ class Strategy(BaseModel):
     timeframe_preference = Column(JSON, nullable=False)
     max_positions = Column(Integer, nullable=False, default=3)
     position_sizing = Column(String(50), nullable=False, default="percentage")
+    order_preference = Column(String(50), nullable=False, default="any") # "maker_only", "taker_accepted", "maker_preferred", "any"
+    funding_rate_threshold = Column(Float, nullable=False, default=0.0) # In percentage (e.g., 0.05 for 0.05%)
     risk_parameters = Column(JSON, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
     is_default = Column(Boolean, nullable=False, default=False)
@@ -122,6 +124,9 @@ class StrategyPerformance(BaseModel):
     profit_factor = Column(Float, nullable=False, default=0.0)
     avg_trade_duration_hours = Column(Float, nullable=False, default=0.0)
     total_volume_traded = Column(Float, nullable=False, default=0.0)
+    total_fees_paid = Column(Float, nullable=False, default=0.0)
+    total_funding_paid = Column(Float, nullable=False, default=0.0)
+    total_liquidations = Column(Integer, nullable=False, default=0)
     var_95 = Column(Float, nullable=True)
     max_consecutive_losses = Column(Integer, nullable=False, default=0)
     max_consecutive_wins = Column(Integer, nullable=False, default=0)

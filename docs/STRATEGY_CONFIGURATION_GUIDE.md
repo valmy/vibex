@@ -1,846 +1,519 @@
-# Strategy Configuration Guide
+# Strategy Configuration Guide for Perpetual Futures DEX Trading
 
 ## Overview
 
-The LLM Decision Engine supports multiple trading strategies that can be assigned to different accounts. This guide covers how to configure, customize, and manage trading strategies effectively.
+This guide is tailored for AI-powered trading bots on AsterDex perpetual futures DEX. Strategies are optimized for short-term trading with 5-minute candles as the primary timeframe, complemented by 4-hour candles for trend context. All strategies account for leverage, funding rates, and AsterDex's competitive fee structure (0.005% maker, 0.04% taker).
+
+---
 
 ## Predefined Strategies
 
-### 1. Conservative Strategy
+### 1. Conservative Perpetual Strategy
 
-**Strategy ID:** `conservative`
+**Strategy ID:** `conservative_perps`
 
 **Characteristics:**
-- Low risk tolerance
-- Longer timeframes
-- Smaller position sizes
-- Higher take-profit ratios
+
+- Low risk tolerance with leverage awareness
+- 5m entries, 4h trend confirmation
+- Small position sizes with 2-3x leverage
+- Prioritizes limit orders (maker fees)
+- High take-profit ratios to offset funding costs
 
 **Configuration:**
+
 ```json
 {
-  "strategy_id": "conservative",
-  "strategy_name": "Conservative Trading",
+  "strategy_id": "conservative_perps",
+  "strategy_name": "Conservative Perps",
   "strategy_type": "conservative",
-  "prompt_template": "Analyze {symbol} with a conservative approach. Focus on strong support/resistance levels, low volatility periods, and high-probability setups. Prioritize capital preservation over aggressive gains. Consider longer timeframes (4h, 1d) and look for confirmation from multiple indicators before recommending any position.",
-  "risk_parameters": {
-    "max_risk_per_trade": 1.0,
-    "max_daily_loss": 3.0,
-    "stop_loss_percentage": 2.0,
-    "take_profit_ratio": 3.0,
-    "max_leverage": 1.5,
-    "cooldown_period": 3600
-  },
-  "timeframe_preference": ["4h", "1d"],
-  "max_positions": 2,
-  "position_sizing": "fixed",
-  "is_active": true
-}
-```
-
-**Best For:**
-- Risk-averse traders
-- Stable market conditions
-- Long-term capital preservation
-- Beginners
-
-### 2. Aggressive Strategy
-
-**Strategy ID:** `aggressive`
-
-**Characteristics:**
-- Higher risk tolerance
-- Shorter timeframes
-- Larger position sizes
-- Quick profit-taking
-
-**Configuration:**
-```json
-{
-  "strategy_id": "aggressive",
-  "strategy_name": "Aggressive Trading",
-  "strategy_type": "aggressive",
-  "prompt_template": "Analyze {symbol} with an aggressive trading approach. Look for momentum breakouts, trend continuations, and high-volatility opportunities. Use shorter timeframes (15m, 1h) for quick entries and exits. Focus on maximizing profit potential while managing risk through position sizing and stop losses.",
-  "risk_parameters": {
-    "max_risk_per_trade": 5.0,
-    "max_daily_loss": 10.0,
-    "stop_loss_percentage": 4.0,
-    "take_profit_ratio": 2.0,
-    "max_leverage": 5.0,
-    "cooldown_period": 300
-  },
-  "timeframe_preference": ["15m", "1h"],
-  "max_positions": 5,
-  "position_sizing": "percentage",
-  "is_active": true
-}
-```
-
-**Best For:**
-- Experienced traders
-- High-volatility markets
-- Active trading sessions
-- Risk-tolerant accounts
-
-### 3. Scalping Strategy
-
-**Strategy ID:** `scalping`
-
-**Characteristics:**
-- Very short timeframes
-- Quick in-and-out trades
-- Small profit targets
-- High frequency
-
-**Configuration:**
-```json
-{
-  "strategy_id": "scalping",
-  "strategy_name": "Scalping Strategy",
-  "strategy_type": "scalping",
-  "prompt_template": "Analyze {symbol} for scalping opportunities. Focus on very short-term price movements (1m, 5m timeframes), order book dynamics, and micro-trends. Look for quick profit opportunities with tight stop losses. Prioritize high-liquidity periods and avoid major news events.",
+  "prompt_template": "Analyze {symbol} perpetual futures conservatively. Use 5m timeframe for precise entries but confirm bias on 4h trend. Focus on strong support/resistance, funding rate direction, and liquidation cluster avoidance. Prioritize limit orders (maker) for fee efficiency. Current funding rate: {funding_rate}%. Target 3:1+ reward/risk to offset holding costs. Maximum 2 concurrent positions.",
   "risk_parameters": {
     "max_risk_per_trade": 0.5,
     "max_daily_loss": 2.0,
-    "stop_loss_percentage": 1.0,
-    "take_profit_ratio": 1.5,
+    "stop_loss_percentage": 1.5,
+    "take_profit_ratio": 3.0,
     "max_leverage": 3.0,
-    "cooldown_period": 60
+    "cooldown_period": 600,
+    "max_funding_rate_bps": 5.0
+  },
+  "timeframe_preference": ["5m", "15m", "4h"],
+  "max_positions": 2,
+  "position_sizing": "volatility_adjusted",
+  "order_preference": "maker_only",
+  "funding_rate_threshold": 0.05,
+  "is_active": true
+}
+```
+
+**Best For:**
+
+- Risk-averse traders in leveraged markets
+- High funding rate environments
+- Account preservation
+- Avoiding liquidation risk
+
+---
+
+### 2. Aggressive Perpetual Strategy
+
+**Strategy ID:** `aggressive_perps`
+
+**Characteristics:**
+
+- High risk tolerance for volatile moves
+- 5m primary, 1h for structure
+- Up to 15x leverage
+- Taker orders accepted for breakout speed
+- Quick profit-taking to minimize funding fees
+
+**Configuration:**
+
+```json
+{
+  "strategy_id": "aggressive_perps",
+  "strategy_name": "Aggressive Perps",
+  "strategy_type": "aggressive",
+  "prompt_template": "Analyze {symbol} for aggressive perpetual futures trading on 5m timeframe. Hunt for momentum breakouts, funding rate squeezes, and liquidation hunts. Accept taker fees for immediate entries on confirmed breaks. Monitor open interest changes and funding rate: {funding_rate}%. Use 15x max leverage with 2% stop loss. Target 2:1 risk/reward, exit within 4-6 hours to limit funding. Obey daily loss limits strictly.",
+  "risk_parameters": {
+    "max_risk_per_trade": 2.0,
+    "max_daily_loss": 8.0,
+    "stop_loss_percentage": 2.0,
+    "take_profit_ratio": 2.0,
+    "max_leverage": 15.0,
+    "cooldown_period": 120,
+    "max_funding_rate_bps": 15.0
+  },
+  "timeframe_preference": ["5m", "15m", "1h"],
+  "max_positions": 4,
+  "position_sizing": "percentage",
+  "order_preference": "taker_accepted",
+  "funding_rate_threshold": 0.15,
+  "is_active": true
+}
+```
+
+**Best For:**
+
+- Experienced perps traders
+- High-volatility breakouts
+- Active session trading (avoid holding through funding)
+- Capitalizing on liquidation cascades
+
+---
+
+### 3. Scalping Perpetual Strategy
+
+**Strategy ID:** `scalping_perps`
+
+**Characteristics:**
+
+- Ultra-short 5m/1m entries
+- 5-10x leverage
+- Strict maker order focus for fee edge
+- Aim for 0.1-0.3% profit per trade
+- High frequency, minimal duration
+
+**Configuration:**
+
+```json
+{
+  "strategy_id": "scalping_perps",
+  "strategy_name": "Perps Scalping",
+  "strategy_type": "scalping",
+  "prompt_template": "Scalp {symbol} perpetuals on 1m/5m timeframes. Focus on order book imbalances, micro-divergences, and funding rate arbitrage. USE LIMIT ORDERS ONLY (maker fee 0.005%). Target 0.2% profit with 0.15% stop. Avoid trading 5 minutes before/after funding. Current funding: {funding_rate}bps. Max hold time: 30 minutes. Check liquidation heatmap for cluster avoidance.",
+  "risk_parameters": {
+    "max_risk_per_trade": 0.25,
+    "max_daily_loss": 1.5,
+    "stop_loss_percentage": 0.15,
+    "take_profit_ratio": 1.3,
+    "max_leverage": 10.0,
+    "cooldown_period": 30,
+    "max_funding_rate_bps": 3.0
   },
   "timeframe_preference": ["1m", "5m"],
   "max_positions": 3,
   "position_sizing": "fixed",
+  "order_preference": "maker_only",
+  "funding_rate_threshold": 0.03,
   "is_active": true
 }
 ```
 
 **Best For:**
-- High-frequency trading
-- Liquid markets
-- Low-latency environments
-- Experienced scalpers
 
-### 4. Swing Trading Strategy
+- High-frequency perps trading
+- Liquid major pairs (BTC, ETH)
+- Fee-sensitive strategies
+- Low-volatility range periods
 
-**Strategy ID:** `swing`
+---
+
+### 4. Swing Perpetual Strategy
+
+**Strategy ID:** `swing_perps`
 
 **Characteristics:**
-- Medium-term positions
-- Trend-following approach
-- Balanced risk/reward
-- Technical analysis focus
+
+- 5m entry, 4h trend riding
+- 3-5x leverage
+- Holds 6-24 hours (1-2 funding payments)
+- Balanced maker/taker usage
+- Focus on funding rate trends
 
 **Configuration:**
+
 ```json
 {
-  "strategy_id": "swing",
-  "strategy_name": "Swing Trading",
+  "strategy_id": "swing_perps",
+  "strategy_name": "Swing Perps",
   "strategy_type": "swing",
-  "prompt_template": "Analyze {symbol} for swing trading opportunities. Focus on medium-term trends (1h, 4h timeframes), support/resistance levels, and momentum indicators. Look for trend continuations and reversals with clear entry/exit points. Balance risk and reward with appropriate position sizing.",
+  "prompt_template": "Swing trade {symbol} perps: use 5m for precision entry, 4h for trend direction. Hold 6-18 hours max. Monitor funding rate trend: {funding_rate}bps. Target 2.5:1 R:R. Use 3-5x leverage. Place limit orders at premium/discount to avoid taker fees. Calculate liquidation price before entry: must be >15% away. Exit if funding flips against position for 2 consecutive periods.",
   "risk_parameters": {
-    "max_risk_per_trade": 3.0,
-    "max_daily_loss": 6.0,
-    "stop_loss_percentage": 3.0,
+    "max_risk_per_trade": 1.5,
+    "max_daily_loss": 5.0,
+    "stop_loss_percentage": 2.5,
     "take_profit_ratio": 2.5,
-    "max_leverage": 3.0,
-    "cooldown_period": 1800
+    "max_leverage": 5.0,
+    "cooldown_period": 300,
+    "max_funding_rate_bps": 8.0
   },
-  "timeframe_preference": ["1h", "4h"],
-  "max_positions": 4,
+  "timeframe_preference": ["5m", "15m", "4h"],
+  "max_positions": 3,
   "position_sizing": "volatility_adjusted",
+  "order_preference": "maker_preferred",
+  "funding_rate_threshold": 0.08,
   "is_active": true
 }
 ```
 
 **Best For:**
-- Medium-term trading
-- Trending markets
-- Balanced approach
-- Technical traders
 
-### 5. DCA (Dollar Cost Averaging) Strategy
+- Medium-term trend following
+- Positive funding rate harvesting
+- Avoiding excessive leverage
+- Balanced risk/reward
 
-**Strategy ID:** `dca`
+---
+
+### 5. DCA Hedging Strategy
+
+**Strategy ID:** `dca_hedge`
 
 **Characteristics:**
-- Gradual position building
-- Long-term accumulation
-- Lower volatility impact
-- Systematic approach
+
+- Systematic position building
+- 15m intervals for DCA
+- 1-2x leverage only
+- Used for hedging or gradual exposure
+- Strict limit orders
 
 **Configuration:**
+
 ```json
 {
-  "strategy_id": "dca",
-  "strategy_name": "Dollar Cost Averaging",
+  "strategy_id": "dca_hedge",
+  "strategy_name": "Perps DCA Hedge",
   "strategy_type": "dca",
-  "prompt_template": "Analyze {symbol} for DCA opportunities. Focus on long-term trends, fundamental strength, and accumulation zones. Recommend gradual position building during dips and systematic profit-taking during rallies. Use longer timeframes (4h, 1d) and emphasize consistency over timing.",
+  "prompt_template": "Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments. Use 1x leverage ONLY. Current funding {funding_rate}bps - avoid if >10bps. Hedge spot exposure or build gradual directional position. Max 5 entry orders, then take profit at +3% from average entry. No stop loss - manual intervention only. Maker orders essential.",
   "risk_parameters": {
-    "max_risk_per_trade": 2.0,
-    "max_daily_loss": 4.0,
-    "stop_loss_percentage": 5.0,
-    "take_profit_ratio": 4.0,
-    "max_leverage": 2.0,
-    "cooldown_period": 7200
+    "max_risk_per_trade": 1.0,
+    "max_daily_loss": 3.0,
+    "stop_loss_percentage": 0,
+    "take_profit_ratio": 3.0,
+    "max_leverage": 1.0,
+    "cooldown_period": 900,
+    "max_funding_rate_bps": 10.0
   },
-  "timeframe_preference": ["4h", "1d"],
-  "max_positions": 3,
+  "timeframe_preference": ["15m", "1h"],
+  "max_positions": 1,
   "position_sizing": "fixed",
+  "order_preference": "maker_only",
+  "funding_rate_threshold": 0.10,
   "is_active": true
 }
 ```
 
 **Best For:**
-- Long-term investors
-- Volatile markets
-- Systematic accumulation
-- Risk management
+
+- Hedging spot positions
+- Gradual exposure building
+- High funding rate avoidance
+- Low-leverage accumulation
+
+---
+
+## DEX-Specific Configuration
+
+### Fee Optimization Settings
+
+The system automatically retrieves fee tiers from the account configuration (`maker_fee_bps` and `taker_fee_bps`). Strategies use this information to:
+
+1. **Calculate Break-even**: Ensure expected profit exceeds trading costs.
+2. **Select Order Type**: High-frequency strategies (Scalping) may prefer Maker orders to minimize fees (0.005% vs 0.04%).
+3. **Adjust Position Sizing**: Account for entry/exit costs in risk calculations.
+
+```json
+"order_preference": "limit",  // Prefer limit orders to capture maker rebates/lower fees
+"fee_structure": {
+  "maker": 0.00005, // 0.005% (5 bps) - Configured in Account settings
+  "taker": 0.0004   // 0.04% (20 bps) - Configured in Account settings
+}
+```
+
+### Funding Rate Management
+
+The `StrategyManager` monitors funding rates and can automatically switch strategies to adapt to the funding regime:
+
+1. **High Positive Funding (> 0.05%)**: Longs pay shorts.
+    - *Action*: Switch from trend-following Long strategies (Aggressive/Swing) to **Scalping** (reduce holding time) or **Neutral** strategies.
+2. **High Negative Funding (< -0.05%)**: Shorts pay longs.
+    - *Action*: Switch to **DCA** (accumulate Longs to capture funding) or **Neutral** strategies.
+
+This logic is enforced by the `switch_by_funding_regime` method in the Strategy Manager.
+
+---
 
 ## Custom Strategy Creation
 
-### Strategy Configuration Parameters
+### Perpetual-Specific Prompt Template
 
-#### Basic Information
-- **strategy_id**: Unique identifier (auto-generated if not provided)
-- **strategy_name**: Human-readable name
-- **strategy_type**: Classification (conservative, aggressive, scalping, swing, dca, custom)
+**Template Variables for Perps:**
 
-#### Prompt Template
-The prompt template is the core of your strategy. It defines how the LLM analyzes market conditions.
+- `{symbol}`: Perpetual pair (e.g., BTC-USD)
+- `{funding_rate}`: Current funding rate (bps)
+- `{open_interest}`: Open interest change (%)
+- `{liquidation_clusters}`: Key liquidation levels
+- `{leverage}`: Current position leverage
 
-**Template Variables:**
-- `{symbol}`: Trading pair symbol
-- `{timeframe}`: Current timeframe
-- `{market_condition}`: Current market condition
-- `{account_balance}`: Available balance
-- `{risk_exposure}`: Current risk exposure
+**Example Prompt:**
 
-**Example Custom Template:**
 ```
-Analyze {symbol} using a momentum-based approach. Current market condition is {market_condition}.
-Account has {account_balance} USD available with {risk_exposure}% current exposure.
+Trade {symbol} perps on 5m timeframe.
 
-Focus on:
-1. RSI divergences on {timeframe} timeframe
-2. Volume confirmation for breakouts
-3. Support/resistance levels from higher timeframes
-4. Risk management based on current exposure
+FUNDING & LIQUIDITY:
+- Current funding: {funding_rate}bps
+- Open interest change: {open_interest}%
+- Avoid liquidation clusters: {liquidation_clusters}
 
-Provide clear entry, exit, and risk management recommendations.
+ACCOUNT STATE:
+- Available margin: {account_balance} USD
+- Current exposure: {risk_exposure}%
+- Max leverage: {leverage}x
+
+EXECUTION RULES:
+1. Use LIMIT orders only (save 0.035% vs taker)
+2. Stop loss must be beyond liquidation cluster
+3. Target 3:1 R:R minimum
+4. Max hold: 8 hours (1 funding period)
+5. If funding >10bps against position, exit early
+
+OUTPUT: Entry, SL, TP, size (USD), order type (limit/market), confidence (1-100)
 ```
 
-#### Risk Parameters
+### Risk Parameters for Leveraged Trading
 
 ```json
 {
-  "max_risk_per_trade": 2.5,        // Maximum risk per trade (%)
-  "max_daily_loss": 5.0,            // Maximum daily loss limit (%)
-  "stop_loss_percentage": 3.0,      // Default stop loss (%)
-  "take_profit_ratio": 2.0,         // Risk/reward ratio
-  "max_leverage": 3.0,              // Maximum leverage allowed
-  "cooldown_period": 1800           // Cooldown between trades (seconds)
+  "risk_parameters": {
+    "max_risk_per_trade": 1.0,        // % of account per trade
+    "max_daily_loss": 3.0,            // % of account before halt
+    "stop_loss_percentage": 2.0,      // Position stop loss
+    "take_profit_ratio": 2.5,         // Min reward/risk
+    "max_leverage": 10.0,             // Max allowed leverage
+    "cooldown_period": 180,           // Seconds between trades
+    "max_funding_rate_bps": 8.0,      // Block if funding too high
+    "liquidation_buffer": 0.15        // Stop must be 15% from liq price
+  }
 }
 ```
 
-#### Position Sizing Methods
+---
 
-**1. Fixed Sizing**
-```json
-{
-  "position_sizing": "fixed",
-  "fixed_amount_usd": 1000.0
-}
-```
+## Strategy Management for Perps
 
-**2. Percentage Sizing**
-```json
-{
-  "position_sizing": "percentage",
-  "percentage_of_balance": 10.0
-}
-```
-
-**3. Kelly Criterion**
-```json
-{
-  "position_sizing": "kelly",
-  "kelly_fraction": 0.25
-}
-```
-
-**4. Volatility Adjusted**
-```json
-{
-  "position_sizing": "volatility_adjusted",
-  "base_percentage": 5.0,
-  "volatility_multiplier": 0.5
-}
-```
-
-### Creating a Custom Strategy
-
-#### API Request Example
-
-```bash
-curl -X POST "http://localhost:3000/api/v1/strategies/custom" \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "strategy_name": "Momentum Breakout Strategy",
-    "prompt_template": "Analyze {symbol} for momentum breakout opportunities...",
-    "risk_parameters": {
-      "max_risk_per_trade": 3.0,
-      "max_daily_loss": 7.0,
-      "stop_loss_percentage": 2.5,
-      "take_profit_ratio": 2.5,
-      "max_leverage": 4.0,
-      "cooldown_period": 900
-    },
-    "timeframe_preference": ["15m", "1h", "4h"],
-    "max_positions": 3,
-    "position_sizing": "volatility_adjusted"
-  }'
-```
-
-#### Python Example
+### Automated Strategy Switching by Funding
 
 ```python
-def create_momentum_strategy(client):
-    strategy_config = {
-        "strategy_name": "Momentum Breakout Strategy",
-        "prompt_template": """
-        Analyze {symbol} for momentum breakout opportunities on {timeframe} timeframe.
+def switch_by_funding_regime(client, account_id):
+    """
+    Switch strategies based on funding rate environment
+    """
+    avg_funding = get_average_funding_rate(hours=24)
 
-        Key Analysis Points:
-        1. Look for volume-confirmed breakouts above resistance
-        2. Check RSI for momentum confirmation (>60 for bullish)
-        3. Ensure price is above key moving averages
-        4. Verify support levels for stop loss placement
-
-        Current market condition: {market_condition}
-        Available balance: {account_balance} USD
-        Current risk exposure: {risk_exposure}%
-
-        Provide specific entry price, stop loss, and take profit levels.
-        """,
-        "risk_parameters": {
-            "max_risk_per_trade": 3.0,
-            "max_daily_loss": 7.0,
-            "stop_loss_percentage": 2.5,
-            "take_profit_ratio": 2.5,
-            "max_leverage": 4.0,
-            "cooldown_period": 900
-        },
-        "timeframe_preference": ["15m", "1h", "4h"],
-        "max_positions": 3,
-        "position_sizing": "volatility_adjusted"
-    }
-
-    response = client.create_custom_strategy(strategy_config)
-    return response
-```
-
-## Strategy Assignment and Management
-
-### Assigning Strategies to Accounts
-
-#### Single Account Assignment
-
-```python
-# Assign strategy to account
-client.assign_strategy_to_account(
-    account_id=1,
-    strategy_id="aggressive",
-    assigned_by="trader_123",
-    switch_reason="Market conditions favor aggressive approach"
-)
-```
-
-#### Bulk Assignment
-
-```python
-# Assign strategies to multiple accounts
-assignments = [
-    {"account_id": 1, "strategy_id": "aggressive"},
-    {"account_id": 2, "strategy_id": "conservative"},
-    {"account_id": 3, "strategy_id": "swing"}
-]
-
-for assignment in assignments:
-    client.assign_strategy_to_account(**assignment)
-```
-
-### Strategy Switching
-
-#### Manual Switch
-
-```python
-# Switch strategy based on market conditions
-def switch_strategy_based_on_volatility(client, account_id, volatility):
-    if volatility > 5.0:
-        # High volatility - use conservative approach
-        client.switch_strategy(account_id, "conservative", "High volatility detected")
-    elif volatility < 2.0:
-        # Low volatility - use aggressive approach
-        client.switch_strategy(account_id, "aggressive", "Low volatility opportunity")
+    if avg_funding > 15:  # High positive funding
+        # Short funding rate arbitrage
+        client.switch_strategy(account_id, "swing_perps",
+                             "High funding regime - favor shorts")
+    elif avg_funding < -15:  # High negative funding
+        # Long funding rate arbitrage
+        client.switch_strategy(account_id, "swing_perps",
+                             "Negative funding regime - favor longs")
     else:
-        # Medium volatility - use swing strategy
-        client.switch_strategy(account_id, "swing", "Balanced market conditions")
+        # Normal regime
+        client.switch_strategy(account_id, "aggressive_perps",
+                             "Neutral funding - momentum trading")
 ```
 
-#### Automated Switch Based on Performance
+### Perps Performance Monitoring
 
 ```python
-def auto_switch_based_on_performance(client, account_id):
-    # Get current strategy performance
-    current_strategy = client.get_account_strategy(account_id)
-    performance = client.get_strategy_performance(
-        current_strategy["strategy_id"],
-        timeframe="7d"
-    )
+def analyze_perps_performance(client, strategy_id):
+    """
+    Perps-specific metrics
+    """
+    perf = client.get_strategy_performance(strategy_id)
 
-    # Switch if performance is poor
-    if performance["win_rate"] < 40.0 or performance["total_pnl_percent"] < -5.0:
-        # Switch to more conservative strategy
-        if current_strategy["strategy_id"] != "conservative":
-            client.switch_strategy(
-                account_id,
-                "conservative",
-                f"Poor performance: {performance['win_rate']}% win rate"
+    # Add perps-specific calculations
+    funding_costs = perf.get("total_funding_paid", 0)
+    fees = perf.get("total_fees_paid", 0)
+    net_pnl = perf["total_pnl"] - (fees + funding_costs)
+
+    return {
+        "gross_pnl": perf["total_pnl"],
+        "net_pnl": net_pnl,
+        "fee_efficiency": (perf["total_pnl"] - fees) / perf["total_pnl"],
+        "funding_impact": funding_costs / perf["total_pnl"],
+        "liquidations_avoided": perf.get("liquidations_avoided", 0),
+        "avg_leverage_used": perf.get("avg_leverage", 0)
+    }
+```
+
+---
+
+## Best Practices for Perps DEX Trading
+
+### 1. Fee Management
+
+- **Always calculate fee impact**: On a 0.2% scalp, 0.04% taker fee = 20% of profit
+- **Use post-only limit orders**: 0.005% maker fee saves 0.035% vs taker
+- **Batch exits**: Close multiple positions in one order to save fees
+
+### 2. Funding Rate Optimization
+
+- **Avoid holding through funding** if rate >10bps against you
+- **Fade extreme funding**: >25bps often mean-reverts
+- **Track funding schedule**: 8-hour intervals, avoid entering 5min before
+
+### 3. Liquidation Management
+
+- **Set stops 15-20% from liquidation** price
+- **Monitor margin ratio**: Keep >1500% when possible
+- **Use isolated margin**: Prevent cross-position liquidation
+
+### 4. Leverage Discipline
+
+- **Start with 3x**: Test strategy before increasing
+- **Scale leverage with conviction**: 10x+ only for high-confidence setups
+- **Reduce leverage in drawdowns**: Protects from death spirals
+
+### 5. DEX-Specific Considerations
+
+- **Slippage**: Set max 20bps for market orders
+- **Order book depth**: Check 2% depth before large orders
+- **Gas costs**: Factor in L2 gas for order cancellations
+
+---
+
+## Troubleshooting Perps Issues
+
+### High Funding Costs
+
+**Symptom**: Eroding P&L despite good trades
+**Solution**:
+
+```python
+def reduce_funding_exposure():
+    # Add to strategy config
+    "max_hold_time_hours": 6,
+    "exit_before_funding": true,
+    "funding_rate_threshold": 0.08
+```
+
+### Liquidation Near Misses
+
+**Symptom**: Positions nearly liquidated
+**Solution**:
+
+- Increase `liquidation_buffer` to 0.20 (20%)
+- Reduce `max_leverage` by 30%
+- Enable `auto_deleverage` flag
+
+### Fee Drag
+
+**Symptom**: Fees >20% of gross P&L
+**Solution**:
+
+- Enforce `order_preference: "maker_only"`
+- Increase `min_profit_target` to 0.5%
+- Reduce trade frequency (increase `cooldown_period`)
+
+---
+
+## Advanced Perps Topics
+
+### Funding Rate Arbitrage
+
+```python
+def funding_arbitrage_strategy(client, symbols):
+    """
+    Long on exchange with negative funding,
+    Short on AsterDex if positive funding
+    """
+    opportunities = []
+    for symbol in symbols:
+        rate = get_funding_rate(symbol)
+        if rate > 20:  # 0.20%
+            # Short on AsterDex (receive funding)
+            client.execute_perps_trade(
+                symbol=symbol,
+                side="short",
+                leverage=5,
+                reason=f"Funding arbitrage: +{rate}bps"
             )
 ```
 
-## Strategy Performance Monitoring
+### Open Interest Analysis
 
-### Key Performance Metrics
+```json
+{
+  "oi_signal_weights": {
+    "oi_increasing_price_increasing": 0.3,  // Bullish conviction
+    "oi_decreasing_price_increasing": -0.5, // Weak hands leaving
+    "oi_increasing_price_decreasing": -0.7, // Trapped longs
+    "oi_decreasing_price_decreasing": 0.2   // Capitulation
+  }
+}
+```
 
-#### Profitability Metrics
-- **Total P&L**: Absolute profit/loss
-- **P&L Percentage**: Return on investment
-- **Win Rate**: Percentage of winning trades
-- **Profit Factor**: Gross profit / Gross loss
-- **Average Win/Loss**: Average profit per winning/losing trade
-
-#### Risk Metrics
-- **Sharpe Ratio**: Risk-adjusted return
-- **Maximum Drawdown**: Largest peak-to-trough decline
-- **Risk-Adjusted Return**: Return per unit of risk
-- **Volatility**: Standard deviation of returns
-
-#### Efficiency Metrics
-- **Trade Frequency**: Number of trades per period
-- **Hold Time**: Average position duration
-- **Capital Utilization**: Percentage of capital actively used
-
-### Performance Analysis Example
+### Dynamic Leverage Based on Volatility
 
 ```python
-def analyze_strategy_performance(client, strategy_id, timeframe="30d"):
-    # Get performance data
-    performance = client.get_strategy_performance(strategy_id, timeframe)
-
-    # Calculate additional metrics
-    risk_reward_ratio = performance["avg_win"] / abs(performance["avg_loss"])
-    expectancy = (performance["win_rate"] / 100 * performance["avg_win"]) + \
-                ((100 - performance["win_rate"]) / 100 * performance["avg_loss"])
-
-    # Performance assessment
-    assessment = {
-        "overall_rating": "good" if performance["profit_factor"] > 1.5 else "poor",
-        "risk_assessment": "low" if performance["max_drawdown"] < 1000 else "high",
-        "consistency": "high" if performance["win_rate"] > 60 else "low",
-        "efficiency": "high" if performance["sharpe_ratio"] > 1.0 else "low"
-    }
-
-    return {
-        "performance": performance,
-        "calculated_metrics": {
-            "risk_reward_ratio": risk_reward_ratio,
-            "expectancy": expectancy
-        },
-        "assessment": assessment
-    }
-```
-
-## Strategy Optimization
-
-### A/B Testing Strategies
-
-#### Setting Up A/B Tests
-
-```python
-def setup_strategy_ab_test(client, account_ids, strategy_a, strategy_b, duration_days=7):
-    # Split accounts between strategies
-    mid_point = len(account_ids) // 2
-    group_a = account_ids[:mid_point]
-    group_b = account_ids[mid_point:]
-
-    # Assign strategies
-    for account_id in group_a:
-        client.switch_strategy(account_id, strategy_a, f"A/B test group A")
-
-    for account_id in group_b:
-        client.switch_strategy(account_id, strategy_b, f"A/B test group B")
-
-    return {
-        "test_start": datetime.now(),
-        "duration_days": duration_days,
-        "group_a": {"accounts": group_a, "strategy": strategy_a},
-        "group_b": {"accounts": group_b, "strategy": strategy_b}
-    }
-```
-
-#### Analyzing A/B Test Results
-
-```python
-def analyze_ab_test_results(client, test_config):
-    results = {}
-
-    for group_name, group_data in [("group_a", test_config["group_a"]),
-                                   ("group_b", test_config["group_b"])]:
-        group_performance = []
-
-        for account_id in group_data["accounts"]:
-            perf = client.get_account_performance(account_id, "7d")
-            group_performance.append(perf)
-
-        # Calculate group averages
-        avg_pnl = sum(p["total_pnl_percent"] for p in group_performance) / len(group_performance)
-        avg_win_rate = sum(p["win_rate"] for p in group_performance) / len(group_performance)
-
-        results[group_name] = {
-            "strategy": group_data["strategy"],
-            "avg_pnl_percent": avg_pnl,
-            "avg_win_rate": avg_win_rate,
-            "account_count": len(group_data["accounts"])
-        }
-
-    # Determine winner
-    winner = "group_a" if results["group_a"]["avg_pnl_percent"] > results["group_b"]["avg_pnl_percent"] else "group_b"
-
-    return {
-        "results": results,
-        "winner": winner,
-        "winning_strategy": results[winner]["strategy"]
-    }
-```
-
-### Parameter Optimization
-
-#### Risk Parameter Tuning
-
-```python
-def optimize_risk_parameters(client, strategy_id, account_id):
-    base_strategy = client.get_strategy(strategy_id)
-
-    # Test different risk levels
-    risk_levels = [1.0, 2.0, 3.0, 4.0, 5.0]
-    results = []
-
-    for risk_level in risk_levels:
-        # Create test strategy with different risk
-        test_strategy = base_strategy.copy()
-        test_strategy["risk_parameters"]["max_risk_per_trade"] = risk_level
-        test_strategy["strategy_name"] = f"Test Risk {risk_level}%"
-
-        # Create and test strategy
-        test_id = client.create_custom_strategy(test_strategy)["strategy_id"]
-
-        # Simulate or backtest (placeholder)
-        simulated_performance = simulate_strategy_performance(test_strategy)
-
-        results.append({
-            "risk_level": risk_level,
-            "performance": simulated_performance,
-            "sharpe_ratio": simulated_performance["sharpe_ratio"]
-        })
-
-    # Find optimal risk level
-    optimal = max(results, key=lambda x: x["sharpe_ratio"])
-
-    return optimal
-```
-
-## Best Practices
-
-### 1. Strategy Design Principles
-
-#### Clear Objectives
-- Define specific goals (profit target, risk tolerance)
-- Align with market conditions
-- Consider account size and experience level
-
-#### Risk Management
-- Always define maximum risk per trade
-- Set daily loss limits
-- Use appropriate position sizing
-- Implement cooldown periods
-
-#### Backtesting and Validation
-- Test strategies on historical data
-- Validate with paper trading
-- Monitor live performance closely
-- Adjust based on results
-
-### 2. Prompt Engineering
-
-#### Effective Prompt Structure
-```
-1. Context Setting
-   - Market condition
-   - Timeframe
-   - Account status
-
-2. Analysis Instructions
-   - Specific indicators to check
-   - Key levels to identify
-   - Risk factors to consider
-
-3. Decision Framework
-   - Entry criteria
-   - Exit criteria
-   - Risk management rules
-
-4. Output Format
-   - Required decision fields
-   - Confidence levels
-   - Rationale requirements
-```
-
-#### Example High-Quality Prompt
-
-```
-Analyze {symbol} for trading opportunities on {timeframe} timeframe.
-
-MARKET CONTEXT:
-- Current condition: {market_condition}
-- Account balance: {account_balance} USD
-- Current exposure: {risk_exposure}%
-- Maximum risk per trade: 2.5%
-
-TECHNICAL ANALYSIS REQUIREMENTS:
-1. Price Action: Check for breakouts, reversals, or continuation patterns
-2. Volume: Confirm moves with volume analysis
-3. Indicators: Use RSI (14), MACD, and EMA (20, 50) for confirmation
-4. Support/Resistance: Identify key levels for entry and exit
-
-RISK MANAGEMENT:
-- Stop loss must be below recent swing low (long) or above swing high (short)
-- Take profit should target 2:1 risk/reward minimum
-- Consider position size based on volatility and account exposure
-
-OUTPUT REQUIREMENTS:
-- Specific entry price with rationale
-- Clear stop loss and take profit levels
-- Position size recommendation
-- Confidence score (1-100)
-- Risk assessment (low/medium/high)
-
-Focus on high-probability setups with clear risk/reward profiles.
-```
-
-### 3. Strategy Lifecycle Management
-
-#### Development Phase
-1. **Research and Design**
-   - Market analysis
-   - Strategy hypothesis
-   - Risk parameter definition
-
-2. **Implementation**
-   - Prompt template creation
-   - Parameter configuration
-   - Validation testing
-
-3. **Testing**
-   - Backtesting on historical data
-   - Paper trading validation
-   - Small-scale live testing
-
-#### Production Phase
-1. **Deployment**
-   - Account assignment
-   - Performance monitoring
-   - Risk oversight
-
-2. **Optimization**
-   - Performance analysis
-   - Parameter tuning
-   - A/B testing
-
-3. **Maintenance**
-   - Regular review
-   - Market adaptation
-   - Strategy updates
-
-#### Retirement Phase
-1. **Performance Decline Detection**
-   - Monitoring key metrics
-   - Identifying degradation
-   - Root cause analysis
-
-2. **Graceful Shutdown**
-   - Position closure
-   - Account reassignment
-   - Strategy deactivation
-
-### 4. Common Pitfalls and Solutions
-
-#### Over-Optimization
-**Problem**: Strategy performs well in backtesting but fails in live trading
-**Solution**:
-- Use out-of-sample testing
-- Implement walk-forward analysis
-- Focus on robust parameters
-
-#### Insufficient Risk Management
-**Problem**: Large losses due to inadequate risk controls
-**Solution**:
-- Always define maximum risk limits
-- Implement circuit breakers
-- Monitor correlation risk
-
-#### Strategy Drift
-**Problem**: Strategy performance degrades over time
-**Solution**:
-- Regular performance reviews
-- Market condition monitoring
-- Adaptive parameter adjustment
-
-#### Complexity Creep
-**Problem**: Strategies become overly complex and hard to maintain
-**Solution**:
-- Keep strategies simple and focused
-- Document all parameters and logic
-- Regular strategy audits
-
-## Troubleshooting
-
-### Common Issues
-
-#### Strategy Not Generating Decisions
-1. Check strategy activation status
-2. Verify account assignment
-3. Review risk parameters (may be too restrictive)
-4. Check market data availability
-
-#### Poor Strategy Performance
-1. Analyze market conditions vs strategy design
-2. Review risk parameters
-3. Check for over-optimization
-4. Consider strategy switching
-
-#### Validation Errors
-1. Review prompt template for clarity
-2. Check risk parameter consistency
-3. Validate position sizing logic
-4. Ensure proper error handling
-
-### Debugging Tools
-
-#### Strategy Performance Dashboard
-```python
-def create_strategy_dashboard(client, strategy_id):
-    strategy = client.get_strategy(strategy_id)
-    performance = client.get_strategy_performance(strategy_id, "30d")
-    assignments = client.get_strategy_assignments(strategy_id)
-
-    dashboard = {
-        "strategy_info": strategy,
-        "performance_metrics": performance,
-        "account_assignments": assignments,
-        "recent_decisions": client.get_recent_decisions(strategy_id, limit=10),
-        "alerts": client.get_strategy_alerts(strategy_id=strategy_id)
-    }
-
-    return dashboard
-```
-
-#### Performance Comparison Tool
-```python
-def compare_strategy_performance(client, strategy_ids, timeframe="30d"):
-    comparison = {}
-
-    for strategy_id in strategy_ids:
-        performance = client.get_strategy_performance(strategy_id, timeframe)
-        comparison[strategy_id] = {
-            "total_pnl_percent": performance["total_pnl_percent"],
-            "win_rate": performance["win_rate"],
-            "sharpe_ratio": performance["sharpe_ratio"],
-            "max_drawdown": performance["max_drawdown"]
-        }
-
-    # Rank strategies
-    ranked = sorted(comparison.items(),
-                   key=lambda x: x[1]["sharpe_ratio"],
-                   reverse=True)
-
-    return {
-        "comparison": comparison,
-        "ranking": ranked,
-        "best_strategy": ranked[0][0] if ranked else None
-    }
-```
-
-## Advanced Topics
-
-### Multi-Asset Strategy Coordination
-
-```python
-def coordinate_multi_asset_strategy(client, account_id, asset_groups):
+def calculate_leverage(volatility_1h):
     """
-    Coordinate strategies across multiple asset groups
+    Reduce leverage in high vol environments
     """
-    decisions = {}
-
-    for group_name, assets in asset_groups.items():
-        group_decisions = []
-
-        for asset in assets:
-            decision = client.generate_decision(asset, account_id)
-            group_decisions.append(decision)
-
-        # Analyze group correlation and adjust
-        decisions[group_name] = optimize_group_allocation(group_decisions)
-
-    return decisions
-```
-
-### Dynamic Strategy Switching
-
-```python
-def implement_dynamic_switching(client, account_id, market_indicators):
-    """
-    Automatically switch strategies based on market conditions
-    """
-    volatility = market_indicators["volatility"]
-    trend_strength = market_indicators["trend_strength"]
-    volume_profile = market_indicators["volume_profile"]
-
-    # Strategy selection logic
-    if volatility > 5.0 and trend_strength < 0.3:
-        # High volatility, weak trend - use scalping
-        target_strategy = "scalping"
-    elif volatility < 2.0 and trend_strength > 0.7:
-        # Low volatility, strong trend - use swing
-        target_strategy = "swing"
-    elif trend_strength > 0.8:
-        # Very strong trend - use aggressive
-        target_strategy = "aggressive"
+    if volatility_1h > 5.0:  // >5% hourly range
+        return 3.0
+    elif volatility_1h > 3.0:
+        return 5.0
     else:
-        # Default to conservative
-        target_strategy = "conservative"
-
-    # Check if switch is needed
-    current_strategy = client.get_account_strategy(account_id)
-    if current_strategy["strategy_id"] != target_strategy:
-        client.switch_strategy(
-            account_id,
-            target_strategy,
-            f"Market conditions: vol={volatility}, trend={trend_strength}"
-        )
-
-    return target_strategy
+        return 8.0
 ```
 
-This comprehensive guide covers all aspects of strategy configuration and management in the LLM Decision Engine. Use it as a reference for creating, optimizing, and managing trading strategies effectively.
+---
+
+## Summary Checklist for Perps Strategies
+
+✅ **Primary timeframe: 5m** for entries/exits
+✅ **Long-term context: 4h** for trend bias
+✅ **Fee optimization**: Prioritize 0.005% maker orders
+✅ **Leverage caps**: 3x (conservative) to 15x (aggressive)
+✅ **Funding awareness**: Block trades >10bps against position
+✅ **Liquidation buffer**: Stop loss 15%+ from liq price
+✅ **Hold time limits**: 30min (scalp) to 8hrs (swing)
+✅ **Max positions**: 1-4 to avoid overexposure
+✅ **Cooldown**: 30-600 seconds between trades
+✅ **Daily loss limits**: 1.5-8% of account equity
+
+Use this framework to deploy robust, fee-efficient strategies on AsterDex perpetual futures.
