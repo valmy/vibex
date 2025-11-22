@@ -60,13 +60,13 @@ New router module for user management endpoints:
 ```python
 router = APIRouter(prefix="/users", tags=["users"])
 
-@router.get("/", response_model=List[UserRead])
+@router.get("/", response_model=UserList)
 async def list_users(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, gt=0, le=1000),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
-) -> List[UserRead]:
+) -> UserList:
     """List all users (admin only)"""
 
 @router.get("/{user_id}", response_model=UserRead)

@@ -34,7 +34,7 @@ class UserManagementService:
         error_details: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
-        Log a structured audit event.
+        Log a structured audit event using logger's extra parameter.
 
         Args:
             level: Log level (INFO, ERROR, WARNING)
@@ -48,10 +48,8 @@ class UserManagementService:
             error_details: Additional error details
         """
         log_data = {
-            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "correlation_id": correlation_id,
             "action": action,
-            "message": message,
         }
 
         if admin_address:
@@ -65,14 +63,12 @@ class UserManagementService:
         if error_details:
             log_data["error_details"] = error_details
 
-        log_message = json.dumps(log_data)
-
         if level == "INFO":
-            logger.info(log_message)
+            logger.info(message, extra=log_data)
         elif level == "ERROR":
-            logger.error(log_message)
+            logger.error(message, extra=log_data)
         elif level == "WARNING":
-            logger.warning(log_message)
+            logger.warning(message, extra=log_data)
 
     async def list_users(
         self,
@@ -205,11 +201,14 @@ class UserManagementService:
         correlation_id = str(uuid.uuid4())
 
         try:
-            result = await db.execute(select(User).where(User.id == user_id))
+            result = await db.execute(select(User).where(User.id == user_id).with_for_update())
             user = result.scalar_one_or_none()
 
             if user is None:
                 raise ValueError(f"User with id {user_id} not found")
+
+            if user.id == admin_user.id:
+                raise ValueError("Admins cannot change their own status")
 
             user.is_admin = True
             db.add(user)
@@ -277,11 +276,14 @@ class UserManagementService:
         correlation_id = str(uuid.uuid4())
 
         try:
-            result = await db.execute(select(User).where(User.id == user_id))
+            result = await db.execute(select(User).where(User.id == user_id).with_for_update())
             user = result.scalar_one_or_none()
 
             if user is None:
                 raise ValueError(f"User with id {user_id} not found")
+
+            if user.id == admin_user.id:
+                raise ValueError("Admins cannot change their own status")
 
             user.is_admin = False
             db.add(user)

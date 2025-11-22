@@ -4,7 +4,7 @@ API routes for user management.
 Provides endpoints for admin users to manage other users and their admin status.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,8 +25,8 @@ user_service = UserManagementService()
 
 @router.get("", response_model=UserList)
 async def list_users(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0, description="Number of users to skip for pagination"),
+    limit: int = Query(100, gt=0, le=1000, description="Maximum number of users to return"),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -37,8 +37,8 @@ async def list_users(
     with their addresses, admin status, and timestamps.
 
     Args:
-        skip: Number of users to skip (pagination offset). Default: 0
-        limit: Maximum number of users to return per page. Default: 100
+        skip: Number of users to skip (pagination offset). Default: 0, must be >= 0
+        limit: Maximum number of users to return per page. Default: 100, must be > 0 and <= 1000
         current_user: Currently authenticated admin user (injected via dependency)
         db: Database session (injected via dependency)
 
@@ -46,7 +46,8 @@ async def list_users(
         UserList: Paginated response containing users, total count, skip, and limit
 
     Raises:
-        HTTPException: 403 if user is not admin, 401 if not authenticated
+        HTTPException: 403 if user is not admin, 401 if not authenticated,
+                      422 if pagination parameters are invalid
 
     Example:
         GET /api/v1/users?skip=0&limit=10
@@ -67,24 +68,13 @@ async def list_users(
         }
     """
     try:
-        # Validate pagination parameters
-        if skip < 0:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="skip must be non-negative",
-            )
-        if limit <= 0:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="limit must be positive",
-            )
 
         # Get total count
         count_result = await db.execute(select(func.count(User.id)))
         total = count_result.scalar()
 
         # Get users
-        users = await user_service.list_users(db, skip=skip, limit=limit)
+        users = await user_service.list_users(db, skip=skip, limit=limit, admin_user=current_user)
 
         logger.info(
             f"Listed users by admin {current_user.address}",
@@ -148,7 +138,7 @@ async def get_user(
         }
     """
     try:
-        user = await user_service.get_user_by_id(db, user_id)
+        user = await user_service.get_user_by_id(db, user_id, admin_user=current_user)
 
         if user is None:
             logger.warning(

@@ -331,15 +331,16 @@ async def test_promotion_actions_are_logged(
     # Verify log entry exists
     assert len(caplog.records) > 0
     log_entry = caplog.records[0]
-    log_data = json.loads(log_entry.message)
 
-    # Verify log contains required audit information
-    assert log_data["action"] == "promote_to_admin"
-    assert log_data["admin_address"] == admin_user.address
-    assert log_data["target_user_address"] == regular_user.address
-    assert log_data["target_user_id"] == regular_user.id
-    assert "correlation_id" in log_data
-    assert "timestamp" in log_data
+    # Verify log message
+    assert "promoted to admin" in log_entry.message.lower()
+
+    # Verify log contains required audit information in extra fields
+    assert log_entry.action == "promote_to_admin"
+    assert log_entry.admin_address == admin_user.address
+    assert log_entry.target_user_address == regular_user.address
+    assert log_entry.target_user_id == regular_user.id
+    assert hasattr(log_entry, "correlation_id")
 
 
 @pytest.mark.unit
@@ -379,15 +380,16 @@ async def test_revocation_actions_are_logged(
     # Verify log entry exists
     assert len(caplog.records) > 0
     log_entry = caplog.records[0]
-    log_data = json.loads(log_entry.message)
 
-    # Verify log contains required audit information
-    assert log_data["action"] == "revoke_admin"
-    assert log_data["admin_address"] == admin_user.address
-    assert log_data["target_user_address"] == admin_to_revoke.address
-    assert log_data["target_user_id"] == admin_to_revoke.id
-    assert "correlation_id" in log_data
-    assert "timestamp" in log_data
+    # Verify log message
+    assert "admin status revoked" in log_entry.message.lower()
+
+    # Verify log contains required audit information in extra fields
+    assert log_entry.action == "revoke_admin"
+    assert log_entry.admin_address == admin_user.address
+    assert log_entry.target_user_address == admin_to_revoke.address
+    assert log_entry.target_user_id == admin_to_revoke.id
+    assert hasattr(log_entry, "correlation_id")
 
 
 @pytest.mark.unit
@@ -428,13 +430,14 @@ async def test_list_actions_are_logged(
     # Verify log entry exists
     assert len(caplog.records) > 0
     log_entry = caplog.records[0]
-    log_data = json.loads(log_entry.message)
 
-    # Verify log contains required audit information
-    assert log_data["action"] == "list_users"
-    assert log_data["admin_address"] == admin_user.address
-    assert "correlation_id" in log_data
-    assert "timestamp" in log_data
+    # Verify log message
+    assert "user list retrieved" in log_entry.message.lower()
+
+    # Verify log contains required audit information in extra fields
+    assert log_entry.action == "list_users"
+    assert log_entry.admin_address == admin_user.address
+    assert hasattr(log_entry, "correlation_id")
 
 
 @pytest.mark.unit
@@ -482,15 +485,16 @@ async def test_get_user_actions_are_logged(
     # Verify log entry exists
     assert len(caplog.records) > 0
     log_entry = caplog.records[0]
-    log_data = json.loads(log_entry.message)
 
-    # Verify log contains required audit information
-    assert log_data["action"] == "get_user"
-    assert log_data["admin_address"] == admin_user.address
-    assert log_data["target_user_address"] == target_user.address
-    assert log_data["target_user_id"] == target_user.id
-    assert "correlation_id" in log_data
-    assert "timestamp" in log_data
+    # Verify log message
+    assert "retrieved" in log_entry.message.lower()
+
+    # Verify log contains required audit information in extra fields
+    assert log_entry.action == "get_user"
+    assert log_entry.admin_address == admin_user.address
+    assert log_entry.target_user_address == target_user.address
+    assert log_entry.target_user_id == target_user.id
+    assert hasattr(log_entry, "correlation_id")
 
 
 @pytest.mark.unit
@@ -523,13 +527,15 @@ async def test_failed_operations_are_logged(
     # Verify error log entry exists
     assert len(caplog.records) > 0
     log_entry = caplog.records[0]
-    log_data = json.loads(log_entry.message)
 
-    # Verify log contains error information
-    assert log_data["action"] == "promote_to_admin"
-    assert log_data["admin_address"] == admin_user.address
-    assert log_data["target_user_id"] == 99999
-    assert "error" in log_data
-    assert "User with id 99999 not found" in log_data["error"]
-    assert "correlation_id" in log_data
-    assert "timestamp" in log_data
+    # Verify log message contains error information
+    assert "failed to promote" in log_entry.message.lower()
+    assert "99999" in log_entry.message
+
+    # Verify log contains error information in extra fields
+    assert log_entry.action == "promote_to_admin"
+    assert log_entry.admin_address == admin_user.address
+    assert log_entry.target_user_id == 99999
+    assert hasattr(log_entry, "error")
+    assert "User with id 99999 not found" in log_entry.error
+    assert hasattr(log_entry, "correlation_id")
