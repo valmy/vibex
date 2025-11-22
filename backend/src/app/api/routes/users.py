@@ -13,7 +13,12 @@ from ...core.security import require_admin
 from ...db import get_db
 from ...models.account import User
 from ...schemas.user import UserList, UserRead
-from ...services.user_management_service import UserManagementService
+from ...services.user_management_service import (
+    CannotModifySelfError,
+    LastAdminError,
+    UserManagementService,
+    UserNotFoundError,
+)
 
 logger = get_logger(__name__)
 
@@ -93,13 +98,13 @@ async def list_users(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Error listing users: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to list users",
-        )
+        ) from e
 
 
 @router.get("/{user_id}", response_model=UserRead)
@@ -166,14 +171,12 @@ async def get_user(
 
         return user
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Error getting user {user_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to get user",
-        )
+        ) from e
 
 
 @router.put("/{user_id}/promote", response_model=UserRead)
@@ -226,7 +229,7 @@ async def promote_user(
 
         return user
 
-    except ValueError as e:
+    except UserNotFoundError as e:
         logger.warning(
             f"Admin {current_user.address} attempted to promote non-existent user {user_id}",
             extra={
@@ -239,13 +242,27 @@ async def promote_user(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
+        ) from e
+    except CannotModifySelfError as e:
+        logger.warning(
+            f"Admin {current_user.address} attempted to modify their own status",
+            extra={
+                "admin_address": current_user.address,
+                "target_user_id": user_id,
+                "action": "promote_to_admin",
+                "error": str(e),
+            },
         )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
     except Exception as e:
         logger.error(f"Error promoting user {user_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to promote user",
-        )
+        ) from e
 
 
 @router.put("/{user_id}/revoke", response_model=UserRead)
@@ -298,7 +315,7 @@ async def revoke_admin(
 
         return user
 
-    except ValueError as e:
+    except UserNotFoundError as e:
         logger.warning(
             f"Admin {current_user.address} attempted to revoke admin from non-existent user {user_id}",
             extra={
@@ -311,10 +328,38 @@ async def revoke_admin(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
+        ) from e
+    except CannotModifySelfError as e:
+        logger.warning(
+            f"Admin {current_user.address} attempted to modify their own status",
+            extra={
+                "admin_address": current_user.address,
+                "target_user_id": user_id,
+                "action": "revoke_admin",
+                "error": str(e),
+            },
         )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+    except LastAdminError as e:
+        logger.warning(
+            f"Admin {current_user.address} attempted to revoke last admin",
+            extra={
+                "admin_address": current_user.address,
+                "target_user_id": user_id,
+                "action": "revoke_admin",
+                "error": str(e),
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
     except Exception as e:
         logger.error(f"Error revoking admin from user {user_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to revoke admin status",
-        )
+        ) from e

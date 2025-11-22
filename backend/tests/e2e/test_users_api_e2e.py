@@ -82,16 +82,18 @@ class TestUserManagementAPIE2E:
 
         finally:
             # Cleanup: delete test users
+            if not created_users:
+                return
             try:
-                for user_id in TEST_USER_IDS[:5]:
-                    result = await db_session.execute(select(User).where(User.id == user_id))
-                    user = result.scalar_one_or_none()
-                    if user:
-                        await db_session.delete(user)
+                from sqlalchemy import delete
+                from sqlalchemy.exc import SQLAlchemyError
 
+                user_ids_to_delete = [user.id for user in created_users]
+                delete_stmt = delete(User).where(User.id.in_(user_ids_to_delete))
+                await db_session.execute(delete_stmt)
                 await db_session.commit()
                 logger.info("Cleaned up test users")
-            except Exception as e:
+            except SQLAlchemyError as e:
                 logger.warning(f"Error cleaning up test users: {e}")
                 await db_session.rollback()
 
@@ -433,49 +435,208 @@ class TestUserManagementAPIE2E:
     async def test_list_users_with_invalid_pagination_returns_error(
         self, client, test_users, get_auth_headers
     ):
-        """Test that invalid pagination parameters return error (422 or 500)."""
-        try:
-            admin_user = test_users[0]
-            headers = get_auth_headers(admin_user)
+        """Test that invalid pagination parameters return 422 validation error."""
+        admin_user = test_users[0]
+        headers = get_auth_headers(admin_user)
 
-            # Test negative skip - should return error
-            response1 = await client.get(
-                "/api/v1/users", params={"skip": -1, "limit": 10}, headers=headers
-            )
-            assert response1.status_code in [422, 500], (
-                f"Should return error for negative skip, got {response1.status_code}"
-            )
+        # Test negative skip - should return 422
+        response1 = await client.get(
+            "/api/v1/users", params={"skip": -1, "limit": 10}, headers=headers
+        )
+        assert response1.status_code == 422, (
+            f"Should return 422 for negative skip, got {response1.status_code}"
+        )
 
-            # Test non-positive limit - should return error
-            response2 = await client.get(
-                "/api/v1/users", params={"skip": 0, "limit": 0}, headers=headers
-            )
-            assert response2.status_code in [422, 500], (
-                f"Should return error for zero limit, got {response2.status_code}"
-            )
+        # Test non-positive limit - should return 422
+        response2 = await client.get(
+            "/api/v1/users", params={"skip": 0, "limit": 0}, headers=headers
+        )
+        assert response2.status_code == 422, (
+            f"Should return 422 for zero limit, got {response2.status_code}"
+        )
 
-            logger.info("Invalid pagination parameters correctly return error")
-
-        except Exception as e:
-            pytest.skip(f"API not available: {e}")
+        logger.info("Invalid pagination parameters correctly return 422")
 
     @pytest.mark.asyncio
     async def test_user_data_integrity(self, client, test_users, get_auth_headers):
         """Test that user data maintains integrity across operations."""
+        admin_user = test_users[0]
+        headers = get_auth_headers(admin_user)
+
+        # Validate data integrity for each test user
+        for user in test_users:
+            # Verify user can be retrieved by ID via API
+            response = await client.get(f"/api/v1/users/{user.id}", headers=headers)
+            assert response.status_code == 200, f"User {user.id} should be retrievable"
+            retrieved = response.json()
+            assert retrieved["address"] == user.address, "Address should match"
+            assert retrieved["is_admin"] == user.is_admin, "Admin status should match"
+
+        logger.info(f"Data integrity verified for {len(test_users)} test users via API")
+
+    @pytest.mark.asyncio
+    async def test_admin_cannot_modify_own_status_promote(
+        self, client, test_users, get_auth_headers
+    ):
+        """Test that an admin cannot promote themselves."""
+        admin_user = test_users[0]
+        headers = get_auth_headers(admin_user)
+
+        # Try to promote self
+        response = await client.put(
+            f"/api/v1/users/{admin_user.id}/promote",
+            headers=headers,
+        )
+        assert response.status_code == 400, "Should return 400 for self-promotion"
+        assert "cannot change their own status" in response.json()["detail"].lower()
+
+        logger.info("Admin self-promotion correctly blocked")
+
+    @pytest.mark.asyncio
+    async def test_admin_cannot_modify_own_status_revoke(
+        self, client, test_users, get_auth_headers
+    ):
+        """Test that an admin cannot revoke their own status."""
+        admin_user = test_users[0]
+        headers = get_auth_headers(admin_user)
+
+        # Try to revoke self
+        response = await client.put(
+            f"/api/v1/users/{admin_user.id}/revoke",
+            headers=headers,
+        )
+        assert response.status_code == 400, "Should return 400 for self-revocation"
+        assert "cannot change their own status" in response.json()["detail"].lower()
+
+        logger.info("Admin self-revocation correctly blocked")
+
+    @pytest.mark.asyncio
+    async def test_cannot_revoke_last_admin(self, client, test_users, get_auth_headers, db_session):
+        """Test that the last admin's status cannot be revoked."""
+        # Create a temporary admin user for this test
+        from datetime import datetime
+        from eth_account import Account
+
+        temp_admin_account = Account.create()
+        temp_admin = User(
+            id=TEST_USER_ID_BASE + 100,
+            address=temp_admin_account.address,
+            is_admin=True,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        db_session.add(temp_admin)
+        await db_session.commit()
+
         try:
-            admin_user = test_users[0]
-            headers = get_auth_headers(admin_user)
-
-            # Validate data integrity for each test user
+            # Revoke all other admins first (make temp_admin the last one)
             for user in test_users:
-                # Verify user can be retrieved by ID via API
-                response = await client.get(f"/api/v1/users/{user.id}", headers=headers)
-                assert response.status_code == 200, f"User {user.id} should be retrievable"
-                retrieved = response.json()
-                assert retrieved["address"] == user.address, "Address should match"
-                assert retrieved["is_admin"] == user.is_admin, "Admin status should match"
+                if user.is_admin and user.id != temp_admin.id:
+                    user.is_admin = False
+                    db_session.add(user)
+            await db_session.commit()
 
-            logger.info(f"Data integrity verified for {len(test_users)} test users via API")
+            # Now try to revoke the last admin
+            headers = get_auth_headers(temp_admin)
+            response = await client.put(
+                f"/api/v1/users/{temp_admin.id}/revoke",
+                headers=headers,
+            )
+            # This should fail because of self-modification, but let's test with another admin
 
-        except Exception as e:
-            pytest.skip(f"API not available: {e}")
+            # Create another admin to perform the revocation
+            temp_admin2_account = Account.create()
+            temp_admin2 = User(
+                id=TEST_USER_ID_BASE + 101,
+                address=temp_admin2_account.address,
+                is_admin=True,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+            )
+            db_session.add(temp_admin2)
+            await db_session.commit()
+
+            # Now temp_admin2 tries to revoke temp_admin (who is now one of two admins)
+            headers2 = get_auth_headers(temp_admin2)
+
+            # First revoke temp_admin2 to make temp_admin the last admin
+            temp_admin2.is_admin = False
+            db_session.add(temp_admin2)
+            await db_session.commit()
+
+            # Restore temp_admin2 as admin
+            temp_admin2.is_admin = True
+            db_session.add(temp_admin2)
+            await db_session.commit()
+
+            # Now try to revoke temp_admin (the only other admin)
+            response = await client.put(
+                f"/api/v1/users/{temp_admin.id}/revoke",
+                headers=headers2,
+            )
+            assert response.status_code == 400, "Should return 400 for last admin revocation"
+            assert "last admin" in response.json()["detail"].lower()
+
+            logger.info("Last admin revocation correctly blocked")
+
+        finally:
+            # Cleanup temp users
+            await db_session.delete(temp_admin)
+            try:
+                result = await db_session.execute(select(User).where(User.id == temp_admin2.id))
+                if result.scalar_one_or_none():
+                    await db_session.delete(temp_admin2)
+            except:
+                pass
+            await db_session.commit()
+
+    @pytest.mark.asyncio
+    async def test_regular_user_cannot_access_list_users(
+        self, client, test_users, get_auth_headers
+    ):
+        """Test that a regular user cannot list users."""
+        regular_user = test_users[1]  # Second user is not admin
+        headers = get_auth_headers(regular_user)
+
+        response = await client.get("/api/v1/users", headers=headers)
+        assert response.status_code == 403, "Should return 403 for regular user"
+
+        logger.info("Regular user correctly denied access to list users")
+
+    @pytest.mark.asyncio
+    async def test_regular_user_cannot_access_get_user(
+        self, client, test_users, get_auth_headers
+    ):
+        """Test that a regular user cannot get user details."""
+        regular_user = test_users[1]
+        target_user = test_users[2]
+        headers = get_auth_headers(regular_user)
+
+        response = await client.get(f"/api/v1/users/{target_user.id}", headers=headers)
+        assert response.status_code == 403, "Should return 403 for regular user"
+
+        logger.info("Regular user correctly denied access to get user")
+
+    @pytest.mark.asyncio
+    async def test_regular_user_cannot_promote(self, client, test_users, get_auth_headers):
+        """Test that a regular user cannot promote another user."""
+        regular_user = test_users[1]
+        target_user = test_users[2]
+        headers = get_auth_headers(regular_user)
+
+        response = await client.put(f"/api/v1/users/{target_user.id}/promote", headers=headers)
+        assert response.status_code == 403, "Should return 403 for regular user"
+
+        logger.info("Regular user correctly denied access to promote")
+
+    @pytest.mark.asyncio
+    async def test_regular_user_cannot_revoke(self, client, test_users, get_auth_headers):
+        """Test that a regular user cannot revoke admin status."""
+        regular_user = test_users[1]
+        admin_user = test_users[0]
+        headers = get_auth_headers(regular_user)
+
+        response = await client.put(f"/api/v1/users/{admin_user.id}/revoke", headers=headers)
+        assert response.status_code == 403, "Should return 403 for regular user"
+
+        logger.info("Regular user correctly denied access to revoke")
