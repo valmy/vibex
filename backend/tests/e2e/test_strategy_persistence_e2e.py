@@ -1,4 +1,5 @@
 import pytest
+from eth_account import Account as EthAccount
 from sqlalchemy import select
 
 from app.db.session import get_session_factory, init_db
@@ -57,20 +58,21 @@ class TestStrategyPersistenceE2E:
                 await strategy_manager.delete_strategy(strategy.strategy_id)
 
         existing_user = (
-            await db_session.execute(select(User).where(User.id == 1))
+            await db_session.execute(select(User).where(User.id == 9999))
         ).scalar_one_or_none()
         if existing_user:
             await db_session.delete(existing_user)
         await db_session.commit()
 
-        # Create a user first
-        test_user = User(id=1, address="0x123", is_admin=True)
+        # Create a user first with a valid Ethereum address
+        eth_account = EthAccount.create()
+        test_user = User(id=9999, address=eth_account.address, is_admin=True)
         db_session.add(test_user)
         await db_session.commit()
 
         test_account = Account(
             id=999,
-            user_id=1,
+            user_id=9999,
             name="Test Account",
             api_key="test_key",
             api_secret="test_secret",
