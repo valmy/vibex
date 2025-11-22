@@ -64,7 +64,35 @@ async def get_current_user(
     return user
 
 
-async def get_current_admin_user(current_user: User = Depends(get_current_user)) -> User:
+async def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Dependency that requires the current user to be an admin.
+
+    Raises HTTPException(403) if user is not admin.
+
+    Args:
+        current_user: The currently authenticated user.
+
+    Returns:
+        The authenticated user if they have admin privileges.
+
+    Raises:
+        HTTPException: 403 Forbidden if user is not an admin.
+    """
     if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="The user doesn't have enough privileges")
+        raise HTTPException(
+            status_code=403,
+            detail="Admin privileges required",
+        )
     return current_user
+
+
+# Alias for backward compatibility
+async def get_current_admin_user(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Deprecated: Use require_admin instead.
+
+    Dependency that requires the current user to be an admin.
+    This is an alias for require_admin maintained for backward compatibility.
+    """
+    return await require_admin(current_user)

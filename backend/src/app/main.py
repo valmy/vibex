@@ -25,6 +25,7 @@ from .api.routes import (
     positions,
     strategies,
     trades,
+    users,
 )
 from .core.config import config
 from .core.config_manager import get_config_manager
@@ -67,6 +68,7 @@ app = FastAPI(
         },
         {"name": "Performance", "description": "Performance tracking and analytics"},
         {"name": "Authentication", "description": "User authentication and authorization"},
+        {"name": "User Management", "description": "Admin user management and privileges"},
         {"name": "System", "description": "System health, status, and configuration"},
     ],
 )
@@ -125,6 +127,7 @@ app.include_router(decision_engine.router)
 app.include_router(strategies.router)
 app.include_router(monitoring.router)
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+app.include_router(users.router)
 
 
 # Health check endpoint

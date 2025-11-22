@@ -209,6 +209,302 @@ Some endpoints require admin privileges:
 - System configuration changes
 - Certain administrative trading operations
 
+## User Management Endpoints
+
+The following endpoints allow admin users to manage other users and their admin status. All user management endpoints require admin authentication.
+
+### List All Users
+
+**Endpoint:** `GET /api/v1/users`
+
+**Authentication:** Required (Admin only)
+
+**Query Parameters:**
+
+- `skip` (integer, optional): Number of users to skip for pagination. Default: 0
+- `limit` (integer, optional): Maximum number of users to return. Default: 100
+
+**Example Request:**
+
+```bash
+curl -X GET "http://localhost:3000/api/v1/users?skip=0&limit=10" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**Success Response (200 OK):**
+
+```json
+{
+  "users": [
+    {
+      "id": 1,
+      "address": "0x1234567890123456789012345678901234567890",
+      "is_admin": true,
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    },
+    {
+      "id": 2,
+      "address": "0x0987654321098765432109876543210987654321",
+      "is_admin": false,
+      "created_at": "2025-01-02T10:30:00Z",
+      "updated_at": "2025-01-02T10:30:00Z"
+    }
+  ],
+  "total": 42,
+  "skip": 0,
+  "limit": 10
+}
+```
+
+**Error Responses:**
+
+- **401 Unauthorized**: Missing or invalid JWT token
+  ```json
+  {
+    "detail": "Not authenticated"
+  }
+  ```
+
+- **403 Forbidden**: User is not an admin
+  ```json
+  {
+    "detail": "Admin privileges required"
+  }
+  ```
+
+- **422 Unprocessable Entity**: Invalid pagination parameters
+  ```json
+  {
+    "detail": "skip must be non-negative"
+  }
+  ```
+
+### Get User Details
+
+**Endpoint:** `GET /api/v1/users/{user_id}`
+
+**Authentication:** Required (Admin only)
+
+**Path Parameters:**
+
+- `user_id` (integer, required): The ID of the user to retrieve
+
+**Example Request:**
+
+```bash
+curl -X GET "http://localhost:3000/api/v1/users/1" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**Success Response (200 OK):**
+
+```json
+{
+  "id": 1,
+  "address": "0x1234567890123456789012345678901234567890",
+  "is_admin": true,
+  "created_at": "2025-01-01T00:00:00Z",
+  "updated_at": "2025-01-01T00:00:00Z"
+}
+```
+
+**Error Responses:**
+
+- **401 Unauthorized**: Missing or invalid JWT token
+  ```json
+  {
+    "detail": "Not authenticated"
+  }
+  ```
+
+- **403 Forbidden**: User is not an admin
+  ```json
+  {
+    "detail": "Admin privileges required"
+  }
+  ```
+
+- **404 Not Found**: User does not exist
+  ```json
+  {
+    "detail": "User with id 999 not found"
+  }
+  ```
+
+### Promote User to Admin
+
+**Endpoint:** `PUT /api/v1/users/{user_id}/promote`
+
+**Authentication:** Required (Admin only)
+
+**Path Parameters:**
+
+- `user_id` (integer, required): The ID of the user to promote
+
+**Description:** Grants admin privileges to the specified user, allowing them to manage other users and access admin-only endpoints.
+
+**Example Request:**
+
+```bash
+curl -X PUT "http://localhost:3000/api/v1/users/2/promote" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**Success Response (200 OK):**
+
+```json
+{
+  "id": 2,
+  "address": "0x0987654321098765432109876543210987654321",
+  "is_admin": true,
+  "created_at": "2025-01-02T10:30:00Z",
+  "updated_at": "2025-01-02T15:45:00Z"
+}
+```
+
+**Error Responses:**
+
+- **401 Unauthorized**: Missing or invalid JWT token
+  ```json
+  {
+    "detail": "Not authenticated"
+  }
+  ```
+
+- **403 Forbidden**: User is not an admin
+  ```json
+  {
+    "detail": "Admin privileges required"
+  }
+  ```
+
+- **404 Not Found**: User does not exist
+  ```json
+  {
+    "detail": "User with id 999 not found"
+  }
+  ```
+
+### Revoke Admin Status
+
+**Endpoint:** `PUT /api/v1/users/{user_id}/revoke`
+
+**Authentication:** Required (Admin only)
+
+**Path Parameters:**
+
+- `user_id` (integer, required): The ID of the user to revoke admin status from
+
+**Description:** Removes admin privileges from the specified user, restricting them to regular user access.
+
+**Example Request:**
+
+```bash
+curl -X PUT "http://localhost:3000/api/v1/users/2/revoke" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**Success Response (200 OK):**
+
+```json
+{
+  "id": 2,
+  "address": "0x0987654321098765432109876543210987654321",
+  "is_admin": false,
+  "created_at": "2025-01-02T10:30:00Z",
+  "updated_at": "2025-01-02T16:00:00Z"
+}
+```
+
+**Error Responses:**
+
+- **401 Unauthorized**: Missing or invalid JWT token
+  ```json
+  {
+    "detail": "Not authenticated"
+  }
+  ```
+
+- **403 Forbidden**: User is not an admin
+  ```json
+  {
+    "detail": "Admin privileges required"
+  }
+  ```
+
+- **404 Not Found**: User does not exist
+  ```json
+  {
+    "detail": "User with id 999 not found"
+  }
+  ```
+
+## Admin-Only Endpoints Summary
+
+The following table summarizes all admin-only endpoints:
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|----------------|
+| GET | `/api/v1/users` | List all users with pagination | Admin |
+| GET | `/api/v1/users/{user_id}` | Get specific user details | Admin |
+| PUT | `/api/v1/users/{user_id}/promote` | Promote user to admin | Admin |
+| PUT | `/api/v1/users/{user_id}/revoke` | Revoke admin status | Admin |
+
+## Common Error Responses
+
+### 401 Unauthorized
+
+Returned when the request lacks valid authentication credentials.
+
+**Causes:**
+- Missing `Authorization` header
+- Invalid or expired JWT token
+- Malformed token format
+
+**Response:**
+```json
+{
+  "detail": "Not authenticated"
+}
+```
+
+**Solution:** Complete the authentication flow to obtain a valid JWT token and include it in the `Authorization: Bearer <token>` header.
+
+### 403 Forbidden
+
+Returned when the authenticated user lacks the required privileges.
+
+**Causes:**
+- Regular user attempting to access admin-only endpoints
+- Insufficient permissions for the requested operation
+
+**Response:**
+```json
+{
+  "detail": "Admin privileges required"
+}
+```
+
+**Solution:** Only admin users can access user management endpoints. Contact a system administrator to request admin privileges.
+
+### 404 Not Found
+
+Returned when the requested resource does not exist.
+
+**Causes:**
+- User ID does not exist in the database
+- Invalid resource identifier
+
+**Response:**
+```json
+{
+  "detail": "User with id 999 not found"
+}
+```
+
+**Solution:** Verify the user ID is correct by listing users first with `GET /api/v1/users`.
+
 ## Security Notes
 
 1. Challenge messages are single-use and time-limited
