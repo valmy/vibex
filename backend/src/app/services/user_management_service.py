@@ -307,11 +307,14 @@ class UserManagementService:
                 raise CannotModifySelfError("Admins cannot change their own status")
 
             # Prevent revoking status from the last admin
+            # Lock all admin rows to prevent race condition and count them
             if user.is_admin:
                 admin_count_result = await db.execute(
-                    select(func.count(User.id)).where(User.is_admin)
+                    select(func.count(User.id)).where(User.is_admin).with_for_update()
                 )
-                if admin_count_result.scalar_one() <= 1:
+                admin_count = admin_count_result.scalar_one()
+                # If there's only 1 admin left (the one we're about to revoke), prevent it
+                if admin_count <= 1:
                     raise LastAdminError("Cannot revoke status from the last admin user")
 
             user.is_admin = False
