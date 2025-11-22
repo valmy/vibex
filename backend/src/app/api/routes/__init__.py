@@ -17,6 +17,7 @@ from . import (
     positions,
     strategies,
     trades,
+    users,
 )
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "positions",
     "strategies",
     "trades",
+    "users",
 ]
