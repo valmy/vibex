@@ -207,7 +207,7 @@ No database schema changes are required.
 
 *A property is a characteristic or behavior that should hold true across all valid executions of a system-essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
 
-### Acceptence Criteria Testing Prework:
+### Acceptance Criteria Testing Prework:
 
 1.1 WHEN an admin user requests the user list THEN the System SHALL return all registered users with their addresses and admin status
 Thoughts: This is a property that should hold for any admin user and any database state. We can create a random set of users in the database, authenticate as an admin, call the list endpoint, and verify that all users are returned with correct information.
