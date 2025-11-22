@@ -165,12 +165,12 @@ async def test_revocation_updates_admin_status(
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = admin_to_revoke
 
-    # Mock the count query to return 2 (more than one admin)
-    mock_count_result = MagicMock()
-    mock_count_result.scalar_one.return_value = 2
+    # Mock the admin users query to return 2 admins (more than one)
+    mock_admin_users_result = MagicMock()
+    mock_admin_users_result.scalars.return_value.all.return_value = [admin_user, admin_to_revoke]
 
     # Setup execute to return different results based on call order
-    mock_db_session.execute = AsyncMock(side_effect=[mock_result, mock_count_result])
+    mock_db_session.execute = AsyncMock(side_effect=[mock_result, mock_admin_users_result])
     mock_db_session.refresh = AsyncMock()
 
     # Revoke admin status
@@ -376,12 +376,12 @@ async def test_revocation_actions_are_logged(
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = admin_to_revoke
 
-    # Mock the count query to return 2 (more than one admin)
-    mock_count_result = MagicMock()
-    mock_count_result.scalar_one.return_value = 2
+    # Mock the admin users query to return 2 admins (more than one)
+    mock_admin_users_result = MagicMock()
+    mock_admin_users_result.scalars.return_value.all.return_value = [admin_user, admin_to_revoke]
 
     # Setup execute to return different results based on call order
-    mock_db_session.execute = AsyncMock(side_effect=[mock_result, mock_count_result])
+    mock_db_session.execute = AsyncMock(side_effect=[mock_result, mock_admin_users_result])
     mock_db_session.refresh = AsyncMock()
 
     # Capture logs
@@ -611,12 +611,12 @@ async def test_cannot_revoke_last_admin(
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = target_admin
 
-    # Mock the count query to return 1 (only one admin)
-    mock_count_result = MagicMock()
-    mock_count_result.scalar_one.return_value = 1
+    # Mock the admin users query to return only 1 admin (the one being revoked)
+    mock_admin_users_result = MagicMock()
+    mock_admin_users_result.scalars.return_value.all.return_value = [target_admin]
 
     # Setup execute to return different results based on call order
-    mock_db_session.execute = AsyncMock(side_effect=[mock_result, mock_count_result])
+    mock_db_session.execute = AsyncMock(side_effect=[mock_result, mock_admin_users_result])
 
     with pytest.raises(LastAdminError, match="last admin"):
         await user_service.revoke_admin_status(mock_db_session, target_admin.id, admin_user)

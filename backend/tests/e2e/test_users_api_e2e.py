@@ -277,21 +277,17 @@ class TestUserManagementAPIE2E:
     @pytest.mark.asyncio
     async def test_get_nonexistent_user_returns_404(self, client, test_users, get_auth_headers):
         """Test that getting a non-existent user returns 404."""
-        try:
-            admin_user = test_users[0]
-            headers = get_auth_headers(admin_user)
+        admin_user = test_users[0]
+        headers = get_auth_headers(admin_user)
 
-            # Try to get user with very high ID
-            response = await client.get(
-                "/api/v1/users/999999",
-                headers=headers,
-            )
-            assert response.status_code == 404, "Should return 404 for non-existent user"
+        # Try to get user with very high ID
+        response = await client.get(
+            "/api/v1/users/999999",
+            headers=headers,
+        )
+        assert response.status_code == 404, f"Should return 404 for non-existent user, got {response.status_code}: {response.text}"
 
-            logger.info("Non-existent user correctly returns 404")
-
-        except Exception as e:
-            pytest.skip(f"API not available: {e}")
+        logger.info("Non-existent user correctly returns 404")
 
     @pytest.mark.asyncio
     async def test_promote_user_updates_admin_status(self, client, test_users, get_auth_headers):

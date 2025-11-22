@@ -171,6 +171,8 @@ async def get_user(
 
         return user
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting user {user_id}: {e}", exc_info=True)
         raise HTTPException(
