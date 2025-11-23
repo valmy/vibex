@@ -4,18 +4,36 @@ User management service for admin operations.
 Provides business logic for managing users and admin privileges.
 """
 
-import json
 import logging
 import uuid
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.account import User
 
 logger = logging.getLogger(__name__)
+
+
+class UserManagementError(Exception):
+    """Base exception for user management errors."""
+    pass
+
+
+class UserNotFoundError(UserManagementError):
+    """Raised when a user is not found."""
+    pass
+
+
+class CannotModifySelfError(UserManagementError):
+    """Raised when an admin attempts to modify their own status."""
+    pass
+
+
+class LastAdminError(UserManagementError):
+    """Raised when attempting to revoke the last admin's privileges."""
+    pass
 
 
 class UserManagementService:
@@ -196,7 +214,8 @@ class UserManagementService:
             Updated User object with is_admin set to True
 
         Raises:
-            ValueError: If user not found
+            UserNotFoundError: If user not found
+            CannotModifySelfError: If admin attempts to modify their own status
         """
         correlation_id = str(uuid.uuid4())
 
@@ -205,10 +224,10 @@ class UserManagementService:
             user = result.scalar_one_or_none()
 
             if user is None:
-                raise ValueError(f"User with id {user_id} not found")
+                raise UserNotFoundError(f"User with id {user_id} not found")
 
             if user.id == admin_user.id:
-                raise ValueError("Admins cannot change their own status")
+                raise CannotModifySelfError("Admins cannot change their own status")
 
             user.is_admin = True
             db.add(user)
@@ -227,7 +246,7 @@ class UserManagementService:
             )
 
             return user
-        except ValueError as e:
+        except (UserNotFoundError, CannotModifySelfError) as e:
             # Log failed promotion
             self._log_structured(
                 level="ERROR",
@@ -271,7 +290,9 @@ class UserManagementService:
             Updated User object with is_admin set to False
 
         Raises:
-            ValueError: If user not found
+            UserNotFoundError: If user not found
+            CannotModifySelfError: If admin attempts to modify their own status
+            LastAdminError: If attempting to revoke the last admin's privileges
         """
         correlation_id = str(uuid.uuid4())
 
@@ -280,10 +301,23 @@ class UserManagementService:
             user = result.scalar_one_or_none()
 
             if user is None:
-                raise ValueError(f"User with id {user_id} not found")
+                raise UserNotFoundError(f"User with id {user_id} not found")
 
             if user.id == admin_user.id:
-                raise ValueError("Admins cannot change their own status")
+                raise CannotModifySelfError("Admins cannot change their own status")
+
+            # Prevent revoking status from the last admin
+            # Lock all admin rows to prevent race condition, then count them
+            if user.is_admin:
+                # First, lock all admin user rows
+                admin_users_result = await db.execute(
+                    select(User).where(User.is_admin).with_for_update()
+                )
+                admin_users = admin_users_result.scalars().all()
+                admin_count = len(admin_users)
+                # If there's only 1 admin left (the one we're about to revoke), prevent it
+                if admin_count <= 1:
+                    raise LastAdminError("Cannot revoke status from the last admin user")
 
             user.is_admin = False
             db.add(user)
@@ -302,7 +336,7 @@ class UserManagementService:
             )
 
             return user
-        except ValueError as e:
+        except (UserNotFoundError, CannotModifySelfError, LastAdminError) as e:
             # Log failed revocation
             self._log_structured(
                 level="ERROR",

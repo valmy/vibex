@@ -14,7 +14,12 @@ from hypothesis import strategies as st
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import User
-from app.services.user_management_service import UserManagementService
+from app.services.user_management_service import (
+    CannotModifySelfError,
+    LastAdminError,
+    UserManagementService,
+    UserNotFoundError,
+)
 
 
 @pytest.fixture
@@ -159,7 +164,13 @@ async def test_revocation_updates_admin_status(
     # Mock the execute method to return the admin user to revoke
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = admin_to_revoke
-    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    # Mock the admin users query to return 2 admins (more than one)
+    mock_admin_users_result = MagicMock()
+    mock_admin_users_result.scalars.return_value.all.return_value = [admin_user, admin_to_revoke]
+
+    # Setup execute to return different results based on call order
+    mock_db_session.execute = AsyncMock(side_effect=[mock_result, mock_admin_users_result])
     mock_db_session.refresh = AsyncMock()
 
     # Revoke admin status
@@ -238,7 +249,7 @@ async def test_promote_nonexistent_user_raises_error(
     user_service: UserManagementService,
     mock_db_session: AsyncMock,
 ):
-    """Test that promoting a non-existent user raises ValueError."""
+    """Test that promoting a non-existent user raises UserNotFoundError."""
     # Create mock admin user
     admin_user = MagicMock(spec=User, id=1, address="0x" + "1" * 40, is_admin=True)
 
@@ -247,7 +258,7 @@ async def test_promote_nonexistent_user_raises_error(
     mock_result.scalar_one_or_none.return_value = None
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    with pytest.raises(ValueError, match="User with id 99999 not found"):
+    with pytest.raises(UserNotFoundError, match="User with id 99999 not found"):
         await user_service.promote_user_to_admin(mock_db_session, 99999, admin_user)
 
 
@@ -257,7 +268,7 @@ async def test_revoke_nonexistent_user_raises_error(
     user_service: UserManagementService,
     mock_db_session: AsyncMock,
 ):
-    """Test that revoking admin from a non-existent user raises ValueError."""
+    """Test that revoking admin from a non-existent user raises UserNotFoundError."""
     # Create mock admin user
     admin_user = MagicMock(spec=User, id=1, address="0x" + "1" * 40, is_admin=True)
 
@@ -266,7 +277,7 @@ async def test_revoke_nonexistent_user_raises_error(
     mock_result.scalar_one_or_none.return_value = None
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    with pytest.raises(ValueError, match="User with id 99999 not found"):
+    with pytest.raises(UserNotFoundError, match="User with id 99999 not found"):
         await user_service.revoke_admin_status(mock_db_session, 99999, admin_user)
 
 
@@ -364,7 +375,13 @@ async def test_revocation_actions_are_logged(
     # Mock the execute method to return the admin user to revoke
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = admin_to_revoke
-    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    # Mock the admin users query to return 2 admins (more than one)
+    mock_admin_users_result = MagicMock()
+    mock_admin_users_result.scalars.return_value.all.return_value = [admin_user, admin_to_revoke]
+
+    # Setup execute to return different results based on call order
+    mock_db_session.execute = AsyncMock(side_effect=[mock_result, mock_admin_users_result])
     mock_db_session.refresh = AsyncMock()
 
     # Capture logs
@@ -521,7 +538,7 @@ async def test_failed_operations_are_logged(
     # Capture logs
     with caplog.at_level(logging.ERROR):
         # Try to promote non-existent user
-        with pytest.raises(ValueError):
+        with pytest.raises(UserNotFoundError):
             await user_service.promote_user_to_admin(mock_db_session, 99999, admin_user)
 
     # Verify error log entry exists
@@ -539,3 +556,67 @@ async def test_failed_operations_are_logged(
     assert hasattr(log_entry, "error")
     assert "User with id 99999 not found" in log_entry.error
     assert hasattr(log_entry, "correlation_id")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_admin_cannot_promote_self(
+    user_service: UserManagementService,
+    mock_db_session: AsyncMock,
+):
+    """Test that an admin cannot promote themselves."""
+    # Create mock admin user
+    admin_user = MagicMock(spec=User, id=1, address="0x" + "1" * 40, is_admin=True)
+
+    # Mock the execute method to return the admin user
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = admin_user
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    with pytest.raises(CannotModifySelfError, match="cannot change their own status"):
+        await user_service.promote_user_to_admin(mock_db_session, admin_user.id, admin_user)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_admin_cannot_revoke_self(
+    user_service: UserManagementService,
+    mock_db_session: AsyncMock,
+):
+    """Test that an admin cannot revoke their own status."""
+    # Create mock admin user
+    admin_user = MagicMock(spec=User, id=1, address="0x" + "1" * 40, is_admin=True)
+
+    # Mock the execute method to return the admin user
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = admin_user
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    with pytest.raises(CannotModifySelfError, match="cannot change their own status"):
+        await user_service.revoke_admin_status(mock_db_session, admin_user.id, admin_user)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_cannot_revoke_last_admin(
+    user_service: UserManagementService,
+    mock_db_session: AsyncMock,
+):
+    """Test that the last admin's status cannot be revoked."""
+    # Create mock admin users
+    admin_user = MagicMock(spec=User, id=1, address="0x" + "1" * 40, is_admin=True)
+    target_admin = MagicMock(spec=User, id=2, address="0x" + "2" * 40, is_admin=True)
+
+    # Mock the execute method to return the target admin
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = target_admin
+
+    # Mock the admin users query to return only 1 admin (the one being revoked)
+    mock_admin_users_result = MagicMock()
+    mock_admin_users_result.scalars.return_value.all.return_value = [target_admin]
+
+    # Setup execute to return different results based on call order
+    mock_db_session.execute = AsyncMock(side_effect=[mock_result, mock_admin_users_result])
+
+    with pytest.raises(LastAdminError, match="last admin"):
+        await user_service.revoke_admin_status(mock_db_session, target_admin.id, admin_user)
