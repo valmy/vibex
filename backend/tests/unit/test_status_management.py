@@ -234,4 +234,3 @@ async def test_invalid_status():
         AccountUpdate(status="invalid_status")
 
     assert "status" in str(exc_info.value)
-

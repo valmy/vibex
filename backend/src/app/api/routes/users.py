@@ -73,7 +73,6 @@ async def list_users(
         }
     """
     try:
-
         # Get total count
         count_result = await db.execute(select(func.count(User.id)))
         total = count_result.scalar()

@@ -451,6 +451,451 @@ The following table summarizes all admin-only endpoints:
 | PUT | `/api/v1/users/{user_id}/promote` | Promote user to admin | Admin |
 | PUT | `/api/v1/users/{user_id}/revoke` | Revoke admin status | Admin |
 
+## Account Management Endpoints
+
+The following endpoints allow users to manage their trading accounts. Regular users can only access their own accounts, while admin users can access any account.
+
+### Account Ownership Rules
+
+- **Regular Users**: Can only create, read, update, and delete their own accounts
+- **Admin Users**: Can read, update, and delete any account (but cannot create accounts for other users)
+- **Account Association**: Accounts are automatically associated with the authenticated user who creates them
+
+### Trading Modes
+
+Accounts support two trading modes:
+
+1. **Paper Trading** (`is_paper_trading: true`)
+   - Simulated trading with virtual funds
+   - Requires `balance_usd` to be set
+   - No API credentials required
+   - Cannot sync balance from exchange
+
+2. **Real Trading** (`is_paper_trading: false`)
+   - Live trading with real funds
+   - Requires `api_key` and `api_secret` for AsterDEX API
+   - Balance synced from exchange via API
+   - API credentials are encrypted and masked in responses
+
+### Account Status States
+
+Accounts can be in one of three states:
+
+- **active**: Account is actively trading
+- **paused**: Trading is temporarily suspended, positions remain open
+- **stopped**: Trading is stopped, all positions should be closed
+
+Status transitions are validated:
+- `active` → `paused` or `stopped`
+- `paused` → `active` or `stopped`
+- `stopped` → `active` (requires valid credentials for real trading)
+
+### Create Account
+
+**Endpoint:** `POST /api/v1/accounts`
+
+**Authentication:** Required (Regular user or Admin)
+
+**Request Body:**
+
+```json
+{
+  "name": "My Trading Account",
+  "description": "Main trading account for BTC/ETH",
+  "is_paper_trading": true,
+  "balance_usd": 10000.0,
+  "leverage": 2.0,
+  "max_position_size_usd": 5000.0,
+  "risk_per_trade": 0.02
+}
+```
+
+**For Real Trading:**
+
+```json
+{
+  "name": "Live Trading Account",
+  "description": "Real trading with AsterDEX",
+  "is_paper_trading": false,
+  "leverage": 3.0,
+  "max_position_size_usd": 10000.0,
+  "risk_per_trade": 0.01,
+  "api_key": "your-asterdex-api-key",
+  "api_secret": "your-asterdex-api-secret"
+}
+```
+
+**Example Request:**
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/accounts" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My Trading Account",
+    "description": "Main trading account",
+    "is_paper_trading": true,
+    "balance_usd": 10000.0,
+    "leverage": 2.0,
+    "max_position_size_usd": 5000.0,
+    "risk_per_trade": 0.02
+  }'
+```
+
+**Success Response (201 Created):**
+
+```json
+{
+  "id": 1,
+  "name": "My Trading Account",
+  "description": "Main trading account",
+  "user_id": 1,
+  "leverage": 2.0,
+  "max_position_size_usd": 5000.0,
+  "risk_per_trade": 0.02,
+  "balance_usd": 10000.0,
+  "is_paper_trading": true,
+  "api_key": null,
+  "api_secret": null,
+  "status": "active",
+  "created_at": "2025-11-26T10:00:00Z",
+  "updated_at": "2025-11-26T10:00:00Z"
+}
+```
+
+**Error Responses:**
+
+- **400 Bad Request**: Duplicate account name or validation error
+  ```json
+  {
+    "detail": "Account with name 'My Trading Account' already exists for this user"
+  }
+  ```
+
+- **400 Bad Request**: Real trading account missing credentials
+  ```json
+  {
+    "detail": "Real trading accounts require api_key and api_secret"
+  }
+  ```
+
+- **401 Unauthorized**: Missing or invalid JWT token
+  ```json
+  {
+    "detail": "Not authenticated"
+  }
+  ```
+
+### List Accounts
+
+**Endpoint:** `GET /api/v1/accounts`
+
+**Authentication:** Required (Regular user or Admin)
+
+**Query Parameters:**
+
+- `skip` (integer, optional): Number of accounts to skip for pagination. Default: 0
+- `limit` (integer, optional): Maximum number of accounts to return. Default: 100, Max: 1000
+
+**Description:** Returns only accounts owned by the authenticated user. Admin users also only see their own accounts.
+
+**Example Request:**
+
+```bash
+curl -X GET "http://localhost:3000/api/v1/accounts?skip=0&limit=10" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**Success Response (200 OK):**
+
+```json
+{
+  "total": 2,
+  "items": [
+    {
+      "id": 1,
+      "name": "My Trading Account",
+      "description": "Main trading account",
+      "user_id": 1,
+      "leverage": 2.0,
+      "max_position_size_usd": 5000.0,
+      "risk_per_trade": 0.02,
+      "balance_usd": 10000.0,
+      "is_paper_trading": true,
+      "api_key": null,
+      "api_secret": null,
+      "status": "active",
+      "created_at": "2025-11-26T10:00:00Z",
+      "updated_at": "2025-11-26T10:00:00Z"
+    },
+    {
+      "id": 2,
+      "name": "Live Trading",
+      "description": "Real trading account",
+      "user_id": 1,
+      "leverage": 3.0,
+      "max_position_size_usd": 10000.0,
+      "risk_per_trade": 0.01,
+      "balance_usd": 25000.0,
+      "is_paper_trading": false,
+      "api_key": "***MASKED***",
+      "api_secret": "***MASKED***",
+      "status": "active",
+      "created_at": "2025-11-26T11:00:00Z",
+      "updated_at": "2025-11-26T11:00:00Z"
+    }
+  ]
+}
+```
+
+**Error Responses:**
+
+- **401 Unauthorized**: Missing or invalid JWT token
+
+### Get Account Details
+
+**Endpoint:** `GET /api/v1/accounts/{id}`
+
+**Authentication:** Required (Account owner or Admin)
+
+**Path Parameters:**
+
+- `id` (integer, required): The ID of the account to retrieve
+
+**Description:** Returns account details. Regular users can only access their own accounts. Admin users can access any account.
+
+**Example Request:**
+
+```bash
+curl -X GET "http://localhost:3000/api/v1/accounts/1" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**Success Response (200 OK):**
+
+```json
+{
+  "id": 1,
+  "name": "My Trading Account",
+  "description": "Main trading account",
+  "user_id": 1,
+  "leverage": 2.0,
+  "max_position_size_usd": 5000.0,
+  "risk_per_trade": 0.02,
+  "balance_usd": 10000.0,
+  "is_paper_trading": true,
+  "api_key": null,
+  "api_secret": null,
+  "status": "active",
+  "created_at": "2025-11-26T10:00:00Z",
+  "updated_at": "2025-11-26T10:00:00Z"
+}
+```
+
+**Error Responses:**
+
+- **401 Unauthorized**: Missing or invalid JWT token
+- **403 Forbidden**: User does not own this account and is not an admin
+  ```json
+  {
+    "detail": "You do not have access to this account"
+  }
+  ```
+
+- **404 Not Found**: Account does not exist
+  ```json
+  {
+    "detail": "Account with id 999 not found"
+  }
+  ```
+
+### Update Account
+
+**Endpoint:** `PUT /api/v1/accounts/{id}`
+
+**Authentication:** Required (Account owner or Admin)
+
+**Path Parameters:**
+
+- `id` (integer, required): The ID of the account to update
+
+**Request Body:**
+
+```json
+{
+  "name": "Updated Account Name",
+  "description": "Updated description",
+  "leverage": 2.5,
+  "max_position_size_usd": 6000.0,
+  "risk_per_trade": 0.015,
+  "status": "paused"
+}
+```
+
+**Example Request:**
+
+```bash
+curl -X PUT "http://localhost:3000/api/v1/accounts/1" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Account Name",
+    "leverage": 2.5,
+    "status": "paused"
+  }'
+```
+
+**Success Response (200 OK):**
+
+```json
+{
+  "id": 1,
+  "name": "Updated Account Name",
+  "description": "Main trading account",
+  "user_id": 1,
+  "leverage": 2.5,
+  "max_position_size_usd": 5000.0,
+  "risk_per_trade": 0.02,
+  "balance_usd": 10000.0,
+  "is_paper_trading": true,
+  "api_key": null,
+  "api_secret": null,
+  "status": "paused",
+  "created_at": "2025-11-26T10:00:00Z",
+  "updated_at": "2025-11-26T12:00:00Z"
+}
+```
+
+**Error Responses:**
+
+- **400 Bad Request**: Invalid status transition
+  ```json
+  {
+    "detail": "Cannot transition from stopped to paused"
+  }
+  ```
+
+- **401 Unauthorized**: Missing or invalid JWT token
+- **403 Forbidden**: User does not own this account and is not an admin
+- **404 Not Found**: Account does not exist
+
+### Delete Account
+
+**Endpoint:** `DELETE /api/v1/accounts/{id}`
+
+**Authentication:** Required (Account owner or Admin)
+
+**Path Parameters:**
+
+- `id` (integer, required): The ID of the account to delete
+
+**Description:** Deletes the account and all associated data (positions, orders, trades). This operation cannot be undone.
+
+**Example Request:**
+
+```bash
+curl -X DELETE "http://localhost:3000/api/v1/accounts/1" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**Success Response (204 No Content):**
+
+No response body.
+
+**Error Responses:**
+
+- **401 Unauthorized**: Missing or invalid JWT token
+- **403 Forbidden**: User does not own this account and is not an admin
+  ```json
+  {
+    "detail": "You do not have access to this account"
+  }
+  ```
+
+- **404 Not Found**: Account does not exist
+  ```json
+  {
+    "detail": "Account with id 999 not found"
+  }
+  ```
+
+### Sync Balance from Exchange
+
+**Endpoint:** `POST /api/v1/accounts/{id}/sync-balance`
+
+**Authentication:** Required (Account owner or Admin)
+
+**Path Parameters:**
+
+- `id` (integer, required): The ID of the account to sync balance for
+
+**Description:** Syncs the account balance from the AsterDEX exchange API. Only available for real trading accounts (not paper trading).
+
+**Example Request:**
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/accounts/1/sync-balance" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**Success Response (200 OK):**
+
+```json
+{
+  "id": 1,
+  "name": "Live Trading",
+  "description": "Real trading account",
+  "user_id": 1,
+  "leverage": 3.0,
+  "max_position_size_usd": 10000.0,
+  "risk_per_trade": 0.01,
+  "balance_usd": 26543.21,
+  "is_paper_trading": false,
+  "api_key": "***MASKED***",
+  "api_secret": "***MASKED***",
+  "status": "active",
+  "created_at": "2025-11-26T11:00:00Z",
+  "updated_at": "2025-11-26T13:00:00Z"
+}
+```
+
+**Error Responses:**
+
+- **400 Bad Request**: Paper trading account cannot sync balance
+  ```json
+  {
+    "detail": "Cannot sync balance for paper trading accounts"
+  }
+  ```
+
+- **400 Bad Request**: Missing API credentials
+  ```json
+  {
+    "detail": "Account must have valid API credentials to sync balance"
+  }
+  ```
+
+- **401 Unauthorized**: Missing or invalid JWT token
+- **403 Forbidden**: User does not own this account and is not an admin
+- **404 Not Found**: Account does not exist
+- **502 Bad Gateway**: Failed to connect to AsterDEX API
+  ```json
+  {
+    "detail": "Failed to sync balance from AsterDEX API: Connection timeout"
+  }
+  ```
+
+### Account Management Endpoints Summary
+
+| Method | Endpoint | Description | Auth Required | Ownership |
+|--------|----------|-------------|---------------|-----------|
+| POST | `/api/v1/accounts` | Create new account | User/Admin | Creates for authenticated user |
+| GET | `/api/v1/accounts` | List user's accounts | User/Admin | Returns only user's accounts |
+| GET | `/api/v1/accounts/{id}` | Get account details | User/Admin | Owner or Admin |
+| PUT | `/api/v1/accounts/{id}` | Update account | User/Admin | Owner or Admin |
+| DELETE | `/api/v1/accounts/{id}` | Delete account | User/Admin | Owner or Admin |
+| POST | `/api/v1/accounts/{id}/sync-balance` | Sync balance from exchange | User/Admin | Owner or Admin |
+
 ## Common Error Responses
 
 ### 401 Unauthorized
