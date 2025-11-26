@@ -63,7 +63,7 @@ cd backend && uv run python -m app.main
 ### Code Quality (CRUSH Standards)
 ```bash
 # Format code (100 char line length)
-cd backend && uv run black .
+cd backend && uv run ruff format .
 
 # Lint code with auto-fix
 cd backend && uv run ruff check . --fix
@@ -75,7 +75,7 @@ cd backend && uv run mypy src/
 cd backend && uv run pre-commit run --all-files
 
 # Complete quality pipeline
-cd backend && uv run black . && uv run ruff check . --fix && uv run mypy src/
+cd backend && uv run ruff format . && uv run ruff check . --fix && uv run mypy src/
 ```
 
 ### Testing (Comprehensive)
@@ -134,8 +134,7 @@ cp backend/.env.example backend/.env
 # Run with specific environment
 cd backend && ENVIRONMENT=production uv run python -m app.main
 ```
-## Co
-nfiguration System
+## Configuration System
 
 ### Environment Variables (Required)
 ```bash
