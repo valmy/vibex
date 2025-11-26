@@ -17,7 +17,9 @@ from ...services.account_service import (
     AccountService,
     AccountValidationError,
     ActivePositionsError,
+    BalanceSyncError,
     DuplicateAccountNameError,
+    StatusTransitionError,
 )
 
 logger = get_logger(__name__)
@@ -199,7 +201,7 @@ async def update_account(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except AccountAccessDeniedError as e:
         raise HTTPException(status_code=403, detail=str(e)) from e
-    except AccountValidationError as e:
+    except (AccountValidationError, StatusTransitionError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Error updating account: {e}")
@@ -253,3 +255,62 @@ async def delete_account(
     except Exception as e:
         logger.error(f"Error deleting account: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete account") from e
+
+
+@router.post("/{account_id}/sync-balance", response_model=AccountRead)
+async def sync_balance(
+    account_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Sync account balance from AsterDEX API.
+
+    Only available for real trading accounts with valid API credentials.
+    Paper trading accounts use manually set balances and cannot be synced.
+
+    **Path Parameters:**
+    - account_id: The ID of the account to sync
+
+    **Returns:**
+    - 200: Balance synced successfully with updated account details
+    - 400: Account is in paper trading mode (sync not allowed)
+    - 401: Invalid API credentials (AsterDEX authentication failed)
+    - 403: User does not own this account and is not an admin
+    - 404: Account not found
+    - 502: AsterDEX API error (service unavailable or other API issues)
+
+    **Example Response:**
+    ```json
+    {
+        "id": 1,
+        "name": "My Trading Account",
+        "balance_usd": 15234.56,
+        "is_paper_trading": false,
+        ...
+    }
+    ```
+    """
+    try:
+        account = await account_service.sync_balance(
+            db=db,
+            account_id=account_id,
+            user=current_user,
+        )
+        return AccountRead.from_account(account)
+    except AccountNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except AccountAccessDeniedError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except AccountValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except BalanceSyncError as e:
+        # Check if it's an authentication error (401) or API error (502)
+        error_msg = str(e)
+        if "Invalid API credentials" in error_msg or "401" in error_msg:
+            raise HTTPException(status_code=401, detail=str(e)) from e
+        else:
+            raise HTTPException(status_code=502, detail=str(e)) from e
+    except Exception as e:
+        logger.error(f"Error syncing balance: {e}")
+        raise HTTPException(status_code=500, detail="Failed to sync balance") from e

@@ -5,6 +5,7 @@ Tests universal properties that should hold across all valid inputs.
 Uses mocked database access for true unit testing.
 """
 
+import logging
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
@@ -13,10 +14,11 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from app.models.account import Account, User
-from app.schemas.account import AccountCreate
+from app.schemas.account import AccountCreate, AccountUpdate
 from app.services.account_service import (
     AccountAccessDeniedError,
     AccountService,
+    AccountValidationError,
     DuplicateAccountNameError,
 )
 
@@ -574,3 +576,335 @@ async def test_property_cascade_deletion(user_data, num_positions):
 
     # The cascade deletion is handled by the database foreign key constraints
     # We verify that the account delete was called, which triggers the cascade
+
+
+# Property 8: Paper trading mode allows arbitrary balance
+# Feature: account-management, Property 8: Paper trading mode allows arbitrary balance
+# Validates: Requirements 6.1, 6.4
+@pytest.mark.asyncio
+@settings(max_examples=100, deadline=None)
+@given(
+    balance_usd=st.floats(min_value=0.0, max_value=1000000.0, allow_nan=False, allow_infinity=False),
+)
+async def test_property_paper_trading_arbitrary_balance(balance_usd):
+    """
+    Property: For any account with is_paper_trading=true, the balance_usd can be
+    set to any non-negative value.
+
+    **Feature: account-management, Property 8: Paper trading mode allows arbitrary balance**
+    **Validates: Requirements 6.1, 6.4**
+    """
+    service = AccountService()
+
+    # Validate paper trading mode with arbitrary balance
+    # Should not raise any exception for non-negative balances
+    service.validate_trading_mode(
+        is_paper_trading=True,
+        api_key=None,  # Paper trading doesn't require credentials
+        api_secret=None,
+        balance_usd=balance_usd,
+    )
+
+    # Also test that paper trading can have None balance (will be set to default)
+    service.validate_trading_mode(
+        is_paper_trading=True,
+        api_key=None,
+        api_secret=None,
+        balance_usd=None,
+    )
+
+    # Verify that negative balances are rejected
+    if balance_usd >= 0:
+        # Test with negative balance should raise error
+        with pytest.raises(AccountValidationError):
+            service.validate_trading_mode(
+                is_paper_trading=True,
+                api_key=None,
+                api_secret=None,
+                balance_usd=-abs(balance_usd) - 1,  # Ensure it's negative
+            )
+
+
+# Property 9: Real trading requires credentials
+# Feature: account-management, Property 9: Real trading requires credentials
+# Validates: Requirements 5.5, 6.2
+@pytest.mark.asyncio
+@settings(max_examples=100, deadline=None)
+@given(
+    api_key=st.text(min_size=10, max_size=100, alphabet=st.characters(blacklist_characters="\x00")),
+    api_secret=st.text(min_size=10, max_size=100, alphabet=st.characters(blacklist_characters="\x00")),
+)
+async def test_property_real_trading_requires_credentials(api_key, api_secret):
+    """
+    Property: For any account with is_paper_trading=false, valid API credentials
+    must be configured.
+
+    **Feature: account-management, Property 9: Real trading requires credentials**
+    **Validates: Requirements 5.5, 6.2**
+    """
+    service = AccountService()
+
+    # Real trading with valid credentials should succeed
+    service.validate_trading_mode(
+        is_paper_trading=False,
+        api_key=api_key,
+        api_secret=api_secret,
+        balance_usd=None,  # Balance is not required for real trading validation
+    )
+
+    # Real trading without api_key should fail
+    with pytest.raises(AccountValidationError) as exc_info:
+        service.validate_trading_mode(
+            is_paper_trading=False,
+            api_key=None,
+            api_secret=api_secret,
+            balance_usd=None,
+        )
+    assert "API credentials" in str(exc_info.value)
+
+    # Real trading without api_secret should fail
+    with pytest.raises(AccountValidationError) as exc_info:
+        service.validate_trading_mode(
+            is_paper_trading=False,
+            api_key=api_key,
+            api_secret=None,
+            balance_usd=None,
+        )
+    assert "API credentials" in str(exc_info.value)
+
+    # Real trading without both credentials should fail
+    with pytest.raises(AccountValidationError) as exc_info:
+        service.validate_trading_mode(
+            is_paper_trading=False,
+            api_key=None,
+            api_secret=None,
+            balance_usd=None,
+        )
+    assert "API credentials" in str(exc_info.value)
+
+    # Real trading with empty string credentials should fail
+    with pytest.raises(AccountValidationError):
+        service.validate_trading_mode(
+            is_paper_trading=False,
+            api_key="",
+            api_secret=api_secret,
+            balance_usd=None,
+        )
+
+    with pytest.raises(AccountValidationError):
+        service.validate_trading_mode(
+            is_paper_trading=False,
+            api_key=api_key,
+            api_secret="",
+            balance_usd=None,
+        )
+
+
+# Property 10: Balance sync updates balance
+# Feature: account-management, Property 10: Balance sync updates balance
+# Validates: Requirements 7.2
+@pytest.mark.asyncio
+@settings(max_examples=100, deadline=None)
+@given(
+    user_data=user_strategy(),
+    new_balance=st.floats(min_value=0.0, max_value=1000000.0, allow_nan=False, allow_infinity=False),
+)
+async def test_property_balance_sync_updates_balance(user_data, new_balance):
+    """
+    Property: For any successful balance sync on a real trading account,
+    the balance_usd field should be updated with the fetched value.
+
+    **Feature: account-management, Property 10: Balance sync updates balance**
+    **Validates: Requirements 7.2**
+    """
+    service = AccountService()
+
+    # Mock database session
+    mock_db = AsyncMock()
+
+    # Create user
+    user = User(**user_data)
+    user.id = 1
+
+    # Create real trading account with credentials
+    old_balance = 5000.0
+    account = Account(
+        id=1,
+        name="test_account",
+        user_id=user.id,
+        description="Test account",
+        status="active",
+        is_enabled=True,
+        is_paper_trading=False,  # Real trading account
+        is_multi_account=False,
+        leverage=2.0,
+        max_position_size_usd=10000.0,
+        risk_per_trade=0.02,
+        balance_usd=old_balance,
+        maker_fee_bps=5.0,
+        taker_fee_bps=20.0,
+        api_key="test_api_key",
+        api_secret="test_api_secret",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    # Mock the execute query to return the account
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = account
+    mock_db.execute.return_value = mock_result
+    mock_db.commit = AsyncMock()
+    mock_db.refresh = AsyncMock()
+
+    # Mock the AsterDEX client to return the new balance
+    from unittest.mock import patch
+
+    with patch("app.services.market_data.client.AsterClient") as MockAsterClient:
+        mock_client_instance = AsyncMock()
+        mock_client_instance.fetch_balance.return_value = new_balance
+        MockAsterClient.return_value = mock_client_instance
+
+        # Sync balance
+        updated_account = await service.sync_balance(mock_db, account.id, user)
+
+        # Verify balance was updated
+        assert abs(updated_account.balance_usd - new_balance) < 0.01, (
+            f"Balance should be updated to {new_balance}"
+        )
+
+        # Verify database operations were called
+        assert mock_db.add.called, "Should add updated account to session"
+        assert mock_db.commit.called, "Should commit transaction"
+        assert mock_db.refresh.called, "Should refresh account from database"
+
+        # Verify the client was called with correct credentials
+        MockAsterClient.assert_called_once()
+        mock_client_instance.fetch_balance.assert_called_once()
+
+
+# Property 11: Status change logging
+# Feature: account-management, Property 11: Status change logging
+# Validates: Requirements 8.5
+@pytest.mark.asyncio
+@settings(
+    max_examples=100,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+@given(
+    old_status=st.sampled_from(["active", "paused", "stopped"]),
+    new_status=st.sampled_from(["active", "paused", "stopped"]),
+    is_paper_trading=st.booleans(),
+    user_data=user_strategy(),
+)
+async def test_property_status_change_logging(
+    old_status, new_status, is_paper_trading, user_data, caplog
+):
+    """
+    Property: For any valid status transition, the system should log the status change
+    with timestamp, old status, new status, correlation ID, and user information.
+
+    **Feature: account-management, Property 11: Status change logging**
+    **Validates: Requirements 8.5**
+    """
+    service = AccountService()
+
+    # Create mock user
+    user = User(**user_data)
+    user.id = 1
+    user.created_at = datetime.now(timezone.utc)
+    user.updated_at = datetime.now(timezone.utc)
+
+    # Create mock account with old status
+    account = Account(
+        id=1,
+        name="Test Account",
+        status=old_status,
+        is_enabled=(old_status != "stopped"),
+        is_paper_trading=is_paper_trading,
+        user_id=user.id,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    # For real trading accounts transitioning from stopped to active, add credentials
+    if not is_paper_trading and old_status == "stopped" and new_status == "active":
+        account.api_key = "test_api_key"
+        account.api_secret = "test_api_secret"
+
+    # Mock database
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = account
+    mock_db.execute.return_value = mock_result
+    mock_db.commit = AsyncMock()
+    mock_db.refresh = AsyncMock()
+
+    # Clear caplog before each test to avoid accumulation across hypothesis examples
+    caplog.clear()
+
+    # Capture logs
+    with caplog.at_level(logging.INFO):
+        try:
+            # Update account status
+            update_data = AccountUpdate(status=new_status)
+            updated_account = await service.update_account(mock_db, 1, user, update_data)
+
+            # If status actually changed, verify logging
+            if old_status != new_status:
+                # Find the status_change log entry (should be the most recent one for this specific transition)
+                status_change_logs = [
+                    record for record in caplog.records
+                    if hasattr(record, "action") and record.action == "status_change"
+                ]
+
+                # Verify at least one status change log exists
+                assert len(status_change_logs) > 0, "Status change should be logged"
+
+                # Get the last status_change log (most recent)
+                log_entry = status_change_logs[-1]
+
+                # Verify log message contains status information
+                assert old_status in log_entry.message.lower(), (
+                    f"Log message should contain old status '{old_status}', got: {log_entry.message}"
+                )
+                assert new_status in log_entry.message.lower(), (
+                    f"Log message should contain new status '{new_status}', got: {log_entry.message}"
+                )
+
+                # Verify log contains required audit information in extra fields
+                assert log_entry.action == "status_change", "Action should be 'status_change'"
+                assert hasattr(log_entry, "user_address"), "Should have user_address field"
+                assert log_entry.account_id == account.id, "Should log account ID"
+                assert log_entry.account_name == account.name, "Should log account name"
+                assert hasattr(log_entry, "old_status"), "Should have old_status field"
+                assert log_entry.old_status == old_status, f"Old status should be '{old_status}', got: {log_entry.old_status}"
+                assert hasattr(log_entry, "new_status"), "Should have new_status field"
+                assert log_entry.new_status == new_status, f"New status should be '{new_status}', got: {log_entry.new_status}"
+                assert hasattr(log_entry, "correlation_id"), "Should have correlation_id"
+
+                # Verify the account status was actually updated
+                assert updated_account.status == new_status, (
+                    f"Account status should be updated to '{new_status}'"
+                )
+
+                # Verify is_enabled is set correctly based on new status
+                if new_status == "stopped":
+                    assert updated_account.is_enabled is False, (
+                        "Stopped accounts should be disabled"
+                    )
+                else:
+                    assert updated_account.is_enabled is True, (
+                        "Active and paused accounts should be enabled"
+                    )
+
+        except AccountValidationError:
+            # This is expected for invalid transitions (e.g., stopped -> active without credentials)
+            # For real trading accounts transitioning from stopped to active without credentials
+            if not is_paper_trading and old_status == "stopped" and new_status == "active":
+                if not account.api_key or not account.api_secret:
+                    # This is expected - no logging should occur for failed validation
+                    pass
+                else:
+                    # If we have credentials, this shouldn't fail
+                    raise

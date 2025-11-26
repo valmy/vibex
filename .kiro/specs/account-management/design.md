@@ -525,6 +525,9 @@ class BalanceSyncError(Exception):
 
 class ActivePositionsError(Exception):
     """Raised when trying to delete account with active positions."""
+
+class StatusTransitionError(Exception):
+    """Raised when an invalid status transition is attempted."""
 ```
 
 ## Testing Strategy

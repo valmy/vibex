@@ -60,6 +60,12 @@ class BalanceSyncError(AccountServiceError):
     pass
 
 
+class StatusTransitionError(AccountServiceError):
+    """Raised when an invalid status transition is attempted."""
+
+    pass
+
+
 class AccountService:
     """Service for managing trading accounts with ownership control."""
 
@@ -73,6 +79,8 @@ class AccountService:
         account_id: Optional[int] = None,
         account_name: Optional[str] = None,
         error: Optional[str] = None,
+        old_status: Optional[str] = None,
+        new_status: Optional[str] = None,
     ) -> None:
         """
         Log a structured audit event.
@@ -86,6 +94,8 @@ class AccountService:
             account_id: ID of account (if applicable)
             account_name: Name of account (if applicable)
             error: Error message (if applicable)
+            old_status: Previous status (for status changes)
+            new_status: New status (for status changes)
         """
         log_data = {
             "correlation_id": correlation_id,
@@ -100,6 +110,10 @@ class AccountService:
             log_data["account_name"] = account_name
         if error:
             log_data["error"] = error
+        if old_status:
+            log_data["old_status"] = old_status
+        if new_status:
+            log_data["new_status"] = new_status
 
         if level == "INFO":
             logger.info(message, extra=log_data)
@@ -139,10 +153,12 @@ class AccountService:
                 raise DuplicateAccountNameError(f"Account with name '{data.name}' already exists")
 
             # Validate trading mode
-            if not data.is_paper_trading and not data.api_key:
-                raise AccountValidationError(
-                    "Real trading accounts require API credentials (api_key and api_secret)"
-                )
+            self.validate_trading_mode(
+                is_paper_trading=data.is_paper_trading,
+                api_key=data.api_key,
+                api_secret=data.api_secret,
+                balance_usd=data.balance_usd,
+            )
 
             # Create account
             account = Account(
@@ -337,7 +353,7 @@ class AccountService:
         data: AccountUpdate,
     ) -> Account:
         """
-        Update account with ownership check.
+        Update account with ownership check and status transition validation.
 
         Args:
             db: Database session
@@ -352,6 +368,7 @@ class AccountService:
             AccountNotFoundError: If account not found
             AccountAccessDeniedError: If user doesn't own account and is not admin
             AccountValidationError: If validation fails
+            StatusTransitionError: If status transition is invalid
         """
         correlation_id = str(uuid.uuid4())
 
@@ -359,25 +376,54 @@ class AccountService:
             # Get account with ownership check
             account = await self.get_account(db, account_id, user)
 
+            # Store old status for logging
+            old_status = account.status
+
             # Update fields
             update_data = data.model_dump(exclude_unset=True)
 
-            # Validate status if being updated
+            # Validate and handle status transitions
             if "status" in update_data:
-                valid_statuses = ["active", "paused", "stopped"]
-                if update_data["status"] not in valid_statuses:
-                    raise AccountValidationError(
-                        f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+                new_status = update_data["status"]
+                # Apply any credential updates first so validation can check them
+                if "api_key" in update_data:
+                    account.api_key = update_data["api_key"]
+                if "api_secret" in update_data:
+                    account.api_secret = update_data["api_secret"]
+
+                # Validate status transition
+                self.validate_status_transition(old_status, new_status, account)
+
+                # Log status change with audit trail
+                if old_status != new_status:
+                    self._log_structured(
+                        level="INFO",
+                        message=f"Account {account_id} status changed from '{old_status}' to '{new_status}'",
+                        correlation_id=correlation_id,
+                        action="status_change",
+                        user_address=user.address,
+                        account_id=account_id,
+                        account_name=account.name,
+                        old_status=old_status,
+                        new_status=new_status,
                     )
 
             # Validate trading mode changes
             if "is_paper_trading" in update_data:
                 new_is_paper = update_data["is_paper_trading"]
-                if not new_is_paper and not account.api_key:
-                    raise AccountValidationError(
-                        "Cannot switch to real trading without API credentials"
-                    )
+                # Check credentials from update data or existing account
+                api_key = update_data.get("api_key", account.api_key)
+                api_secret = update_data.get("api_secret", account.api_secret)
+                balance_usd = update_data.get("balance_usd", account.balance_usd)
 
+                self.validate_trading_mode(
+                    is_paper_trading=new_is_paper,
+                    api_key=api_key,
+                    api_secret=api_secret,
+                    balance_usd=balance_usd,
+                )
+
+            # Apply all updates
             for field, value in update_data.items():
                 setattr(account, field, value)
 
@@ -397,7 +443,12 @@ class AccountService:
 
             return account
 
-        except (AccountNotFoundError, AccountAccessDeniedError, AccountValidationError) as e:
+        except (
+            AccountNotFoundError,
+            AccountAccessDeniedError,
+            AccountValidationError,
+            StatusTransitionError,
+        ) as e:
             self._log_structured(
                 level="ERROR",
                 message=f"Failed to update account {account_id}: {str(e)}",
@@ -478,25 +529,207 @@ class AccountService:
             )
             raise
 
+    async def sync_balance(
+        self,
+        db: AsyncSession,
+        account_id: int,
+        user: User,
+    ) -> Account:
+        """
+        Sync account balance from AsterDEX API.
+
+        Args:
+            db: Database session
+            account_id: ID of the account
+            user: Current user requesting the sync
+
+        Returns:
+            Updated Account object with synced balance
+
+        Raises:
+            AccountNotFoundError: If account not found
+            AccountAccessDeniedError: If user doesn't own account and is not admin
+            AccountValidationError: If account is in paper trading mode
+            BalanceSyncError: If balance sync fails (401 for invalid credentials, 502 for API errors)
+        """
+        correlation_id = str(uuid.uuid4())
+
+        try:
+            # Get account with ownership check
+            account = await self.get_account(db, account_id, user)
+
+            # Validate account is in real trading mode
+            if account.is_paper_trading:
+                raise AccountValidationError(
+                    "Balance sync is only allowed for real trading accounts. "
+                    "Paper trading accounts use manually set balances."
+                )
+
+            # Validate account has API credentials
+            if not account.api_key or not account.api_secret:
+                raise AccountValidationError(
+                    "Account must have API credentials configured for balance sync"
+                )
+
+            # Import AsterClient here to avoid circular dependency
+            from ..core.config import config
+            from ..services.market_data.client import AsterClient
+
+            # Create AsterDEX client
+            client = AsterClient(
+                api_key=account.api_key,
+                api_secret=account.api_secret,
+                base_url=config.ASTERDEX_BASE_URL,
+            )
+
+            # Fetch balance from AsterDEX
+            try:
+                balance = await client.fetch_balance()
+            except Exception as e:
+                error_msg = str(e).lower()
+                # Check for authentication errors
+                if "401" in error_msg or "unauthorized" in error_msg or "invalid" in error_msg:
+                    self._log_structured(
+                        level="ERROR",
+                        message=f"Invalid API credentials for account {account_id}",
+                        correlation_id=correlation_id,
+                        action="sync_balance",
+                        user_address=user.address,
+                        account_id=account_id,
+                        error="401 Unauthorized - Invalid API credentials",
+                    )
+                    raise BalanceSyncError(
+                        "Invalid API credentials. Please update your account credentials."
+                    ) from e
+                else:
+                    # Other API errors
+                    self._log_structured(
+                        level="ERROR",
+                        message=f"AsterDEX API error for account {account_id}: {str(e)}",
+                        correlation_id=correlation_id,
+                        action="sync_balance",
+                        user_address=user.address,
+                        account_id=account_id,
+                        error=f"502 Bad Gateway - {str(e)}",
+                    )
+                    raise BalanceSyncError(
+                        f"Failed to fetch balance from AsterDEX API: {str(e)}"
+                    ) from e
+
+            # Update account balance
+            old_balance = account.balance_usd
+            account.balance_usd = balance
+
+            db.add(account)
+            await db.commit()
+            await db.refresh(account)
+
+            self._log_structured(
+                level="INFO",
+                message=f"Balance synced for account {account_id}: {old_balance} -> {balance}",
+                correlation_id=correlation_id,
+                action="sync_balance",
+                user_address=user.address,
+                account_id=account_id,
+                account_name=account.name,
+            )
+
+            return account
+
+        except (
+            AccountNotFoundError,
+            AccountAccessDeniedError,
+            AccountValidationError,
+            BalanceSyncError,
+        ):
+            # Re-raise known exceptions
+            raise
+        except Exception as e:
+            self._log_structured(
+                level="ERROR",
+                message=f"Unexpected error syncing balance for account {account_id}: {str(e)}",
+                correlation_id=correlation_id,
+                action="sync_balance",
+                user_address=user.address,
+                account_id=account_id,
+                error=str(e),
+            )
+            raise BalanceSyncError(f"Unexpected error during balance sync: {str(e)}") from e
+
     def validate_trading_mode(
         self,
-        account: Account,
         is_paper_trading: bool,
+        api_key: Optional[str] = None,
+        api_secret: Optional[str] = None,
+        balance_usd: Optional[float] = None,
     ) -> None:
         """
         Validate trading mode requirements.
 
         Args:
-            account: Account to validate
             is_paper_trading: Whether paper trading mode is enabled
+            api_key: API key (required for real trading)
+            api_secret: API secret (required for real trading)
+            balance_usd: Account balance (for paper trading validation)
 
         Raises:
             AccountValidationError: If validation fails
         """
-        if not is_paper_trading and not account.api_key:
+        # Real trading requires API credentials
+        if not is_paper_trading:
+            if not api_key or not api_secret:
+                raise AccountValidationError(
+                    "Real trading mode requires API credentials (api_key and api_secret)"
+                )
+
+        # Paper trading allows arbitrary balance (including None)
+        # Balance validation is only for negative values
+        if is_paper_trading and balance_usd is not None and balance_usd < 0:
+            raise AccountValidationError("Paper trading balance cannot be negative")
+
+    def validate_status_transition(
+        self,
+        old_status: str,
+        new_status: str,
+        account: Account,
+    ) -> None:
+        """
+        Validate status transition and enforce requirements.
+
+        Args:
+            old_status: Current account status
+            new_status: Desired new status
+            account: Account being updated
+
+        Raises:
+            StatusTransitionError: If transition is invalid
+            AccountValidationError: If requirements not met (e.g., missing credentials)
+        """
+        # Valid statuses
+        valid_statuses = ["active", "paused", "stopped"]
+        if new_status not in valid_statuses:
             raise AccountValidationError(
-                "Real trading mode requires API credentials (api_key and api_secret)"
+                f"Invalid status '{new_status}'. Must be one of: {', '.join(valid_statuses)}"
             )
 
-        if is_paper_trading and account.balance_usd < 0:
-            raise AccountValidationError("Paper trading balance cannot be negative")
+        # No validation needed if status isn't changing
+        if old_status == new_status:
+            return
+
+        # Reactivating from stopped requires credential validation for real trading
+        if old_status == "stopped" and new_status == "active":
+            if not account.is_paper_trading:
+                # Real trading accounts must have valid API credentials
+                if not account.api_key or not account.api_secret:
+                    raise AccountValidationError(
+                        "Cannot reactivate stopped account: Real trading mode requires "
+                        "valid API credentials (api_key and api_secret)"
+                    )
+
+        # When setting to stopped, disable the account
+        if new_status == "stopped":
+            account.is_enabled = False
+
+        # When setting to active or paused, enable the account
+        if new_status in ["active", "paused"]:
+            account.is_enabled = True

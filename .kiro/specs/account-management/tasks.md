@@ -68,22 +68,22 @@
 - [x] 5. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. Implement trading mode validation
+- [x] 6. Implement trading mode validation
   - Add trading mode validation to account service
   - Validate paper trading allows arbitrary balance
   - Validate real trading requires API credentials
   - Add validation when switching from paper to real trading
   - _Requirements: 5.5, 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 6.1 Write property test for paper trading mode
+- [x] 6.1 Write property test for paper trading mode
   - **Property 8: Paper trading mode allows arbitrary balance**
   - **Validates: Requirements 6.1, 6.4**
 
-- [ ] 6.2 Write property test for real trading requirements
+- [x] 6.2 Write property test for real trading requirements
   - **Property 9: Real trading requires credentials**
   - **Validates: Requirements 5.5, 6.2**
 
-- [ ] 7. Implement balance sync endpoint
+- [x] 7. Implement balance sync endpoint
   - Add `sync_balance` method to account service
   - Create AsterDEX API client integration for balance fetching
   - Add `POST /api/v1/accounts/{id}/sync-balance` endpoint
@@ -91,11 +91,11 @@
   - Validate sync only allowed for real trading accounts
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
 
-- [ ] 7.1 Write property test for balance sync
+- [x] 7.1 Write property test for balance sync
   - **Property 10: Balance sync updates balance**
   - **Validates: Requirements 7.2**
 
-- [ ] 8. Implement account status management
+- [x] 8. Implement account status management
   - Add status transition validation to account service
   - Implement paused status behavior (stop trading, retain data)
   - Implement stopped status behavior (disable, require reactivation)
@@ -103,11 +103,11 @@
   - Add audit logging for status changes
   - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
 
-- [ ] 8.1 Write property test for status change logging
+- [x] 8.1 Write property test for status change logging
   - **Property 11: Status change logging**
   - **Validates: Requirements 8.5**
 
-- [ ] 9. Checkpoint - Ensure all tests pass
+- [x] 9. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 10. Write unit tests for account service
