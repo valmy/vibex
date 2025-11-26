@@ -3,7 +3,6 @@ API routes for account management with ownership control.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.logging import get_logger
@@ -19,6 +18,8 @@ from ...services.account_service import (
     ActivePositionsError,
     BalanceSyncError,
     DuplicateAccountNameError,
+    ExternalApiError,
+    InvalidApiCredentialsError,
     StatusTransitionError,
 )
 
@@ -98,18 +99,12 @@ async def list_accounts(
     - 401: Invalid or missing authentication token
     """
     try:
-        accounts = await account_service.list_user_accounts(
+        accounts, total = await account_service.list_user_accounts(
             db=db,
             user_id=current_user.id,
             skip=skip,
             limit=limit,
         )
-
-        # Get total count for this user
-        count_result = await db.execute(
-            select(func.count(Account.id)).where(Account.user_id == current_user.id)
-        )
-        total = count_result.scalar()
 
         return AccountListResponse(
             total=total,
@@ -304,13 +299,10 @@ async def sync_balance(
         raise HTTPException(status_code=403, detail=str(e)) from e
     except AccountValidationError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except BalanceSyncError as e:
-        # Check if it's an authentication error (401) or API error (502)
-        error_msg = str(e)
-        if "Invalid API credentials" in error_msg or "401" in error_msg:
-            raise HTTPException(status_code=401, detail=str(e)) from e
-        else:
-            raise HTTPException(status_code=502, detail=str(e)) from e
+    except InvalidApiCredentialsError as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except ExternalApiError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Error syncing balance: {e}")
         raise HTTPException(status_code=500, detail="Failed to sync balance") from e

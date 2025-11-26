@@ -60,6 +60,18 @@ class BalanceSyncError(AccountServiceError):
     pass
 
 
+class InvalidApiCredentialsError(BalanceSyncError):
+    """Raised when API credentials are invalid (401 Unauthorized)."""
+
+    pass
+
+
+class ExternalApiError(BalanceSyncError):
+    """Raised when external API (AsterDEX) returns an error (502 Bad Gateway)."""
+
+    pass
+
+
 class StatusTransitionError(AccountServiceError):
     """Raised when an invalid status transition is attempted."""
 
@@ -228,9 +240,9 @@ class AccountService:
         user_id: int,
         skip: int = 0,
         limit: int = 100,
-    ) -> List[Account]:
+    ) -> tuple[List[Account], int]:
         """
-        List all accounts owned by the user.
+        List all accounts owned by the user with total count.
 
         Args:
             db: Database session
@@ -239,7 +251,7 @@ class AccountService:
             limit: Maximum number of accounts to return (default: 100)
 
         Returns:
-            List of Account objects owned by the user
+            Tuple of (List of Account objects owned by the user, total count)
 
         Raises:
             ValueError: If skip or limit are invalid
@@ -252,6 +264,13 @@ class AccountService:
             if limit <= 0:
                 raise ValueError("limit must be positive")
 
+            # Get total count for this user
+            count_result = await db.execute(
+                select(func.count(Account.id)).where(Account.user_id == user_id)
+            )
+            total = count_result.scalar()
+
+            # Get paginated accounts
             result = await db.execute(
                 select(Account)
                 .where(Account.user_id == user_id)
@@ -267,13 +286,13 @@ class AccountService:
 
             self._log_structured(
                 level="INFO",
-                message=f"Listed {len(accounts)} accounts for user {user_id}",
+                message=f"Listed {len(accounts)} accounts for user {user_id} (total: {total})",
                 correlation_id=correlation_id,
                 action="list_user_accounts",
                 user_address=user.address if user else None,
             )
 
-            return list(accounts)
+            return list(accounts), total
 
         except ValueError as e:
             self._log_structured(
@@ -598,7 +617,7 @@ class AccountService:
                         account_id=account_id,
                         error="401 Unauthorized - Invalid API credentials",
                     )
-                    raise BalanceSyncError(
+                    raise InvalidApiCredentialsError(
                         "Invalid API credentials. Please update your account credentials."
                     ) from e
                 else:
@@ -612,7 +631,7 @@ class AccountService:
                         account_id=account_id,
                         error=f"502 Bad Gateway - {str(e)}",
                     )
-                    raise BalanceSyncError(
+                    raise ExternalApiError(
                         f"Failed to fetch balance from AsterDEX API: {str(e)}"
                     ) from e
 
@@ -640,7 +659,8 @@ class AccountService:
             AccountNotFoundError,
             AccountAccessDeniedError,
             AccountValidationError,
-            BalanceSyncError,
+            InvalidApiCredentialsError,
+            ExternalApiError,
         ):
             # Re-raise known exceptions
             raise

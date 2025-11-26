@@ -215,22 +215,31 @@ async def test_property_ownership_filtering(num_accounts, user_data):
         )
         mock_accounts.append(account)
 
-    # Mock the execute query to return the accounts
-    mock_result = MagicMock()
+    # Mock the execute query to return count, accounts, and user
+    # First call: count query
+    count_result = MagicMock()
+    count_result.scalar.return_value = num_accounts
+
+    # Second call: accounts query
+    accounts_result = MagicMock()
     mock_scalars = MagicMock()
     mock_scalars.all.return_value = mock_accounts
-    mock_result.scalars.return_value = mock_scalars
-    mock_db.execute.return_value = mock_result
+    accounts_result.scalars.return_value = mock_scalars
 
-    # Mock user query
-    mock_user_result = MagicMock()
-    mock_user_result.scalar_one_or_none.return_value = user
+    # Third call: user query
+    user_result = MagicMock()
+    user_result.scalar_one_or_none.return_value = user
+
+    mock_db.execute = AsyncMock(
+        side_effect=[count_result, accounts_result, user_result]
+    )
 
     # List accounts for the user
-    accounts = await service.list_user_accounts(mock_db, user.id)
+    accounts, total = await service.list_user_accounts(mock_db, user.id)
 
     # Verify we get exactly N accounts
     assert len(accounts) == num_accounts, f"Should return exactly {num_accounts} accounts"
+    assert total == num_accounts, f"Total count should be {num_accounts}"
 
     # Verify all accounts belong to the user
     for account in accounts:

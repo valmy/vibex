@@ -207,13 +207,23 @@ async def test_list_user_accounts_with_ownership_filtering(
         for i in range(1, 4)
     ]
 
-    # Mock the execute method to return user's accounts
-    mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = mock_accounts
-    mock_db_session.execute = AsyncMock(return_value=mock_result)
+    # Mock the execute method to return count and accounts
+    # First call: count query, Second call: accounts query, Third call: user query
+    count_result = MagicMock()
+    count_result.scalar.return_value = 3
+
+    accounts_result = MagicMock()
+    accounts_result.scalars.return_value.all.return_value = mock_accounts
+
+    user_result = MagicMock()
+    user_result.scalar_one_or_none.return_value = mock_user
+
+    mock_db_session.execute = AsyncMock(
+        side_effect=[count_result, accounts_result, user_result]
+    )
 
     # List user accounts
-    result = await account_service.list_user_accounts(
+    accounts, total = await account_service.list_user_accounts(
         db=mock_db_session,
         user_id=mock_user.id,
         skip=0,
@@ -221,11 +231,12 @@ async def test_list_user_accounts_with_ownership_filtering(
     )
 
     # Verify all returned accounts belong to the user
-    assert len(result) == 3
-    assert all(account.user_id == mock_user.id for account in result)
+    assert len(accounts) == 3
+    assert total == 3
+    assert all(account.user_id == mock_user.id for account in accounts)
 
-    # Verify execute was called (twice: once for accounts, once for user)
-    assert mock_db_session.execute.call_count == 2
+    # Verify execute was called (3 times: count, accounts, user)
+    assert mock_db_session.execute.call_count == 3
 
 
 # Test 4: get_account as owner
