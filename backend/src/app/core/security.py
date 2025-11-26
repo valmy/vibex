@@ -96,3 +96,81 @@ async def get_current_admin_user(current_user: User = Depends(get_current_user))
     This is an alias for require_admin maintained for backward compatibility.
     """
     return await require_admin(current_user)
+
+
+async def require_account_owner(
+    account_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Dependency that requires the current user to own the account.
+
+    Args:
+        account_id: The account ID to check ownership for
+        current_user: The currently authenticated user
+        db: Database session
+
+    Returns:
+        The Account object if user owns it
+
+    Raises:
+        HTTPException: 404 if account not found, 403 if user doesn't own the account
+    """
+    from ..models.account import Account
+
+    result = await db.execute(select(Account).where(Account.id == account_id))
+    account = result.scalar_one_or_none()
+
+    if account is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Account with id {account_id} not found",
+        )
+
+    if account.user_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have access to this account",
+        )
+
+    return account
+
+
+async def require_admin_or_owner(
+    account_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Dependency that requires the current user to be admin or own the account.
+
+    Args:
+        account_id: The account ID to check ownership for
+        current_user: The currently authenticated user
+        db: Database session
+
+    Returns:
+        The Account object if user is admin or owns it
+
+    Raises:
+        HTTPException: 404 if account not found, 403 if neither admin nor owner
+    """
+    from ..models.account import Account
+
+    result = await db.execute(select(Account).where(Account.id == account_id))
+    account = result.scalar_one_or_none()
+
+    if account is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Account with id {account_id} not found",
+        )
+
+    if account.user_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have access to this account",
+        )
+
+    return account
