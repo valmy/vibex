@@ -8,7 +8,7 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.account import User
@@ -18,21 +18,25 @@ logger = logging.getLogger(__name__)
 
 class UserManagementError(Exception):
     """Base exception for user management errors."""
+
     pass
 
 
 class UserNotFoundError(UserManagementError):
     """Raised when a user is not found."""
+
     pass
 
 
 class CannotModifySelfError(UserManagementError):
     """Raised when an admin attempts to modify their own status."""
+
     pass
 
 
 class LastAdminError(UserManagementError):
     """Raised when attempting to revoke the last admin's privileges."""
+
     pass
 
 

@@ -285,7 +285,9 @@ class TestUserManagementAPIE2E:
             "/api/v1/users/999999",
             headers=headers,
         )
-        assert response.status_code == 404, f"Should return 404 for non-existent user, got {response.status_code}: {response.text}"
+        assert response.status_code == 404, (
+            f"Should return 404 for non-existent user, got {response.status_code}: {response.text}"
+        )
 
         logger.info("Non-existent user correctly returns 404")
 
@@ -510,6 +512,7 @@ class TestUserManagementAPIE2E:
     async def test_cannot_revoke_last_admin(self, client, test_users, get_auth_headers, db_session):
         """Test that the last admin's status cannot be revoked."""
         from datetime import datetime
+
         from eth_account import Account
 
         # Create two temporary admin users
@@ -589,7 +592,11 @@ class TestUserManagementAPIE2E:
         finally:
             # Cleanup temp users
             try:
-                for user_id in [TEST_USER_ID_BASE + 100, TEST_USER_ID_BASE + 101, TEST_USER_ID_BASE + 102]:
+                for user_id in [
+                    TEST_USER_ID_BASE + 100,
+                    TEST_USER_ID_BASE + 101,
+                    TEST_USER_ID_BASE + 102,
+                ]:
                     result = await db_session.execute(select(User).where(User.id == user_id))
                     user = result.scalar_one_or_none()
                     if user:
@@ -613,9 +620,7 @@ class TestUserManagementAPIE2E:
         logger.info("Regular user correctly denied access to list users")
 
     @pytest.mark.asyncio
-    async def test_regular_user_cannot_access_get_user(
-        self, client, test_users, get_auth_headers
-    ):
+    async def test_regular_user_cannot_access_get_user(self, client, test_users, get_auth_headers):
         """Test that a regular user cannot get user details."""
         regular_user = test_users[1]
         target_user = test_users[2]

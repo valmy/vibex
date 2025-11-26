@@ -4,7 +4,6 @@ Property-based tests for user management service.
 Tests correctness properties for user management operations using hypothesis.
 """
 
-import json
 import logging
 from unittest.mock import AsyncMock, MagicMock
 

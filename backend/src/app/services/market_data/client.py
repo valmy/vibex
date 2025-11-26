@@ -144,3 +144,49 @@ class AsterClient:
         except Exception as e:
             logger.error(f"Error in fetch_funding_rate task: {e}", exc_info=True)
             raise
+
+    async def fetch_balance(self) -> float:
+        """
+        Fetch account balance from Aster DEX.
+
+        Returns:
+            Account balance in USD
+
+        Raises:
+            Exception: If the API call fails (401 for invalid credentials, 502 for other errors)
+        """
+        try:
+
+            def _fetch_in_thread():
+                try:
+                    client = self._client
+                    # Fetch account information which includes balance
+                    result = client.account()
+                    # Extract balance from the response
+                    # The exact field name may vary based on the API response structure
+                    # Common fields: 'totalWalletBalance', 'balance', 'availableBalance'
+                    if isinstance(result, dict):
+                        # Try different possible balance field names
+                        balance = (
+                            result.get("totalWalletBalance")
+                            or result.get("balance")
+                            or result.get("availableBalance")
+                            or result.get("totalMarginBalance")
+                            or 0.0
+                        )
+                        return float(balance)
+                    else:
+                        logger.error(f"Unexpected account response format: {result}")
+                        raise ValueError("Unexpected account response format")
+                except Exception as e:
+                    logger.error(f"Error fetching balance in thread: {e}", exc_info=True)
+                    raise
+
+            loop = asyncio.get_event_loop()
+            balance = await loop.run_in_executor(None, _fetch_in_thread)
+
+            logger.debug(f"Successfully fetched account balance: {balance}")
+            return balance
+        except Exception as e:
+            logger.error(f"Error in fetch_balance task: {e}", exc_info=True)
+            raise

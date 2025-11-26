@@ -5,11 +5,11 @@ Integration tests for the updated Decision Engine.
 from unittest.mock import Mock
 
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
 
-from app.core.security import get_current_user
+from app.core.security import create_access_token
 from app.main import app
-from app.middleware import AdminOnlyMiddleware
 from app.models.account import User
 from app.schemas.trading_decision import (
     DecisionResult,
@@ -25,33 +25,34 @@ def reset_decision_engine_singleton():
     decision_engine_module._decision_engine = None
 
 
+@pytest_asyncio.fixture
+async def admin_user(db_session):
+    """Create an admin user for testing."""
+    user = User(address="0x1234567890123456789012345678901234567890", is_admin=True)
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    yield user
+    # Cleanup
+    await db_session.delete(user)
+    await db_session.commit()
+
+
 @pytest.fixture
-def mock_get_current_user():
-    """Fixture to mock the get_current_user dependency."""
-    mock_user = User(address="0x1234567890123456789012345678901234567890", is_admin=True)
-
-    async def _mock_get_current_user():
-        return mock_user
-
-    return _mock_get_current_user
+def auth_headers(admin_user):
+    """Generate authentication headers with JWT token."""
+    token = create_access_token(data={"sub": admin_user.address})
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
-def client(mock_get_current_user):
+def client():
     """Create a TestClient instance for testing."""
-    app.dependency_overrides[get_current_user] = mock_get_current_user
-    original_middleware = app.user_middleware
-    app.user_middleware = [
-        middleware
-        for middleware in app.user_middleware
-        if middleware.cls is not AdminOnlyMiddleware
-    ]
     yield TestClient(app)
-    app.dependency_overrides = {}
-    app.user_middleware = original_middleware
 
 
-def test_generate_decision_with_new_context(client, monkeypatch):
+@pytest.mark.asyncio
+async def test_generate_decision_with_new_context(client, auth_headers, monkeypatch):
     """Test the /api/v1/decisions/generate endpoint with multi-asset support."""
     from app.schemas.trading_decision import AssetDecision
 
@@ -131,6 +132,7 @@ def test_generate_decision_with_new_context(client, monkeypatch):
     response = client.post(
         "/api/v1/decisions/generate",
         json={"symbols": ["BTCUSDT", "ETHUSDT"], "account_id": 1},
+        headers=auth_headers,
     )
 
     # Verify the response
@@ -146,6 +148,7 @@ def test_generate_decision_with_new_context(client, monkeypatch):
     response = client.post(
         "/api/v1/decisions/generate",
         json={"account_id": 1},
+        headers=auth_headers,
     )
 
     # Verify the response
@@ -153,6 +156,3 @@ def test_generate_decision_with_new_context(client, monkeypatch):
     response_json = response.json()
     assert "decision" in response_json
     assert "decisions" in response_json["decision"]
-
-    # Clean up the dependency override
-    app.dependency_overrides = {}

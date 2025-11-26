@@ -44,16 +44,18 @@ class AccountCreate(BaseCreateSchema):
     api_key: Optional[str] = Field(None, description="API key")
     api_secret: Optional[str] = Field(None, description="API secret")
     api_passphrase: Optional[str] = Field(None, description="API passphrase")
-    leverage: float = Field(default=2.0, ge=1.0, le=5.0, description="Trading leverage")
+    leverage: float = Field(default=2.0, ge=1.0, le=20.0, description="Trading leverage")
     max_position_size_usd: float = Field(
         default=10000.0, gt=0, description="Max position size in USD"
     )
     risk_per_trade: float = Field(
         default=0.02, ge=0.01, le=0.1, description="Risk per trade (0.01-0.1)"
     )
-    is_paper_trading: bool = Field(default=False, description="Is paper trading")
+    is_paper_trading: bool = Field(default=True, description="Is paper trading")
     is_multi_account: bool = Field(default=False, description="Is multi-account mode")
-    user_id: int = Field(..., description="User ID")
+    balance_usd: Optional[float] = Field(
+        None, ge=0, description="Initial balance for paper trading"
+    )
 
 
 class AccountUpdate(BaseUpdateSchema):
@@ -61,25 +63,59 @@ class AccountUpdate(BaseUpdateSchema):
 
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = Field(None, max_length=1000)
-    leverage: Optional[float] = Field(None, ge=1.0, le=5.0)
+    status: Optional[str] = Field(None, pattern="^(active|paused|stopped)$")
+    api_key: Optional[str] = None
+    api_secret: Optional[str] = None
+    leverage: Optional[float] = Field(None, ge=1.0, le=20.0)
     max_position_size_usd: Optional[float] = Field(None, gt=0)
     risk_per_trade: Optional[float] = Field(None, ge=0.01, le=0.1)
     is_paper_trading: Optional[bool] = None
     is_enabled: Optional[bool] = None
+    balance_usd: Optional[float] = Field(None, ge=0)
 
 
 class AccountRead(BaseSchema):
-    """Schema for reading an account."""
+    """Schema for reading an account with masked credentials."""
 
     name: str
     description: Optional[str] = None
     status: str
+    user_id: int
+    has_api_credentials: bool = Field(
+        description="True if API credentials are set (actual credentials are masked)"
+    )
     leverage: float
     max_position_size_usd: float
     risk_per_trade: float
+    maker_fee_bps: float
+    taker_fee_bps: float
+    balance_usd: float
     is_paper_trading: bool
     is_multi_account: bool
     is_enabled: bool
+
+    @classmethod
+    def from_account(cls, account):
+        """Create AccountRead from Account model with credential masking."""
+        return cls(
+            id=account.id,
+            name=account.name,
+            description=account.description,
+            status=account.status,
+            user_id=account.user_id,
+            has_api_credentials=bool(account.api_key),
+            leverage=account.leverage,
+            max_position_size_usd=account.max_position_size_usd,
+            risk_per_trade=account.risk_per_trade,
+            maker_fee_bps=account.maker_fee_bps,
+            taker_fee_bps=account.taker_fee_bps,
+            balance_usd=account.balance_usd,
+            is_paper_trading=account.is_paper_trading,
+            is_multi_account=account.is_multi_account,
+            is_enabled=account.is_enabled,
+            created_at=account.created_at,
+            updated_at=account.updated_at,
+        )
 
 
 class AccountListResponse(BaseSchema):

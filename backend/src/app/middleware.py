@@ -14,6 +14,12 @@ class AdminOnlyMiddleware(BaseHTTPMiddleware):
         if request.method in ["POST", "PUT", "DELETE"]:
             # A list of routes that are exempt from the admin check
             exempt_routes = ["/api/v1/auth/login", "/api/v1/auth/challenge"]
+
+            # Account management routes handle their own ownership control
+            # so they don't need admin-only restriction
+            if request.url.path.startswith("/api/v1/accounts"):
+                return await call_next(request)
+
             if request.url.path in exempt_routes:
                 return await call_next(request)
 

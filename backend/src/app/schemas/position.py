@@ -17,7 +17,7 @@ class PositionCreate(BaseCreateSchema):
     side: str = Field(..., description="Position side: long or short")
     entry_price: float = Field(..., gt=0, description="Entry price")
     quantity: float = Field(..., gt=0, description="Position quantity")
-    leverage: float = Field(default=1.0, ge=1.0, le=5.0, description="Position leverage")
+    leverage: float = Field(default=1.0, ge=1.0, le=20.0, description="Position leverage")
     stop_loss: Optional[float] = Field(None, gt=0, description="Stop loss price")
     take_profit: Optional[float] = Field(None, gt=0, description="Take profit price")
 
