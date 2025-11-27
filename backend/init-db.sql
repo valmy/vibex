@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS trading.accounts (
     leverage REAL NOT NULL DEFAULT 2.0,
     max_position_size_usd REAL NOT NULL DEFAULT 10000.0,
     risk_per_trade REAL NOT NULL DEFAULT 0.02,
+    maker_fee_bps DOUBLE PRECISION NOT NULL DEFAULT 5.0,
+    taker_fee_bps DOUBLE PRECISION NOT NULL DEFAULT 20.0,
+    balance_usd DOUBLE PRECISION NOT NULL DEFAULT 0.0,
     is_paper_trading BOOLEAN NOT NULL DEFAULT FALSE,
     is_multi_account BOOLEAN NOT NULL DEFAULT FALSE,
     is_enabled BOOLEAN NOT NULL DEFAULT TRUE
@@ -58,6 +61,8 @@ CREATE TABLE IF NOT EXISTS trading.strategies (
     timeframe_preference JSON NOT NULL,
     max_positions INTEGER NOT NULL DEFAULT 3,
     position_sizing VARCHAR(50) NOT NULL DEFAULT 'percentage',
+    order_preference VARCHAR(50) NOT NULL DEFAULT 'any',
+    funding_rate_threshold DOUBLE PRECISION NOT NULL DEFAULT 0.0,
     risk_parameters JSON NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     is_default BOOLEAN NOT NULL DEFAULT FALSE,
@@ -116,6 +121,9 @@ CREATE TABLE IF NOT EXISTS trading.strategy_performances (
     profit_factor REAL NOT NULL DEFAULT 0.0,
     avg_trade_duration_hours REAL NOT NULL DEFAULT 0.0,
     total_volume_traded REAL NOT NULL DEFAULT 0.0,
+    total_fees_paid DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    total_funding_paid DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    total_liquidations INTEGER NOT NULL DEFAULT 0,
     var_95 REAL,
     max_consecutive_losses INTEGER NOT NULL DEFAULT 0,
     max_consecutive_wins INTEGER NOT NULL DEFAULT 0,
@@ -234,30 +242,36 @@ CREATE TABLE IF NOT EXISTS trading.performance_metrics (
     average_win REAL,
     average_loss REAL,
     profit_factor REAL,
-    max_drawdown REAL,
-    max_drawdown_percent REAL,
-    sharpe_ratio REAL,
-    sortino_ratio REAL
+    max_drawdown DOUBLE PRECISION,
+    max_drawdown_percent DOUBLE PRECISION,
+    sharpe_ratio DOUBLE PRECISION,
+    sortino_ratio DOUBLE PRECISION
 );
 CREATE INDEX IF NOT EXISTS idx_performance_account_id ON trading.performance_metrics (account_id);
 CREATE INDEX IF NOT EXISTS idx_performance_period ON trading.performance_metrics (period);
 
--- Decisions table
+-- Decisions table (supports both single-asset and multi-asset decisions)
 CREATE TABLE IF NOT EXISTS trading.decisions (
     id SERIAL PRIMARY KEY,
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     account_id INTEGER NOT NULL REFERENCES trading.accounts(id),
     strategy_id VARCHAR(100) NOT NULL,
-    symbol VARCHAR(20) NOT NULL,
-    action VARCHAR(20) NOT NULL,
-    allocation_usd REAL NOT NULL DEFAULT 0.0,
+    -- Multi-asset decision fields
+    asset_decisions JSON,
+    portfolio_rationale TEXT,
+    total_allocation_usd DOUBLE PRECISION,
+    portfolio_risk_level VARCHAR(10),
+    -- Legacy single-asset decision fields (nullable for multi-asset decisions)
+    symbol VARCHAR(20),
+    action VARCHAR(20),
+    allocation_usd REAL DEFAULT 0.0,
     tp_price REAL,
     sl_price REAL,
-    exit_plan TEXT NOT NULL,
-    rationale TEXT NOT NULL,
-    confidence REAL NOT NULL,
-    risk_level VARCHAR(10) NOT NULL,
+    exit_plan TEXT,
+    rationale TEXT,
+    confidence REAL,
+    risk_level VARCHAR(10),
     "timestamp" TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     position_adjustment JSON,
     order_adjustment JSON,
@@ -325,6 +339,7 @@ CREATE TABLE IF NOT EXISTS trading.market_data (
     number_of_trades REAL,
     taker_buy_base_asset_volume REAL,
     taker_buy_quote_asset_volume REAL,
+    funding_rate REAL,
     PRIMARY KEY (time, id)
 );
 CREATE INDEX IF NOT EXISTS idx_market_data_symbol ON trading.market_data (symbol);
