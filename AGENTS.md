@@ -3,6 +3,7 @@
 ## Build/Lint/Test Commands
 
 ### Development Setup
+
 ```bash
 # Install dependencies (always use uv for better performance)
 uv pip install -e backend/
@@ -10,6 +11,7 @@ uv pip install -e backend/[dev,test]
 ```
 
 ### Running Tests
+
 ```bash
 # Run all tests
 cd backend && uv run pytest
@@ -28,6 +30,7 @@ cd backend && uv run pytest tests/integration/
 ```
 
 ### Linting and Formatting
+
 ```bash
 # Format code
 cd backend && uv run ruff format .
@@ -72,12 +75,9 @@ cd backend && podman-compose logs backend
 # Stop services
 cd backend && podman-compose down
 
-# Remove volumes
+# Remove volumes (destroys all data - use for fresh start)
 cd backend && podman-compose down -v
-
-# Initial database will be set by backend/init-db.sql
-# Run migrations
-cd backend && ENVINRONMENT=testing uv run alembic upgrade head
+```
 
 ### With podman-compose (Recommended for Development)
 
@@ -100,21 +100,95 @@ cd backend && podman-compose logs -f backend
 cd backend && podman-compose down
 ```
 
+## Database Schema Management
+
+### Overview
+
+The database schema is managed using two components:
+
+1. **`backend/init-db.sql`** - Single source of truth for initial schema. Executed automatically on first container start via PostgreSQL's entrypoint.
+2. **Alembic migrations** - Used for tracking schema versions and applying incremental changes.
+
+The current baseline migration is `bfb15195438f`.
+
+### Fresh Installation Setup
+
+After starting containers for the first time (or after `podman-compose down -v`):
+
+```bash
+# Wait for database to initialize
+sleep 15
+
+# Stamp the database with the baseline Alembic revision
+# This marks the database as current without running migrations
+# (init-db.sql already created the schema)
+cd backend && ENVIRONMENT=testing uv run alembic stamp head
+```
+
+**Important**: Use `ENVIRONMENT=testing` when running Alembic commands from the host machine (uses `localhost` instead of container hostname `postgres`).
+
+### Common Alembic Commands
+
+```bash
+# Check current migration version
+cd backend && ENVIRONMENT=testing uv run alembic current
+
+# View migration history
+cd backend && ENVIRONMENT=testing uv run alembic history
+
+# Apply pending migrations (for existing databases)
+cd backend && ENVIRONMENT=testing uv run alembic upgrade head
+
+# Rollback one migration
+cd backend && ENVIRONMENT=testing uv run alembic downgrade -1
+```
+
+### Making Schema Changes
+
+Follow this workflow for all schema modifications:
+
+1. **Modify SQLAlchemy models** in `backend/src/app/models/`
+
+2. **Generate migration**:
+
+   ```bash
+   cd backend && ENVIRONMENT=testing uv run alembic revision -m "description" --autogenerate
+   ```
+
+3. **Review the generated migration** in `backend/alembic/versions/`
+
+4. **Apply the migration**:
+
+   ```bash
+   cd backend && ENVIRONMENT=testing uv run alembic upgrade head
+   ```
+
+5. **Update `backend/init-db.sql`** to include the new columns/tables (keeps fresh installations in sync)
+
+### Important Notes
+
+- **TimescaleDB hypertable** for `market_data` is managed in `init-db.sql`, not Alembic
+- **Never manually edit** the `alembic_version` table
+- See `docs/database-baseline-reset.md` for detailed troubleshooting
+
 ## Code Style Guidelines
 
 ### Imports
+
 - Use absolute imports when possible
 - Group imports in order: standard library, third-party, local
 - Use explicit imports (no `from module import *`)
 - Place imports at the top of the file
 
 ### Formatting
+
 - Line length: 100 characters (Ruff)
 - Indentation: 4 spaces (no tabs)
 - Use Ruff for automatic formatting
 - Use Ruff for linting
 
 ### Types and Naming
+
 - Use type hints for all function parameters and return values
 - Use descriptive variable names in snake_case
 - Class names in PascalCase
@@ -122,6 +196,7 @@ cd backend && podman-compose down
 - Private methods prefixed with underscore
 
 ### Error Handling
+
 - Create custom exception classes for specific error scenarios
 - Inherit from appropriate base exception classes
 - Always include meaningful error messages
@@ -129,12 +204,14 @@ cd backend && podman-compose down
 - Handle exceptions at the appropriate level
 
 ### Documentation
+
 - Use docstrings for all public classes and functions
 - Follow Google-style docstrings with Args/Returns sections
 - Include type information in docstrings
 - Keep comments focused on why, not what
 
 ### Testing
+
 - Use pytest for testing
 - Write both unit and integration tests
 - Use fixtures for test setup
