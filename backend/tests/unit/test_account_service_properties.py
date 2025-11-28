@@ -117,6 +117,7 @@ async def test_property_account_creation_persistence(account_data, user_data):
 
     # Mock database session
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     mock_execute_result = MagicMock()
 
     # Create mock user
@@ -350,6 +351,7 @@ async def test_property_admin_access_granted(owner_data, admin_data):
 
     # Mock database session
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
 
     # Create owner user
     owner = User(**owner_data)
@@ -427,6 +429,7 @@ async def test_property_update_persistence(user_data, new_description, new_lever
 
     # Mock database session
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
 
     # Create user
     user = User(**user_data)
@@ -767,6 +770,7 @@ async def test_property_balance_sync_updates_balance(user_data, new_balance):
 
     # Mock database session
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
 
     # Create user
     user = User(**user_data)
@@ -880,6 +884,7 @@ async def test_property_status_change_logging(
 
     # Mock database
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = account
     mock_db.execute.return_value = mock_result

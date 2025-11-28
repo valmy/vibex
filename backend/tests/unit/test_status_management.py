@@ -36,6 +36,7 @@ async def test_status_transition_active_to_paused():
 
     # Mock database
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = account
     mock_db.execute.return_value = mock_result
@@ -70,6 +71,7 @@ async def test_status_transition_active_to_stopped():
 
     # Mock database
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = account
     mock_db.execute.return_value = mock_result
@@ -104,6 +106,7 @@ async def test_status_transition_stopped_to_active_paper_trading():
 
     # Mock database
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = account
     mock_db.execute.return_value = mock_result
@@ -175,6 +178,7 @@ async def test_status_transition_stopped_to_active_real_trading_with_credentials
 
     # Mock database
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = account
     mock_db.execute.return_value = mock_result
@@ -209,6 +213,7 @@ async def test_status_transition_paused_to_active():
 
     # Mock database
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = account
     mock_db.execute.return_value = mock_result
