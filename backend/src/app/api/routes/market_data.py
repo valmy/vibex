@@ -26,7 +26,17 @@ router = APIRouter(prefix="/api/v1/market-data", tags=["Market Data"])
 
 @router.get("", response_model=MarketDataListResponse)
 async def list_market_data(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
-    """List all market data with pagination."""
+    """
+    List all market data with pagination.
+
+    Args:
+        skip (int): Number of records to skip. Defaults to 0.
+        limit (int): Number of records to return. Defaults to 100.
+        db (AsyncSession): Database session.
+
+    Returns:
+        MarketDataListResponse: A list of market data entries and the total count.
+    """
     try:
         # Get total count
         count_result = await db.execute(select(func.count(MarketData.id)))
@@ -44,7 +54,19 @@ async def list_market_data(skip: int = 0, limit: int = 100, db: AsyncSession = D
 
 @router.get("/{data_id}", response_model=MarketDataRead)
 async def get_market_data(data_id: int, db: AsyncSession = Depends(get_db)):
-    """Get a specific market data entry by ID."""
+    """
+    Get a specific market data entry by ID.
+
+    Args:
+        data_id (int): The ID of the market data entry.
+        db (AsyncSession): Database session.
+
+    Returns:
+        MarketDataRead: The requested market data entry.
+
+    Raises:
+        HTTPException: If the market data entry is not found.
+    """
     try:
         result = await db.execute(select(MarketData).where(MarketData.id == data_id))
         data = result.scalar_one_or_none()
@@ -67,7 +89,18 @@ async def get_market_data_by_symbol(
     limit: int = Query(100, ge=1, le=1000, description="Number of records"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get market data for a specific symbol."""
+    """
+    Get market data for a specific symbol.
+
+    Args:
+        symbol (str): The trading symbol (e.g., BTCUSDT).
+        interval (str): Candlestick interval (e.g., "1h"). Defaults to "1h".
+        limit (int): Number of records to return. Defaults to 100. Max 1000.
+        db (AsyncSession): Database session.
+
+    Returns:
+        MarketDataListResponse: A list of market data entries for the symbol.
+    """
     try:
         result = await db.execute(
             select(MarketData)
@@ -129,7 +162,19 @@ async def get_market_data_range(
     interval: str = Query("1h", description="Candlestick interval"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get market data within a time range."""
+    """
+    Get market data within a time range.
+
+    Args:
+        symbol (str): The trading symbol (e.g., BTCUSDT).
+        start_time (datetime): Start time of the range (ISO format).
+        end_time (datetime): End time of the range (ISO format).
+        interval (str): Candlestick interval (e.g., "1h"). Defaults to "1h".
+        db (AsyncSession): Database session.
+
+    Returns:
+        MarketDataListResponse: A list of market data entries within the specified time range.
+    """
     try:
         service = get_market_data_service()
         data = await service.get_market_data_range(db, symbol, interval, start_time, end_time)
