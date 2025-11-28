@@ -91,22 +91,41 @@ async def test_generate_decision_with_new_context(client, auth_headers, monkeypa
     mock_context = Mock(spec=TradingContext)
     mock_context.symbols = ["BTCUSDT", "ETHUSDT"]
     mock_context.account_id = 1
-    mock_context.market_data = {
-        "assets": {
-            "BTCUSDT": {
-                "technical_indicators": {
-                    "interval": {"ema_20": list(range(10))},
-                    "long_interval": {"ema_20": list(range(10))},
-                }
-            },
-            "ETHUSDT": {
-                "technical_indicators": {
-                    "interval": {"ema_20": list(range(10))},
-                    "long_interval": {"ema_20": list(range(10))},
-                }
-            },
+
+    # Create proper MarketContext object to avoid Pydantic serialization warnings
+    from app.schemas.trading_decision import (
+        MarketContext,
+        AssetMarketData,
+        TechnicalIndicators,
+        TechnicalIndicatorsSet
+    )
+
+    mock_context.market_data = MarketContext(
+        assets={
+            "BTCUSDT": AssetMarketData(
+                symbol="BTCUSDT",
+                current_price=50000.0,
+                price_change_24h=2.5,
+                volume_24h=1000000.0,
+                volatility=0.02,
+                technical_indicators=TechnicalIndicators(
+                    interval=TechnicalIndicatorsSet(ema_20=list(range(10))),
+                    long_interval=TechnicalIndicatorsSet(ema_20=list(range(10)))
+                )
+            ),
+            "ETHUSDT": AssetMarketData(
+                symbol="ETHUSDT",
+                current_price=3000.0,
+                price_change_24h=1.5,
+                volume_24h=500000.0,
+                volatility=0.03,
+                technical_indicators=TechnicalIndicators(
+                    interval=TechnicalIndicatorsSet(ema_20=list(range(10))),
+                    long_interval=TechnicalIndicatorsSet(ema_20=list(range(10)))
+                )
+            )
         }
-    }
+    )
 
     mock_result = DecisionResult(
         decision=mock_decision,
