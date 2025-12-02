@@ -102,15 +102,12 @@ async def get_market_data_by_symbol(
         MarketDataListResponse: A list of market data entries for the symbol.
     """
     try:
-        result = await db.execute(
-            select(MarketData)
-            .where(and_(MarketData.symbol == symbol, MarketData.interval == interval))
-            .order_by(MarketData.time.desc())
-            .limit(limit)
+        service = get_market_data_service()
+        data, total = await service.get_latest_market_data_with_total(
+            db, symbol, interval, limit
         )
-        data = result.scalars().all()
 
-        return MarketDataListResponse(items=list(reversed(data)), total=len(data))
+        return MarketDataListResponse(items=data, total=total)
     except Exception as e:
         logger.error(f"Error getting market data for {symbol}: {e}")
         raise HTTPException(status_code=500, detail="Failed to get market data")

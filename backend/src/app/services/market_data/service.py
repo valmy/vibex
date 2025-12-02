@@ -373,6 +373,23 @@ class MarketDataService:
         """
         return await self.repository.get_latest(db, symbol, interval, limit)
 
+    async def get_latest_market_data_with_total(
+        self, db: AsyncSession, symbol: str, interval: str = "1h", limit: int = 100
+    ) -> tuple[List, int]:
+        """
+        Get latest market data and total count from database.
+
+        Args:
+            db: Database session
+            symbol: Trading pair symbol
+            interval: Candlestick interval
+            limit: Number of records to fetch
+
+        Returns:
+            Tuple containing list of MarketData records and total count
+        """
+        return await self.repository.get_latest_with_count(db, symbol, interval, limit)
+
     async def get_market_data_range(
         self, db: AsyncSession, symbol: str, interval: str, start_time, end_time
     ) -> List:
