@@ -231,9 +231,7 @@ async def test_property_ownership_filtering(num_accounts, user_data):
     user_result = MagicMock()
     user_result.scalar_one_or_none.return_value = user
 
-    mock_db.execute = AsyncMock(
-        side_effect=[count_result, accounts_result, user_result]
-    )
+    mock_db.execute = AsyncMock(side_effect=[count_result, accounts_result, user_result])
 
     # List accounts for the user
     accounts, total = await service.list_user_accounts(mock_db, user.id)

@@ -218,9 +218,7 @@ async def test_list_user_accounts_with_ownership_filtering(
     user_result = MagicMock()
     user_result.scalar_one_or_none.return_value = mock_user
 
-    mock_db_session.execute = AsyncMock(
-        side_effect=[count_result, accounts_result, user_result]
-    )
+    mock_db_session.execute = AsyncMock(side_effect=[count_result, accounts_result, user_result])
 
     # List user accounts
     accounts, total = await account_service.list_user_accounts(

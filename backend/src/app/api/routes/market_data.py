@@ -8,7 +8,7 @@ Integrates with MarketDataService for real-time data fetching and storage.
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import and_, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.exceptions import ResourceNotFoundError, to_http_exception
@@ -103,9 +103,7 @@ async def get_market_data_by_symbol(
     """
     try:
         service = get_market_data_service()
-        data, total = await service.get_latest_market_data_with_total(
-            db, symbol, interval, limit
-        )
+        data, total = await service.get_latest_market_data_with_total(db, symbol, interval, limit)
 
         return MarketDataListResponse(items=data, total=total)
     except Exception as e:
