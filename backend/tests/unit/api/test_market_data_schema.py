@@ -22,7 +22,11 @@ def test_market_data_schema_mapping():
 
     assert schema.time == now
     assert schema.symbol == "BTCUSDT"
+    assert schema.timeframe == "1h"
     assert schema.open_price == 100.0
+    assert schema.high_price == 110.0
+    assert schema.low_price == 90.0
+    assert schema.close_price == 105.0
 
     # Check serialization
     json_output = schema.model_dump_json()
