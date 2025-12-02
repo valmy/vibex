@@ -2,6 +2,7 @@
 Market data schemas for request/response validation.
 """
 
+from datetime import datetime
 from typing import Optional
 
 from .base import BaseSchema
@@ -17,7 +18,7 @@ class MarketDataRead(BaseSchema):
     low_price: float
     close_price: float
     volume: float
-    timestamp: Optional[str] = None
+    time: datetime
     funding_rate: Optional[float] = None
 
 
