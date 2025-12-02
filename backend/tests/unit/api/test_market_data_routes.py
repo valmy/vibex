@@ -1,25 +1,21 @@
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 from src.app.api.routes.market_data import get_market_data_by_symbol, get_market_data_range
 from src.app.models.market_data import MarketData
+
 
 @pytest.mark.asyncio
 async def test_get_market_data_by_symbol_correct_total_count():
     """Test that total count is independent of pagination limit."""
     mock_db = AsyncMock()
 
-    # Mock return values
-    # We expect two calls to execute:
-    # 1. Count query -> returns scalar 200
-    # 2. Data query -> returns list of 10 items
+    # Mock service
+    mock_service = MagicMock()
 
-    # Mock for count query result
-    mock_count_result = MagicMock()
-    mock_count_result.scalar.return_value = 200
-
-    # Mock for data query result
-    mock_data_result = MagicMock()
+    # Mock data items
     mock_data = []
     for _ in range(10):
         m = MagicMock(spec=MarketData)
@@ -35,21 +31,22 @@ async def test_get_market_data_by_symbol_correct_total_count():
         m.funding_rate = None
         mock_data.append(m)
 
-    mock_data_result.scalars.return_value.all.return_value = mock_data
+    # Return (data, total_count=200)
+    mock_service.get_latest_market_data_with_total = AsyncMock(return_value=(mock_data, 200))
 
-    # side_effect to return count_result then data_result
-    mock_db.execute.side_effect = [mock_count_result, mock_data_result]
+    # Patch get_market_data_service
+    with patch("src.app.api.routes.market_data.get_market_data_service", return_value=mock_service):
+        response = await get_market_data_by_symbol(
+            symbol="BTCUSDT", interval="1h", limit=10, db=mock_db
+        )
 
-    response = await get_market_data_by_symbol(
-        symbol="BTCUSDT",
-        interval="1h",
-        limit=10,
-        db=mock_db
-    )
+        assert len(response.items) == 10
+        assert response.total == 200
+        # Verify service was called correctly
+        mock_service.get_latest_market_data_with_total.assert_called_once_with(
+            mock_db, "BTCUSDT", "1h", 10
+        )
 
-    assert len(response.items) == 10
-    assert response.total == 200
-    assert mock_db.execute.call_count == 2
 
 @pytest.mark.asyncio
 async def test_get_market_data_range_total_count():
@@ -83,7 +80,7 @@ async def test_get_market_data_range_total_count():
             start_time=datetime.now(timezone.utc),
             end_time=datetime.now(timezone.utc),
             interval="1h",
-            db=mock_db
+            db=mock_db,
         )
 
         assert len(response.items) == 5

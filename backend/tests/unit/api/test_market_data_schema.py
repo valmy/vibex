@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
+
 from src.app.models.market_data import MarketData
 from src.app.schemas.market_data import MarketDataRead
+
 
 def test_market_data_schema_mapping():
     """Test that MarketData model correctly maps to MarketDataRead schema."""
@@ -15,7 +17,7 @@ def test_market_data_schema_mapping():
         high=110.0,
         low=90.0,
         close=105.0,
-        volume=1000.0
+        volume=1000.0,
     )
 
     schema = MarketDataRead.model_validate(md)
@@ -34,4 +36,4 @@ def test_market_data_schema_mapping():
     assert "2023-10-27T10:00:00Z" in json_output or "2023-10-27T10:00:00+00:00" in json_output
     assert "time" in json_output
     # Check that timestamp is NOT in json output (it was renamed)
-    assert "\"timestamp\"" not in json_output
+    assert '"timestamp"' not in json_output

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.logging import get_logger
 from ...core.security import get_current_user
 from ...db import get_db
-from ...models import Account, User
+from ...models import User
 from ...schemas import AccountCreate, AccountListResponse, AccountRead, AccountUpdate
 from ...services.account_service import (
     AccountAccessDeniedError,
@@ -16,7 +16,6 @@ from ...services.account_service import (
     AccountService,
     AccountValidationError,
     ActivePositionsError,
-    BalanceSyncError,
     DuplicateAccountNameError,
     ExternalApiError,
     InvalidApiCredentialsError,

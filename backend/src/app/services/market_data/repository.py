@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from typing import List
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...models.market_data import MarketData
@@ -136,6 +136,43 @@ class MarketDataRepository:
             return list(reversed(data))  # Return in ascending order
         except Exception as e:
             logger.error(f"Error retrieving market data: {e}")
+            raise
+
+    async def get_latest_with_count(
+        self, db: AsyncSession, symbol: str, interval: str = "1h", limit: int = 100
+    ) -> tuple[List[MarketData], int]:
+        """
+        Get latest market data and total count from database.
+
+        Args:
+            db: Database session
+            symbol: Trading pair symbol
+            interval: Candlestick interval
+            limit: Number of records to fetch
+
+        Returns:
+            Tuple containing list of MarketData records and total count
+        """
+        try:
+            # Get total count
+            count_result = await db.execute(
+                select(func.count(MarketData.id)).where(
+                    and_(MarketData.symbol == symbol, MarketData.interval == interval)
+                )
+            )
+            total = count_result.scalar()
+
+            # Get data
+            result = await db.execute(
+                select(MarketData)
+                .where(and_(MarketData.symbol == symbol, MarketData.interval == interval))
+                .order_by(MarketData.time.desc())
+                .limit(limit)
+            )
+            data = result.scalars().all()
+            return list(reversed(data)), total
+        except Exception as e:
+            logger.error(f"Error retrieving market data with count: {e}")
             raise
 
     async def get_range(

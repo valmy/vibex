@@ -94,10 +94,10 @@ async def test_generate_decision_with_new_context(client, auth_headers, monkeypa
 
     # Create proper MarketContext object to avoid Pydantic serialization warnings
     from app.schemas.trading_decision import (
-        MarketContext,
         AssetMarketData,
+        MarketContext,
         TechnicalIndicators,
-        TechnicalIndicatorsSet
+        TechnicalIndicatorsSet,
     )
 
     mock_context.market_data = MarketContext(
@@ -110,8 +110,8 @@ async def test_generate_decision_with_new_context(client, auth_headers, monkeypa
                 volatility=0.02,
                 technical_indicators=TechnicalIndicators(
                     interval=TechnicalIndicatorsSet(ema_20=list(range(10))),
-                    long_interval=TechnicalIndicatorsSet(ema_20=list(range(10)))
-                )
+                    long_interval=TechnicalIndicatorsSet(ema_20=list(range(10))),
+                ),
             ),
             "ETHUSDT": AssetMarketData(
                 symbol="ETHUSDT",
@@ -121,9 +121,9 @@ async def test_generate_decision_with_new_context(client, auth_headers, monkeypa
                 volatility=0.03,
                 technical_indicators=TechnicalIndicators(
                     interval=TechnicalIndicatorsSet(ema_20=list(range(10))),
-                    long_interval=TechnicalIndicatorsSet(ema_20=list(range(10)))
-                )
-            )
+                    long_interval=TechnicalIndicatorsSet(ema_20=list(range(10))),
+                ),
+            ),
         }
     )
 
