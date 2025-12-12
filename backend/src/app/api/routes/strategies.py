@@ -12,7 +12,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from ...core.exceptions import ConfigurationError, ValidationError
+from ...core.exceptions import ConfigurationError, ResourceNotFoundError, ValidationError
 from ...core.security import get_current_user
 from ...db.session import get_session_factory
 from ...models.account import User
@@ -210,12 +210,10 @@ async def assign_strategy_to_account(
 
         return assignment
 
+    except ResourceNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except ValidationError as e:
-        error_msg = str(e)
-        # Return 404 for not-found errors, 400 for other validation errors
-        if "not found" in error_msg.lower():
-            raise HTTPException(status_code=404, detail=error_msg)
-        raise HTTPException(status_code=400, detail=error_msg)
+        raise HTTPException(status_code=400, detail=str(e))
     except ConfigurationError as e:
         logger.error(f"Configuration error assigning strategy to account {account_id}: {e}")
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
@@ -246,6 +244,8 @@ async def switch_account_strategy(
 
         return assignment
 
+    except ResourceNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except ConfigurationError as e:

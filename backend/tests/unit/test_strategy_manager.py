@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.app.core.exceptions import ValidationError
+from src.app.core.exceptions import ValidationError, StrategyNotFoundError
 from src.app.models.account import Account as AccountModel
 from src.app.models.strategy import Strategy as StrategyModel
 from src.app.models.strategy import StrategyAssignment as StrategyAssignmentModel
@@ -301,7 +301,7 @@ class TestStrategyManager:
         # Configure execute side effects: account, strategy
         mock_session.execute.side_effect = [mock_result_account, mock_result_strategy]
 
-        with pytest.raises(ValidationError, match="Strategy 'nonexistent' not found"):
+        with pytest.raises(StrategyNotFoundError, match="Strategy with id nonexistent not found"):
             await strategy_manager.assign_strategy_to_account(
                 account_id=account_id, strategy_id="nonexistent"
             )

@@ -13,7 +13,13 @@ from typing import Dict, List, Literal, Optional, Tuple
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from ...core.exceptions import ConfigurationError, ValidationError
+from ...core.exceptions import (
+    AccountNotFoundError,
+    ConfigurationError,
+    StrategyAssignmentError,
+    StrategyNotFoundError,
+    ValidationError,
+)
 from ...models.account import Account as AccountModel
 from ...models.strategy import Strategy as StrategyModel
 from ...models.strategy import StrategyAssignment as StrategyAssignmentModel
@@ -327,7 +333,7 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 stmt = select(StrategyModel).where(StrategyModel.strategy_id == strategy_id)
                 result = await session.execute(stmt)
                 if result.scalar_one_or_none():
-                    raise ValidationError(f"Strategy '{strategy_id}' already exists")
+                    raise StrategyAssignmentError(f"Strategy '{strategy_id}' already exists")
 
                 # Persist to DB
                 db_strategy = StrategyModel(
@@ -443,7 +449,7 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 account = account_result.scalar_one_or_none()
 
                 if not account:
-                    raise ValidationError(f"Account {account_id} not found")
+                    raise AccountNotFoundError(account_id)
 
                 # 1. Get the strategy to assign
                 stmt = select(StrategyModel).where(StrategyModel.strategy_id == strategy_id)
@@ -451,9 +457,9 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 strategy = result.scalar_one_or_none()
 
                 if not strategy:
-                    raise ValidationError(f"Strategy '{strategy_id}' not found")
+                    raise StrategyNotFoundError(strategy_id)
                 if not strategy.is_active:
-                    raise ValidationError(f"Strategy '{strategy_id}' is not active")
+                    raise StrategyAssignmentError(f"Strategy '{strategy_id}' is not active")
 
                 # 2. Get current active assignment
                 stmt = select(StrategyAssignmentModel).where(
@@ -509,7 +515,7 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                     assigned_at=new_assignment.assigned_at,
                 )
 
-            except ValidationError:
+            except (AccountNotFoundError, StrategyNotFoundError, StrategyAssignmentError):
                 raise
             except Exception as e:
                 await session.rollback()
@@ -578,7 +584,7 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
         current_strategy_id = current_strategy.strategy_id if current_strategy else None
 
         if current_strategy_id == new_strategy_id:
-            raise ValidationError(
+            raise StrategyAssignmentError(
                 f"Account {account_id} is already using strategy '{new_strategy_id}'"
             )
 
@@ -606,10 +612,10 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
         """
         strategy = await self.get_strategy(new_strategy_id)
         if not strategy:
-            raise ValidationError(f"Strategy '{new_strategy_id}' not found")
+            raise StrategyNotFoundError(new_strategy_id)
 
         if not strategy.is_active:
-            raise ValidationError(f"Strategy '{new_strategy_id}' is not active")
+            raise StrategyAssignmentError(f"Strategy '{new_strategy_id}' is not active")
 
         if current_strategy_id == "conservative" and new_strategy_id == "aggressive":
             logger.warning(

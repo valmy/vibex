@@ -770,11 +770,11 @@ class TestStrategyAPIE2E:
         assert "already using" in data["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_switch_strategy_not_found_returns_400(
+    async def test_switch_strategy_not_found_returns_404(
         self, client, test_users, assigned_strategy, get_auth_headers
     ):
         """
-        Test POST /api/v1/strategies/account/{account_id}/switch returns 400 for invalid strategy.
+        Test POST /api/v1/strategies/account/{account_id}/switch returns 404 for invalid strategy.
 
         **Feature: strategy-management**
         **Test ID: SWITCH_ERR_01**
@@ -794,7 +794,7 @@ class TestStrategyAPIE2E:
             headers=headers,
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 404
         data = response.json()
         assert "not found" in data["detail"].lower()
 
