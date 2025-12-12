@@ -544,11 +544,16 @@ class DecisionEngine:
         """
         try:
             # Extract market and account context for storage
-            market_context_dict = context.market_data.model_dump() if context.market_data else {}
-            account_context_dict = (
-                context.account_state.model_dump() if context.account_state else {}
+            # Use mode='json' to ensure all values are JSON-serializable (e.g., datetime -> str)
+            market_context_dict = (
+                context.market_data.model_dump(mode="json") if context.market_data else {}
             )
-            risk_metrics_dict = context.risk_metrics.model_dump() if context.risk_metrics else {}
+            account_context_dict = (
+                context.account_state.model_dump(mode="json") if context.account_state else {}
+            )
+            risk_metrics_dict = (
+                context.risk_metrics.model_dump(mode="json") if context.risk_metrics else {}
+            )
 
             # Save decision to database
             await self.decision_repository.save_decision(

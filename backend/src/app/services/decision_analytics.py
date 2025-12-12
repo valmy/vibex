@@ -9,11 +9,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from sqlalchemy import and_, func, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.future import select
 
 from ..models.decision import Decision, DecisionResult
-from .decision_repository import DecisionRepository
+from .llm.decision_repository import DecisionRepository
 
 
 @dataclass
@@ -60,10 +60,14 @@ class TradingInsights:
 class DecisionAnalyticsService:
     """Service for decision analytics and performance tracking."""
 
-    def __init__(self, db_session: AsyncSession):
-        """Initialize analytics service."""
-        self.db = db_session
-        self.decision_repo = DecisionRepository(db_session)
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
+        """Initialize analytics service.
+
+        Args:
+            session_factory: Async session factory for creating database sessions.
+        """
+        self.session_factory = session_factory
+        self.decision_repo = DecisionRepository(session_factory)
 
     async def get_decision_metrics(
         self,
@@ -205,45 +209,46 @@ class DecisionAnalyticsService:
         end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=days)
 
-        result = await self.db.execute(
-            text(
+        async with self.session_factory() as session:
+            result = await session.execute(
+                text(
+                    """
+                    SELECT
+                        EXTRACT(DOW FROM timestamp) as day_of_week,
+                        EXTRACT(HOUR FROM timestamp) as hour_of_day,
+                        COUNT(*) as decision_count
+                    FROM trading.decisions
+                    WHERE account_id = :account_id
+                        AND timestamp >= :start_date
+                        AND timestamp <= :end_date
+                    GROUP BY EXTRACT(DOW FROM timestamp), EXTRACT(HOUR FROM timestamp)
+                    ORDER BY day_of_week, hour_of_day
                 """
-                SELECT
-                    EXTRACT(DOW FROM timestamp) as day_of_week,
-                    EXTRACT(HOUR FROM timestamp) as hour_of_day,
-                    COUNT(*) as decision_count
-                FROM trading.decisions
-                WHERE account_id = :account_id
-                    AND timestamp >= :start_date
-                    AND timestamp <= :end_date
-                GROUP BY EXTRACT(DOW FROM timestamp), EXTRACT(HOUR FROM timestamp)
-                ORDER BY day_of_week, hour_of_day
-            """
-            ),
-            {"account_id": account_id, "start_date": start_date, "end_date": end_date},
-        )
+                ),
+                {"account_id": account_id, "start_date": start_date, "end_date": end_date},
+            )
 
-        heatmap = {}
-        for row in result:
-            day = int(row.day_of_week)
-            hour = int(row.hour_of_day)
-            count = int(row.decision_count)
+            heatmap = {}
+            for row in result:
+                day = int(row.day_of_week)
+                hour = int(row.hour_of_day)
+                count = int(row.decision_count)
 
-            day_name = [
-                "Sunday",
-                "Monday",
-                "Tuesday",
-                "Wednesday",
-                "Thursday",
-                "Friday",
-                "Saturday",
-            ][day]
+                day_name = [
+                    "Sunday",
+                    "Monday",
+                    "Tuesday",
+                    "Wednesday",
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                ][day]
 
-            if day_name not in heatmap:
-                heatmap[day_name] = {}
-            heatmap[day_name][f"{hour:02d}:00"] = count
+                if day_name not in heatmap:
+                    heatmap[day_name] = {}
+                heatmap[day_name][f"{hour:02d}:00"] = count
 
-        return heatmap
+            return heatmap
 
     async def get_model_performance_comparison(
         self,
@@ -260,8 +265,9 @@ class DecisionAnalyticsService:
         if end_date:
             query = query.where(Decision.timestamp <= end_date)
 
-        result = await self.db.execute(query)
-        decisions = result.scalars().all()
+        async with self.session_factory() as session:
+            result = await session.execute(query)
+            decisions = result.scalars().all()
 
         model_stats = {}
 
@@ -334,9 +340,9 @@ class DecisionAnalyticsService:
         if end_date:
             query = query.where(Decision.timestamp <= end_date)
 
-        result = await self.db.execute(query)
-
-        return {symbol: float(pnl or 0) for symbol, pnl in result}
+        async with self.session_factory() as session:
+            result = await session.execute(query)
+            return {symbol: float(pnl or 0) for symbol, pnl in result}
 
     async def _calculate_action_pnl(
         self, account_id: int, start_date: datetime, end_date: datetime
@@ -357,8 +363,9 @@ class DecisionAnalyticsService:
             .group_by(Decision.action)
         )
 
-        result = await self.db.execute(query)
-        return {action: float(pnl or 0) for action, pnl in result}
+        async with self.session_factory() as session:
+            result = await session.execute(query)
+            return {action: float(pnl or 0) for action, pnl in result}
 
     async def _calculate_performance_trend(self, account_id: int, lookback_days: int) -> str:
         """Calculate performance trend over time."""
@@ -386,20 +393,21 @@ class DecisionAnalyticsService:
     ) -> float:
         """Get total PnL for a period."""
 
-        result = await self.db.execute(
-            select(func.sum(DecisionResult.realized_pnl))
-            .join(Decision, Decision.id == DecisionResult.decision_id)
-            .where(
-                and_(
-                    Decision.account_id == account_id,
-                    Decision.timestamp >= start_date,
-                    Decision.timestamp <= end_date,
-                    DecisionResult.realized_pnl.isnot(None),
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(func.sum(DecisionResult.realized_pnl))
+                .join(Decision, Decision.id == DecisionResult.decision_id)
+                .where(
+                    and_(
+                        Decision.account_id == account_id,
+                        Decision.timestamp >= start_date,
+                        Decision.timestamp <= end_date,
+                        DecisionResult.realized_pnl.isnot(None),
+                    )
                 )
             )
-        )
 
-        return float(result.scalar() or 0)
+            return float(result.scalar() or 0)
 
     def _get_performance_recommendations(self, performance_trend: str) -> List[str]:
         """Get performance-based recommendations."""
