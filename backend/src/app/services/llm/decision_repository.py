@@ -315,7 +315,7 @@ class DecisionRepository:
 
             except Exception as e:
                 logger.error(f"Failed to get pending decisions for account {account_id}: {e}")
-            raise
+                raise
 
     async def get_decisions_by_strategy(
         self,
