@@ -12,8 +12,10 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from ...core.exceptions import ConfigurationError, ValidationError
+from ...core.exceptions import ConfigurationError, ResourceNotFoundError, ValidationError
+from ...core.security import get_current_user
 from ...db.session import get_session_factory
+from ...models.account import User
 from ...schemas.trading_decision import (
     StrategyAlert,
     StrategyAssignment,
@@ -159,12 +161,15 @@ async def get_strategy(
 
 @router.get("/account/{account_id}", response_model=TradingStrategy)
 async def get_account_strategy(
-    account_id: int, strategy_manager: StrategyManager = Depends(get_strategy_manager)
+    account_id: int,
+    current_user: User = Depends(get_current_user),
+    strategy_manager: StrategyManager = Depends(get_strategy_manager),
 ):
     """
     Get the currently assigned strategy for an account.
 
     Returns the strategy configuration currently assigned to the specified account.
+    Requires authentication.
     """
     try:
         strategy = await strategy_manager.get_account_strategy(account_id)
@@ -205,8 +210,13 @@ async def assign_strategy_to_account(
 
         return assignment
 
+    except ResourceNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except ConfigurationError as e:
+        logger.error(f"Configuration error assigning strategy to account {account_id}: {e}")
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     except Exception as e:
         logger.error(f"Error assigning strategy to account {account_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -234,8 +244,13 @@ async def switch_account_strategy(
 
         return assignment
 
+    except ResourceNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except ConfigurationError as e:
+        logger.error(f"Configuration error switching strategy for account {account_id}: {e}")
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     except Exception as e:
         logger.error(f"Error switching strategy for account {account_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")

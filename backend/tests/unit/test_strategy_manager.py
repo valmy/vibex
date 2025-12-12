@@ -10,7 +10,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.app.core.exceptions import ValidationError
+from src.app.core.exceptions import ValidationError, StrategyNotFoundError
+from src.app.models.account import Account as AccountModel
 from src.app.models.strategy import Strategy as StrategyModel
 from src.app.models.strategy import StrategyAssignment as StrategyAssignmentModel
 from src.app.schemas.trading_decision import (
@@ -229,6 +230,10 @@ class TestStrategyManager:
         account_id = 123
         strategy_id = "conservative_perps"
 
+        # Mock account lookup
+        mock_account = MagicMock(spec=AccountModel)
+        mock_account.id = account_id
+
         # Mock strategy lookup
         mock_strategy = StrategyModel(
             id=1,
@@ -245,15 +250,24 @@ class TestStrategyManager:
             risk_parameters=valid_risk_params,
         )
 
-        # Mock current assignment lookup (None)
+        # Mock account lookup result
+        mock_result_account = MagicMock()
+        mock_result_account.scalar_one_or_none.return_value = mock_account
+
+        # Mock strategy lookup result
         mock_result_strategy = MagicMock()
         mock_result_strategy.scalar_one_or_none.return_value = mock_strategy
 
+        # Mock current assignment lookup (None)
         mock_result_assignment = MagicMock()
         mock_result_assignment.scalar_one_or_none.return_value = None
 
-        # Configure execute side effects
-        mock_session.execute.side_effect = [mock_result_strategy, mock_result_assignment]
+        # Configure execute side effects: account, strategy, assignment
+        mock_session.execute.side_effect = [
+            mock_result_account,
+            mock_result_strategy,
+            mock_result_assignment,
+        ]
 
         assignment = await strategy_manager.assign_strategy_to_account(
             account_id=account_id,
@@ -272,14 +286,24 @@ class TestStrategyManager:
 
     async def test_assign_nonexistent_strategy(self, strategy_manager, mock_session):
         """Test assigning a non-existent strategy."""
-        # Mock strategy lookup returning None
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_session.execute.return_value = mock_result
+        account_id = 123
 
-        with pytest.raises(ValidationError, match="Strategy 'nonexistent' not found"):
+        # Mock account lookup (account exists)
+        mock_account = MagicMock(spec=AccountModel)
+        mock_account.id = account_id
+        mock_result_account = MagicMock()
+        mock_result_account.scalar_one_or_none.return_value = mock_account
+
+        # Mock strategy lookup returning None
+        mock_result_strategy = MagicMock()
+        mock_result_strategy.scalar_one_or_none.return_value = None
+
+        # Configure execute side effects: account, strategy
+        mock_session.execute.side_effect = [mock_result_account, mock_result_strategy]
+
+        with pytest.raises(StrategyNotFoundError, match="Strategy with id nonexistent not found"):
             await strategy_manager.assign_strategy_to_account(
-                account_id=123, strategy_id="nonexistent"
+                account_id=account_id, strategy_id="nonexistent"
             )
 
     async def test_switch_account_strategy(self, strategy_manager, mock_session, valid_risk_params):
@@ -287,6 +311,10 @@ class TestStrategyManager:
         account_id = 123
         old_strategy_id = "conservative_perps"
         new_strategy_id = "aggressive_perps"
+
+        # Mock account
+        mock_account = MagicMock(spec=AccountModel)
+        mock_account.id = account_id
 
         # Mock get_account_strategy response (current strategy)
         mock_current_strategy = StrategyModel(
@@ -329,21 +357,29 @@ class TestStrategyManager:
         res2 = MagicMock()
         res2.scalar_one_or_none.return_value = mock_new_strategy
 
-        # 3. assign_strategy_to_account -> get_strategy query
+        # 3. assign_strategy_to_account -> account check
         res3 = MagicMock()
-        res3.scalar_one_or_none.return_value = mock_new_strategy
+        res3.scalar_one_or_none.return_value = mock_account
 
-        # 4. assign_strategy_to_account -> get_current_assignment query
+        # 4. assign_strategy_to_account -> get_strategy query
+        res4 = MagicMock()
+        res4.scalar_one_or_none.return_value = mock_new_strategy
+
+        # 5. assign_strategy_to_account -> get_current_assignment query
         mock_assignment = StrategyAssignmentModel(
             account_id=account_id,
             strategy_id=1,
             is_active=True,
             assigned_at=datetime.now(timezone.utc),
         )
-        res4 = MagicMock()
-        res4.scalar_one_or_none.return_value = mock_assignment
+        res5 = MagicMock()
+        res5.scalar_one_or_none.return_value = mock_assignment
 
-        mock_session.execute.side_effect = [res1, res2, res3, res4]
+        # 6. assign_strategy_to_account -> get previous strategy for previous_strategy_id_str
+        res6 = MagicMock()
+        res6.scalar_one_or_none.return_value = mock_current_strategy
+
+        mock_session.execute.side_effect = [res1, res2, res3, res4, res5, res6]
 
         assignment = await strategy_manager.switch_account_strategy(
             account_id=account_id,

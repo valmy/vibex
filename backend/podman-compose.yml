@@ -40,7 +40,7 @@ services:
 
   # Redis Cache Service (for LLM Decision Engine caching)
   redis:
-    image: docker.io/redis:7-alpine
+    image: docker.io/redis:8.4-alpine
     container_name: trading-agent-redis
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     ports:

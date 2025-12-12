@@ -31,6 +31,27 @@ class ValidationError(TradingAgentException):
         super().__init__(message, "VALIDATION_ERROR")
 
 
+class StrategyNotFoundError(ResourceNotFoundError):
+    """Raised when a strategy is not found."""
+
+    def __init__(self, strategy_id: str):
+        super().__init__("Strategy", strategy_id)
+
+
+class AccountNotFoundError(ResourceNotFoundError):
+    """Raised when an account is not found."""
+
+    def __init__(self, account_id: int):
+        super().__init__("Account", account_id)
+
+
+class StrategyAssignmentError(ValidationError):
+    """Raised when strategy assignment fails."""
+
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
 class InsufficientFundsError(TradingAgentException):
     """Raised when there are insufficient funds."""
 
