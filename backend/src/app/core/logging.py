@@ -95,8 +95,14 @@ def setup_logging(config: Any) -> None:
     root_logger.setLevel(getattr(logging, config.LOG_LEVEL))
 
     # Remove existing handlers
-    for handler in root_logger.handlers[:]:
-        root_logger.removeHandler(handler)
+    # In testing environment (pytest), we must NOT remove handlers as it breaks caplog
+    import sys
+    is_testing = getattr(config, "ENVIRONMENT", "").lower() == "testing"
+    is_pytest = "pytest" in sys.modules
+    
+    if not (is_testing or is_pytest):
+        for handler in root_logger.handlers[:]:
+            root_logger.removeHandler(handler)
 
     # Add sensitive data filter
     sensitive_filter = SensitiveDataFilter()
@@ -117,40 +123,42 @@ def setup_logging(config: Any) -> None:
     root_logger.addHandler(console_handler)
 
     # File handlers for different log types
-    log_files = {
-        "app": "app.log",
-        "trading": "trading.log",
-        "market_data": "market_data.log",
-        "llm": "llm.log",
-        "errors": "errors.log",
-    }
+    # Skip file handlers in testing to avoid creating log files and messing with logger levels
+    if not (is_testing or is_pytest):
+        log_files = {
+            "app": "app.log",
+            "trading": "trading.log",
+            "market_data": "market_data.log",
+            "llm": "llm.log",
+            "errors": "errors.log",
+        }
 
-    for log_type, filename in log_files.items():
-        log_path = os.path.join(config.LOG_DIR, filename)
+        for log_type, filename in log_files.items():
+            log_path = os.path.join(config.LOG_DIR, filename)
 
-        # Rotating file handler (100MB per file, 10 backups)
-        file_handler = logging.handlers.RotatingFileHandler(
-            log_path,
-            maxBytes=100 * 1024 * 1024,  # 100MB
-            backupCount=10,
-        )
-
-        file_handler.setLevel(getattr(logging, config.LOG_LEVEL))
-        file_handler.addFilter(sensitive_filter)
-
-        if config.LOG_FORMAT == "json":
-            file_formatter = JSONFormatter()
-        else:
-            file_formatter = logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            # Rotating file handler (100MB per file, 10 backups)
+            file_handler = logging.handlers.RotatingFileHandler(
+                log_path,
+                maxBytes=100 * 1024 * 1024,  # 100MB
+                backupCount=10,
             )
 
-        file_handler.setFormatter(file_formatter)
+            file_handler.setLevel(getattr(logging, config.LOG_LEVEL))
+            file_handler.addFilter(sensitive_filter)
 
-        # Create logger for specific log type
-        logger = logging.getLogger(log_type)
-        logger.addHandler(file_handler)
-        logger.setLevel(getattr(logging, config.LOG_LEVEL))
+            if config.LOG_FORMAT == "json":
+                file_formatter = JSONFormatter()
+            else:
+                file_formatter = logging.Formatter(
+                    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                )
+
+            file_handler.setFormatter(file_formatter)
+
+            # Create logger for specific log type
+            logger = logging.getLogger(log_type)
+            logger.addHandler(file_handler)
+            logger.setLevel(getattr(logging, config.LOG_LEVEL))
 
 
 def get_logger(name: str) -> logging.Logger:

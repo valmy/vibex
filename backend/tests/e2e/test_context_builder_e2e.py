@@ -334,9 +334,9 @@ class TestContextBuilderE2E:
                         or getattr(indicators_long, field, None) is not None
                         for field in indicator_fields
                     )
-                    assert (
-                        has_indicators
-                    ), f"Should have at least some technical indicators for {symbol}"
+                    assert has_indicators, (
+                        f"Should have at least some technical indicators for {symbol}"
+                    )
 
             logger.info(
                 f"Successfully built multi-asset context for {len(available_assets)} assets"
