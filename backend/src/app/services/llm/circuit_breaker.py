@@ -6,7 +6,7 @@ Provides fault tolerance and prevents cascading failures.
 
 import time
 from enum import Enum
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Type
 
 from ...core.logging import get_logger
 from .llm_exceptions import CircuitBreakerError
@@ -29,8 +29,8 @@ class CircuitBreaker:
         self,
         failure_threshold: int = 5,
         recovery_timeout: int = 60,
-        expected_exception: type = Exception,
-    ):
+        expected_exception: Type[Exception] = Exception,
+    ) -> None:
         """
         Initialize circuit breaker.
 
@@ -47,7 +47,7 @@ class CircuitBreaker:
         self.last_failure_time: Optional[float] = None
         self.state = CircuitState.CLOSED
 
-    async def call(self, func: Callable, *args, **kwargs) -> Any:
+    async def call(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """
         Execute function with circuit breaker protection.
 
@@ -83,14 +83,14 @@ class CircuitBreaker:
             return False
         return time.time() - self.last_failure_time >= self.recovery_timeout
 
-    def _on_success(self):
+    def _on_success(self) -> None:
         """Handle successful call."""
         self.failure_count = 0
         self.state = CircuitState.CLOSED
         if self.state == CircuitState.HALF_OPEN:
             logger.info("Circuit breaker reset to CLOSED")
 
-    def _on_failure(self):
+    def _on_failure(self) -> None:
         """Handle failed call."""
         self.failure_count += 1
         self.last_failure_time = time.time()
@@ -104,7 +104,7 @@ class CircuitBreaker:
         """Check if circuit is open."""
         return self.state == CircuitState.OPEN
 
-    def reset(self):
+    def reset(self) -> None:
         """Manually reset circuit breaker."""
         self.failure_count = 0
         self.last_failure_time = None

@@ -224,7 +224,7 @@ class ConfigurationManager:
             self._reload_count += 1
         return success
 
-    def subscribe_to_changes(self, callback: Callable) -> str:
+    def subscribe_to_changes(self, callback: Callable[[str], Any]) -> str:
         """
         Subscribe to configuration changes.
 

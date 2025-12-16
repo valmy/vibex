@@ -199,4 +199,5 @@ dev = [
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
     "pytest-mock>=3.15.1",
+    "types-python-jose>=1.0.0", # Added for mypy stubs
 ]

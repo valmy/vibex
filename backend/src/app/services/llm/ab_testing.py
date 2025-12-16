@@ -7,7 +7,7 @@ Provides capabilities to compare different models and track performance.
 import random
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from ...core.logging import get_logger
 
@@ -20,8 +20,8 @@ class ABTestResult:
 
     model_a: str
     model_b: str
-    model_a_performance: Dict
-    model_b_performance: Dict
+    model_a_performance: Dict[str, Any]
+    model_b_performance: Dict[str, Any]
     winner: Optional[str] = None
     confidence_level: float = 0.0
     test_duration_hours: float = 0.0
@@ -45,9 +45,9 @@ class ModelPerformance:
 class ABTestManager:
     """Manages A/B testing for LLM models."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize A/B test manager."""
-        self.active_tests: Dict[str, Dict] = {}
+        self.active_tests: Dict[str, Dict[str, Any]] = {}
         self.model_performance: Dict[str, ModelPerformance] = {}
         self.test_results: List[ABTestResult] = []
 
@@ -134,7 +134,7 @@ class ABTestManager:
         response_time_ms: float,
         cost: Optional[float] = None,
         success: bool = True,
-    ):
+    ) -> None:
         """
         Record performance metrics for a model decision.
 
@@ -171,7 +171,7 @@ class ABTestManager:
         model_name: str,
         was_profitable: bool,
         actual_return: float,
-    ):
+    ) -> None:
         """
         Record actual trading outcome for decision accuracy calculation.
 
@@ -273,7 +273,7 @@ class ABTestManager:
         )
         return result
 
-    def get_active_tests(self) -> Dict[str, Dict]:
+    def get_active_tests(self) -> Dict[str, Dict[str, Any]]:
         """
         Get all active A/B tests.
 
@@ -315,7 +315,7 @@ class ABTestManager:
         """
         return self.test_results[-limit:]
 
-    def _determine_winner(self, perf_a: Dict, perf_b: Dict) -> Optional[str]:
+    def _determine_winner(self, perf_a: Dict[str, Any], perf_b: Dict[str, Any]) -> Optional[str]:
         """
         Determine winner based on multiple performance criteria.
 
@@ -359,7 +359,7 @@ class ABTestManager:
 
         return "model_a" if score_a > score_b else "model_b"
 
-    def _calculate_confidence(self, perf_a: Dict, perf_b: Dict) -> float:
+    def _calculate_confidence(self, perf_a: Dict[str, Any], perf_b: Dict[str, Any]) -> float:
         """
         Calculate statistical confidence in the test results.
 

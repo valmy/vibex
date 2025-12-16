@@ -28,7 +28,7 @@ The old context.py file has been deleted and should not be used.
 """
 
 from datetime import datetime, timezone
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Any
 
 from pydantic import BaseModel, Field
 
@@ -562,7 +562,7 @@ class TradingContext(BaseModel):
     market_data: MarketContext
     account_state: AccountContext
     recent_trades: Dict[str, List[TradeHistory]] = Field(
-        default_factory=dict, description="Recent trades grouped by asset symbol"
+        default_factory=lambda: {}, description="Recent trades grouped by asset symbol"
     )
     risk_metrics: RiskMetrics
     timestamp: datetime = Field(default_factory=datetime.utcnow)
@@ -591,7 +591,7 @@ class TradingContext(BaseModel):
 
         return errors
 
-    def get_context_summary(self) -> dict:
+    def get_context_summary(self) -> Dict[str, Any]:
         """Get a summary of the trading context for logging."""
         # Get portfolio trends
         trends = self.market_data.get_portfolio_trends()
@@ -621,7 +621,7 @@ class TradingContext(BaseModel):
         """Check if context is ready for making trading decisions."""
         return len(self.validate_context_completeness()) == 0
 
-    def get_asset_context(self, symbol: str) -> Optional[Dict]:
+    def get_asset_context(self, symbol: str) -> Optional[Dict[str, Any]]:
         """Get context data for a specific asset."""
         asset_data = self.market_data.get_asset_data(symbol)
         if not asset_data:
@@ -656,12 +656,10 @@ class StrategyPerformance(BaseModel):
     sortino_ratio: Optional[float] = None
     profit_factor: float = Field(..., gt=0)
     avg_trade_duration_hours: float = Field(..., ge=0)
-    avg_trade_duration_hours: float = Field(..., ge=0)
     total_volume_traded: float = Field(..., ge=0)
     total_fees_paid: float = Field(default=0.0, ge=0)
     total_funding_paid: float = Field(default=0.0)
     total_liquidations: int = Field(default=0, ge=0)
-    start_date: datetime
     start_date: datetime
     end_date: datetime
     period_days: int = Field(..., gt=0)

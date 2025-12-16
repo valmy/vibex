@@ -20,6 +20,6 @@ class BaseModel(Base):
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """String representation of the model."""
         return f"<{self.__class__.__name__}(id={self.id})>"

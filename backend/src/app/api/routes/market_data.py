@@ -6,7 +6,7 @@ Integrates with MarketDataService for real-time data fetching and storage.
 """
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, List, Optional, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
@@ -31,7 +31,7 @@ async def list_market_data(
     db: Annotated[AsyncSession, Depends(get_db)],
     skip: Annotated[int, Query()] = 0,
     limit: Annotated[int, Query()] = 100,
-):
+) -> MarketDataListResponse:
     """
     List all market data with pagination.
 
@@ -46,20 +46,20 @@ async def list_market_data(
     try:
         # Get total count
         count_result = await db.execute(select(func.count(MarketData.id)))
-        total = count_result.scalar()
+        total: int = count_result.scalar_one()
 
         # Get paginated results
         result = await db.execute(select(MarketData).offset(skip).limit(limit))
         data = result.scalars().all()
 
-        return MarketDataListResponse(items=data, total=total)
+        return MarketDataListResponse(items=[MarketDataRead.model_validate(d) for d in data], total=total)
     except Exception as e:
         logger.error(f"Error listing market data: {e}")
         raise HTTPException(status_code=500, detail="Failed to list market data") from e
 
 
 @router.get("/{data_id}", response_model=MarketDataRead)
-async def get_market_data(data_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+async def get_market_data(data_id: int, db: Annotated[AsyncSession, Depends(get_db)]) -> MarketDataRead:
     """
     Get a specific market data entry by ID.
 
@@ -80,7 +80,7 @@ async def get_market_data(data_id: int, db: Annotated[AsyncSession, Depends(get_
         if not data:
             raise ResourceNotFoundError("MarketData", data_id)
 
-        return data
+        return MarketDataRead.model_validate(data)
     except ResourceNotFoundError as e:
         raise to_http_exception(e) from e
     except Exception as e:
@@ -94,7 +94,7 @@ async def get_market_data_by_symbol(
     db: Annotated[AsyncSession, Depends(get_db)],
     interval: Annotated[str, Query(description="Candlestick interval")] = "1h",
     limit: Annotated[int, Query(ge=1, le=1000, description="Number of records")] = 100,
-):
+) -> MarketDataListResponse:
     """
     Get market data for a specific symbol.
 
@@ -122,7 +122,7 @@ async def sync_market_data(
     symbol: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
-):
+) -> Dict[str, Any]:
     """Sync market data from Aster DEX for a specific symbol."""
     try:
         service = get_market_data_service()
@@ -142,7 +142,7 @@ async def sync_market_data(
 async def sync_all_market_data(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
-):
+) -> Dict[str, Any]:
     """Sync market data from Aster DEX for all configured assets."""
     try:
         service = get_market_data_service()
@@ -165,7 +165,7 @@ async def get_market_data_range(
     start_time: Annotated[datetime, Query(description="Start time (ISO format)")],
     end_time: Annotated[datetime, Query(description="End time (ISO format)")],
     interval: Annotated[str, Query(description="Candlestick interval")] = "1h",
-):
+) -> MarketDataListResponse:
     """
     Get market data within a time range.
 

@@ -13,18 +13,18 @@ router = APIRouter()
 
 
 @router.post("/challenge", response_model=Challenge)
-async def request_challenge(address: str, db: Annotated[AsyncSession, Depends(get_db)]):
+async def request_challenge(address: str, db: Annotated[AsyncSession, Depends(get_db)]) -> Challenge:
     """
     Requests a challenge message for a user to sign.
     """
     challenge = await get_challenge(db, address)
-    return {"challenge": challenge}
+    return Challenge(challenge=challenge)
 
 
 @router.post("/login", response_model=Token)
 async def login(
     challenge: str, signature: str, address: str, db: Annotated[AsyncSession, Depends(get_db)]
-):
+) -> Token:
     """
     Authenticates a user and returns a JWT token.
     """
@@ -33,11 +33,11 @@ async def login(
         raise HTTPException(status_code=401, detail="Invalid signature")
 
     access_token = create_access_token(data={"sub": user.address})
-    return {"access_token": access_token, "token_type": "bearer"}
+    return Token(access_token=access_token, token_type="bearer")
 
 
 @router.get("/me", response_model=UserRead)
-def read_users_me(current_user: Annotated[UserRead, Depends(get_current_user)]):
+def read_users_me(current_user: Annotated[UserRead, Depends(get_current_user)]) -> UserRead:
     """
     Returns the current authenticated user.
     """

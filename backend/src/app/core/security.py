@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Any, Dict
 
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -25,8 +25,8 @@ class TokenData(BaseModel):
     username: Optional[str] = None
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
+def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+    to_encode: Dict[str, Any] = data.copy()
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
@@ -36,10 +36,10 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 
-def verify_token(token: str, credentials_exception):
+def verify_token(token: str, credentials_exception: HTTPException) -> TokenData:
     try:
         payload = jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
-        username: str = payload.get("sub")
+        username: Optional[str] = payload.get("sub")
         if username is None:
             raise credentials_exception
         return TokenData(username=username)

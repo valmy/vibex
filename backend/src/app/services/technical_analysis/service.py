@@ -23,7 +23,7 @@ class TechnicalAnalysisService:
     MIN_CANDLES = 50
     SERIES_LENGTH = 10
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the Technical Analysis Service."""
         logger.info("TechnicalAnalysisService initialized")
 
@@ -93,21 +93,22 @@ class TechnicalAnalysisService:
 
         for i, candle in enumerate(candles):
             # Check all OHLC fields are present
-            if not all([candle.open, candle.high, candle.low, candle.close]):
+            # Explicitly cast to float for comparison to avoid _N type issues
+            if not all([float(candle.open), float(candle.high), float(candle.low), float(candle.close)]):
                 raise InvalidCandleDataError("Missing OHLC data", candle_index=i)
 
             # Check high >= low
-            if candle.high < candle.low:
+            if float(candle.high) < float(candle.low):
                 raise InvalidCandleDataError(
                     f"High ({candle.high}) < Low ({candle.low})", candle_index=i
                 )
 
             # Check for negative prices
-            if any(p < 0 for p in [candle.open, candle.high, candle.low, candle.close]):
+            if any(float(p) < 0 for p in [candle.open, candle.high, candle.low, candle.close]):
                 raise InvalidCandleDataError("Negative price values", candle_index=i)
 
             # Check for negative volume
-            if candle.volume < 0:
+            if float(candle.volume) < 0:
                 raise InvalidCandleDataError("Negative volume", candle_index=i)
 
     def _prepare_arrays(

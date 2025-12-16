@@ -4,7 +4,7 @@ API routes for market analysis powered by LLM.
 Provides endpoints for market analysis, trading signals, and market summaries.
 """
 
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +24,7 @@ async def analyze_market(
     symbol: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     context: Annotated[Optional[str], Query(description="Additional context for analysis")] = None,
-):
+) -> Dict[str, Any]:
     """
     Analyze market data for a symbol using LLM.
 
@@ -72,7 +72,7 @@ async def analyze_market(
 
 
 @router.post("/signal/{symbol}")
-async def get_trading_signal(symbol: str, db: Annotated[AsyncSession, Depends(get_db)]):
+async def get_trading_signal(symbol: str, db: Annotated[AsyncSession, Depends(get_db)]) -> Dict[str, Any]:
     """
     Get trading signal for a symbol using LLM analysis.
 
@@ -125,7 +125,7 @@ async def get_trading_signal(symbol: str, db: Annotated[AsyncSession, Depends(ge
 
 
 @router.post("/summary")
-async def get_market_summary(db: Annotated[AsyncSession, Depends(get_db)]):
+async def get_market_summary(db: Annotated[AsyncSession, Depends(get_db)]) -> Dict[str, Any]:
     """
     Get overall market summary for all configured assets.
 
@@ -181,7 +181,7 @@ async def get_market_summary(db: Annotated[AsyncSession, Depends(get_db)]):
 
 
 @router.get("/health")
-async def analysis_health():
+async def analysis_health() -> Dict[str, Any]:
     """Check health of analysis services."""
     try:
         get_llm_service()

@@ -4,9 +4,12 @@ Market data model for OHLCV data.
 Represents candlestick data for trading pairs.
 """
 
+from datetime import datetime
+from typing import Optional
+
 from sqlalchemy import Column, DateTime, Float, Index, Integer, String
-from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.util import hybridproperty  # Import hybridproperty from sqlalchemy.util
+from sqlalchemy.orm import declarative_base, Mapped, mapped_column
 from sqlalchemy.schema import PrimaryKeyConstraint
 
 # Create a separate base for TimescaleDB models since they have different requirements
@@ -25,50 +28,50 @@ class MarketData(TimescaleBase):
     )
 
     # Note: Using composite primary key as required by TimescaleDB
-    time = Column(DateTime, nullable=False, primary_key=True)
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    time: Mapped[datetime] = mapped_column(DateTime, nullable=False, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
 
     # Market identification
-    symbol = Column(String(50), nullable=False, index=True)  # e.g., BTCUSDT
-    interval = Column(String(20), nullable=False)  # e.g., 1h, 4h, 1d
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # e.g., BTCUSDT
+    interval: Mapped[str] = mapped_column(String(20), nullable=False)  # e.g., 1h, 4h, 1d
 
     # Candlestick data
-    open = Column(Float, nullable=False)
-    high = Column(Float, nullable=False)
-    low = Column(Float, nullable=False)
-    close = Column(Float, nullable=False)
-    volume = Column(Float, nullable=False)
+    open: Mapped[float] = mapped_column(Float, nullable=False)
+    high: Mapped[float] = mapped_column(Float, nullable=False)
+    low: Mapped[float] = mapped_column(Float, nullable=False)
+    close: Mapped[float] = mapped_column(Float, nullable=False)
+    volume: Mapped[float] = mapped_column(Float, nullable=False)
 
     # Additional data
-    quote_asset_volume = Column(Float, nullable=True)
-    number_of_trades = Column(Float, nullable=True)
-    taker_buy_base_asset_volume = Column(Float, nullable=True)
-    taker_buy_quote_asset_volume = Column(Float, nullable=True)
+    quote_asset_volume: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    number_of_trades: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    taker_buy_base_asset_volume: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    taker_buy_quote_asset_volume: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Funding rate data
-    funding_rate = Column(Float, nullable=True)
+    funding_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Properties to match the expected schema field names
-    @hybrid_property
-    def timeframe(self):
+    @hybridproperty
+    def timeframe(self) -> str:
         return self.interval
 
-    @hybrid_property
-    def open_price(self):
+    @hybridproperty
+    def open_price(self) -> float:
         return self.open
 
-    @hybrid_property
-    def high_price(self):
+    @hybridproperty
+    def high_price(self) -> float:
         return self.high
 
-    @hybrid_property
-    def low_price(self):
+    @hybridproperty
+    def low_price(self) -> float:
         return self.low
 
-    @hybrid_property
-    def close_price(self):
+    @hybridproperty
+    def close_price(self) -> float:
         return self.close
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """String representation."""
         return f"<MarketData(symbol={self.symbol}, time={self.time}, close={self.close})>"

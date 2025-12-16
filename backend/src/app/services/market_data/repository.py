@@ -1,10 +1,9 @@
-"""Database repository for market data operations."""
-
 import logging
 from datetime import datetime
-from typing import List
+from typing import Any, List, Optional, Tuple
 
 from sqlalchemy import and_, func, select
+from sqlalchemy.engine import Result
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...models.market_data import MarketData
@@ -20,7 +19,7 @@ class MarketDataRepository:
         db: AsyncSession,
         symbol: str,
         interval: str,
-        data: List[List],  # API returns list of lists
+        data: List[List[Any]],  # API returns list of lists
     ) -> int:
         """
         Store market data in TimescaleDB with upsert to handle duplicates.
@@ -47,14 +46,14 @@ class MarketDataRepository:
                 candle_time = datetime.fromtimestamp(candle[0] / 1000)  # open_time
 
                 # Check if record already exists
-                existing = await db.execute(
+                result = await db.execute(
                     select(MarketData).where(
                         MarketData.symbol == symbol,
                         MarketData.interval == interval,
                         MarketData.time == candle_time,
                     )
                 )
-                existing = existing.scalar_one_or_none()
+                existing: Optional[MarketData] = result.scalar_one_or_none()
 
                 if existing:
                     # Update existing record
@@ -97,7 +96,7 @@ class MarketDataRepository:
                             if len(candle) > 11 and candle[-1] is not None
                             else None
                         ),
-                    )
+                    )  # type: ignore[call-arg]
                     db.add(market_data)
                     logger.debug(f"Added new market data for {symbol} at {candle_time}")
 
@@ -140,7 +139,7 @@ class MarketDataRepository:
 
     async def get_latest_with_count(
         self, db: AsyncSession, symbol: str, interval: str = "1h", limit: int = 100
-    ) -> tuple[List[MarketData], int]:
+    ) -> Tuple[List[MarketData], int]:
         """
         Get latest market data and total count from database.
 
@@ -160,7 +159,7 @@ class MarketDataRepository:
                     and_(MarketData.symbol == symbol, MarketData.interval == interval)
                 )
             )
-            total = count_result.scalar()
+            total: int = count_result.scalar_one() # Ensure total is int
 
             # Get data
             result = await db.execute(

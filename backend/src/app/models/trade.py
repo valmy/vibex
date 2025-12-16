@@ -4,10 +4,17 @@ Trade model for executed trades.
 Represents a completed trade execution.
 """
 
-from sqlalchemy import Column, Float, ForeignKey, Index, Integer, String
-from sqlalchemy.orm import relationship
+from typing import TYPE_CHECKING, Optional
+
+from sqlalchemy import Float, ForeignKey, Index, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import BaseModel
+
+if TYPE_CHECKING:
+    from .account import Account
+    from .position import Position
+    from .order import Order
 
 
 class Trade(BaseModel):
@@ -23,32 +30,32 @@ class Trade(BaseModel):
     )
 
     # Foreign keys
-    account_id = Column(Integer, ForeignKey("trading.accounts.id"), nullable=False, index=True)
-    position_id = Column(Integer, ForeignKey("trading.positions.id"), nullable=True, index=True)
-    order_id = Column(Integer, ForeignKey("trading.orders.id"), nullable=True, index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("trading.accounts.id"), nullable=False, index=True)
+    position_id: Mapped[Optional[int]] = mapped_column(ForeignKey("trading.positions.id"), nullable=True, index=True)
+    order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("trading.orders.id"), nullable=True, index=True)
 
     # Trade identification
-    exchange_trade_id = Column(String(255), unique=True, nullable=True)
-    symbol = Column(String(50), nullable=False)
-    side = Column(String(10), nullable=False)  # buy or sell
+    exchange_trade_id: Mapped[Optional[str]] = mapped_column(String(255), unique=True, nullable=True)
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False)
+    side: Mapped[str] = mapped_column(String(10), nullable=False)  # buy or sell
 
     # Trade details
-    quantity = Column(Float, nullable=False)
-    price = Column(Float, nullable=False)
-    total_cost = Column(Float, nullable=False)
-    commission = Column(Float, default=0.0, nullable=False)
-    commission_asset = Column(String(50), nullable=True)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    total_cost: Mapped[float] = mapped_column(Float, nullable=False)
+    commission: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    commission_asset: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
     # Trade metrics
-    pnl = Column(Float, nullable=True)
-    pnl_percent = Column(Float, nullable=True)
-    roi = Column(Float, nullable=True)
+    pnl: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    pnl_percent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    roi: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Relationships
-    account = relationship("Account", back_populates="trades")
-    position = relationship("Position", back_populates="trades")
-    order = relationship("Order", back_populates="trades")
+    account: Mapped["Account"] = relationship("Account", back_populates="trades")
+    position: Mapped[Optional["Position"]] = relationship("Position", back_populates="trades")
+    order: Mapped[Optional["Order"]] = relationship("Order", back_populates="trades")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """String representation."""
         return f"<Trade(id={self.id}, symbol={self.symbol}, side={self.side}, quantity={self.quantity})>"

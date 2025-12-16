@@ -284,7 +284,7 @@ async def get_model_management_info():
             }
 
         # Get switch history (placeholder - would implement actual tracking)
-        switch_history = []  # Would track actual model switches
+        switch_history: List[Dict[str, Any]] = []  # Would track actual model switches
 
         return ModelManagementResponse(
             current_model=current_model,

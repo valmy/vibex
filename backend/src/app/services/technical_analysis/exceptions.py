@@ -30,7 +30,7 @@ class InsufficientDataError(TechnicalAnalysisException):
 class InvalidCandleDataError(TechnicalAnalysisException):
     """Raised when candle data is invalid or incomplete."""
 
-    def __init__(self, message: str, candle_index: int = None):
+    def __init__(self, message: str, candle_index: Optional[int] = None):
         """
         Initialize InvalidCandleDataError.
 
