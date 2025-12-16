@@ -207,9 +207,9 @@ class TestAccountManagementAPIE2E:
 
         response = await client.post("/api/v1/accounts", json=account_data, headers=headers)
 
-        assert response.status_code == 201, (
-            f"Expected 201, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == 201
+        ), f"Expected 201, got {response.status_code}: {response.text}"
         data = response.json()
 
         # Verify response data
@@ -521,6 +521,7 @@ class TestAccountManagementAPIE2E:
 
         # Expect either 401 (invalid credentials) or 502 (API error)
         # Both are acceptable since we're using test credentials
-        assert response.status_code in [401, 502], (
-            f"Expected 401 or 502, got {response.status_code}: {response.text}"
-        )
+        assert response.status_code in [
+            401,
+            502,
+        ], f"Expected 401 or 502, got {response.status_code}: {response.text}"

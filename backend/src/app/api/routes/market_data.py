@@ -6,6 +6,7 @@ Integrates with MarketDataService for real-time data fetching and storage.
 """
 
 from datetime import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
@@ -15,6 +16,7 @@ from ...core.exceptions import ResourceNotFoundError, to_http_exception
 from ...core.logging import get_logger
 from ...core.security import get_current_user
 from ...db.session import get_db
+from ...models import User
 from ...models.market_data import MarketData
 from ...schemas.market_data import MarketDataListResponse, MarketDataRead
 from ...services import get_market_data_service
@@ -25,7 +27,11 @@ router = APIRouter(prefix="/api/v1/market-data", tags=["Market Data"])
 
 
 @router.get("", response_model=MarketDataListResponse)
-async def list_market_data(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+async def list_market_data(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    skip: Annotated[int, Query()] = 0,
+    limit: Annotated[int, Query()] = 100,
+):
     """
     List all market data with pagination.
 
@@ -49,11 +55,11 @@ async def list_market_data(skip: int = 0, limit: int = 100, db: AsyncSession = D
         return MarketDataListResponse(items=data, total=total)
     except Exception as e:
         logger.error(f"Error listing market data: {e}")
-        raise HTTPException(status_code=500, detail="Failed to list market data")
+        raise HTTPException(status_code=500, detail="Failed to list market data") from e
 
 
 @router.get("/{data_id}", response_model=MarketDataRead)
-async def get_market_data(data_id: int, db: AsyncSession = Depends(get_db)):
+async def get_market_data(data_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
     """
     Get a specific market data entry by ID.
 
@@ -76,18 +82,18 @@ async def get_market_data(data_id: int, db: AsyncSession = Depends(get_db)):
 
         return data
     except ResourceNotFoundError as e:
-        raise to_http_exception(e)
+        raise to_http_exception(e) from e
     except Exception as e:
         logger.error(f"Error getting market data: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get market data")
+        raise HTTPException(status_code=500, detail="Failed to get market data") from e
 
 
 @router.get("/symbol/{symbol}", response_model=MarketDataListResponse)
 async def get_market_data_by_symbol(
     symbol: str,
-    interval: str = Query("1h", description="Candlestick interval"),
-    limit: int = Query(100, ge=1, le=1000, description="Number of records"),
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
+    interval: Annotated[str, Query(description="Candlestick interval")] = "1h",
+    limit: Annotated[int, Query(ge=1, le=1000, description="Number of records")] = 100,
 ):
     """
     Get market data for a specific symbol.
@@ -108,12 +114,14 @@ async def get_market_data_by_symbol(
         return MarketDataListResponse(items=data, total=total)
     except Exception as e:
         logger.error(f"Error getting market data for {symbol}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get market data")
+        raise HTTPException(status_code=500, detail="Failed to get market data") from e
 
 
 @router.post("/sync/{symbol}")
 async def sync_market_data(
-    symbol: str, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
+    symbol: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ):
     """Sync market data from Aster DEX for a specific symbol."""
     try:
@@ -127,12 +135,13 @@ async def sync_market_data(
         }
     except Exception as e:
         logger.error(f"Error syncing market data for {symbol}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to sync market data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to sync market data: {str(e)}") from e
 
 
 @router.post("/sync-all")
 async def sync_all_market_data(
-    db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ):
     """Sync market data from Aster DEX for all configured assets."""
     try:
@@ -146,16 +155,16 @@ async def sync_all_market_data(
         }
     except Exception as e:
         logger.error(f"Error syncing all market data: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to sync market data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to sync market data: {str(e)}") from e
 
 
 @router.get("/range/{symbol}")
 async def get_market_data_range(
     symbol: str,
-    start_time: datetime = Query(..., description="Start time (ISO format)"),
-    end_time: datetime = Query(..., description="End time (ISO format)"),
-    interval: str = Query("1h", description="Candlestick interval"),
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
+    start_time: Annotated[datetime, Query(description="Start time (ISO format)")],
+    end_time: Annotated[datetime, Query(description="End time (ISO format)")],
+    interval: Annotated[str, Query(description="Candlestick interval")] = "1h",
 ):
     """
     Get market data within a time range.
@@ -177,4 +186,4 @@ async def get_market_data_range(
         return MarketDataListResponse(items=data, total=len(data))
     except Exception as e:
         logger.error(f"Error getting market data range for {symbol}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get market data range")
+        raise HTTPException(status_code=500, detail="Failed to get market data range") from e

@@ -83,19 +83,20 @@ class TestUserManagementAPIE2E:
         finally:
             # Cleanup: delete test users
             if not created_users:
-                return
-            try:
-                from sqlalchemy import delete
-                from sqlalchemy.exc import SQLAlchemyError
+                pass  # Do nothing if no users were created
+            else:
+                try:
+                    from sqlalchemy import delete
+                    from sqlalchemy.exc import SQLAlchemyError
 
-                user_ids_to_delete = [user.id for user in created_users]
-                delete_stmt = delete(User).where(User.id.in_(user_ids_to_delete))
-                await db_session.execute(delete_stmt)
-                await db_session.commit()
-                logger.info("Cleaned up test users")
-            except SQLAlchemyError as e:
-                logger.warning(f"Error cleaning up test users: {e}")
-                await db_session.rollback()
+                    user_ids_to_delete = [user.id for user in created_users]
+                    delete_stmt = delete(User).where(User.id.in_(user_ids_to_delete))
+                    await db_session.execute(delete_stmt)
+                    await db_session.commit()
+                    logger.info("Cleaned up test users")
+                except SQLAlchemyError as e:
+                    logger.warning(f"Error cleaning up test users: {e}")
+                    await db_session.rollback()
 
     @pytest.mark.asyncio
     async def test_list_users_returns_all_users(self, client, test_users, get_auth_headers):
@@ -194,9 +195,9 @@ class TestUserManagementAPIE2E:
             assert len(users_page2) == 1, "Second page should have 1 user"
 
             # Verify different users
-            assert users_page1[0]["id"] != users_page2[0]["id"], (
-                "Pages should contain different users"
-            )
+            assert (
+                users_page1[0]["id"] != users_page2[0]["id"]
+            ), "Pages should contain different users"
 
             # Test pagination with skip beyond total
             response_beyond = await client.get(
@@ -285,9 +286,9 @@ class TestUserManagementAPIE2E:
             "/api/v1/users/999999",
             headers=headers,
         )
-        assert response.status_code == 404, (
-            f"Should return 404 for non-existent user, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == 404
+        ), f"Should return 404 for non-existent user, got {response.status_code}: {response.text}"
 
         logger.info("Non-existent user correctly returns 404")
 
@@ -362,9 +363,9 @@ class TestUserManagementAPIE2E:
             )
 
             # Validate response
-            assert revoke_response.status_code == 200, (
-                f"Should return 200, got {revoke_response.status_code}"
-            )
+            assert (
+                revoke_response.status_code == 200
+            ), f"Should return 200, got {revoke_response.status_code}"
             revoked_user = revoke_response.json()
 
             # Validate revocation
@@ -441,17 +442,17 @@ class TestUserManagementAPIE2E:
         response1 = await client.get(
             "/api/v1/users", params={"skip": -1, "limit": 10}, headers=headers
         )
-        assert response1.status_code == 422, (
-            f"Should return 422 for negative skip, got {response1.status_code}"
-        )
+        assert (
+            response1.status_code == 422
+        ), f"Should return 422 for negative skip, got {response1.status_code}"
 
         # Test non-positive limit - should return 422
         response2 = await client.get(
             "/api/v1/users", params={"skip": 0, "limit": 0}, headers=headers
         )
-        assert response2.status_code == 422, (
-            f"Should return 422 for zero limit, got {response2.status_code}"
-        )
+        assert (
+            response2.status_code == 422
+        ), f"Should return 422 for zero limit, got {response2.status_code}"
 
         logger.info("Invalid pagination parameters correctly return 422")
 

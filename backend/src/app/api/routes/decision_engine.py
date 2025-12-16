@@ -7,7 +7,7 @@ decision generation, batch processing, history, and management.
 
 import logging
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -125,12 +125,12 @@ async def generate_decision(request: DecisionRequest):
         return result
 
     except RateLimitExceededError as e:
-        raise HTTPException(status_code=429, detail=str(e))
+        raise HTTPException(status_code=429, detail=str(e)) from e
     except DecisionEngineError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Unexpected error in generate_decision: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/batch", response_model=List[DecisionResult])
@@ -163,26 +163,28 @@ async def generate_batch_decisions(request: BatchDecisionRequest):
         return results
 
     except RateLimitExceededError as e:
-        raise HTTPException(status_code=429, detail=str(e))
+        raise HTTPException(status_code=429, detail=str(e)) from e
     except DecisionEngineError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Unexpected error in generate_batch_decisions: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/history/{account_id}", response_model=DecisionHistoryResponse)
 async def get_decision_history(
     account_id: int,
-    symbol: Optional[str] = Query(
-        None,
-        description="Optional symbol filter. Filters asset decisions within multi-asset decisions "
-        "to show only decisions for the specified symbol.",
-    ),
-    limit: int = Query(100, ge=1, le=1000, description="Number of decisions to return"),
-    page: int = Query(1, ge=1, description="Page number"),
-    start_date: Optional[datetime] = Query(None, description="Start date filter"),
-    end_date: Optional[datetime] = Query(None, description="End date filter"),
+    symbol: Annotated[
+        Optional[str],
+        Query(
+            description="Optional symbol filter. Filters asset decisions within multi-asset decisions "
+            "to show only decisions for the specified symbol.",
+        ),
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=1000, description="Number of decisions to return")] = 100,
+    page: Annotated[int, Query(ge=1, description="Page number")] = 1,
+    start_date: Annotated[Optional[datetime], Query(description="Start date filter")] = None,
+    end_date: Annotated[Optional[datetime], Query(description="End date filter")] = None,
 ):
     """
     Get decision history for an account with optional filtering.
@@ -225,7 +227,7 @@ async def get_decision_history(
 
     except Exception as e:
         logger.error(f"Error getting decision history: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/validate", response_model=dict)
@@ -374,7 +376,7 @@ async def validate_decision(decision: TradingDecision):
 
     except Exception as e:
         logger.error(f"Error validating decision: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/strategies/{account_id}/switch")
@@ -404,10 +406,10 @@ async def switch_strategy(account_id: int, request: StrategySwitch):
         }
 
     except DecisionEngineError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Error switching strategy: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/health", response_model=HealthStatus)
@@ -438,7 +440,9 @@ async def get_engine_health():
 
 @router.get("/metrics", response_model=UsageMetrics)
 async def get_usage_metrics(
-    timeframe_hours: int = Query(24, ge=1, le=168, description="Hours to look back for metrics"),
+    timeframe_hours: Annotated[
+        int, Query(ge=1, le=168, description="Hours to look back for metrics")
+    ] = 24,
 ):
     """
     Get usage metrics for the decision engine.
@@ -456,7 +460,7 @@ async def get_usage_metrics(
 
     except Exception as e:
         logger.error(f"Error getting usage metrics: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/cache/stats", response_model=CacheStats)
@@ -475,14 +479,16 @@ async def get_cache_stats():
 
     except Exception as e:
         logger.error(f"Error getting cache stats: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/cache/clear")
 async def clear_cache(
     background_tasks: BackgroundTasks,
-    account_id: Optional[int] = Query(None, description="Clear cache for specific account"),
-    symbol: Optional[str] = Query(None, description="Clear cache for specific symbol"),
+    account_id: Annotated[
+        Optional[int], Query(description="Clear cache for specific account")
+    ] = None,
+    symbol: Annotated[Optional[str], Query(description="Clear cache for specific symbol")] = None,
 ):
     """
     Clear decision engine caches.
@@ -515,7 +521,7 @@ async def clear_cache(
 
     except Exception as e:
         logger.error(f"Error clearing cache: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/metrics/reset")
@@ -537,7 +543,7 @@ async def reset_metrics():
 
     except Exception as e:
         logger.error(f"Error resetting metrics: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 # WebSocket endpoint for real-time decision streaming

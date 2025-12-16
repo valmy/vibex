@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db.session import get_db
+from ..models.account import User
 from .config import config
 
 http_bearer = HTTPBearer(auto_error=True, scheme_name="BearerAuth")
@@ -42,16 +43,13 @@ def verify_token(token: str, credentials_exception):
         if username is None:
             raise credentials_exception
         return TokenData(username=username)
-    except JWTError:
-        raise credentials_exception
-
-
-from ..models.account import User
+    except JWTError as e:
+        raise credentials_exception from e
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(http_bearer),
-    db: AsyncSession = Depends(get_db),
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(http_bearer)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
     token = credentials.credentials
     token_data = verify_token(token, credentials_exception)
@@ -64,7 +62,7 @@ async def get_current_user(
     return user
 
 
-async def require_admin(current_user: User = Depends(get_current_user)) -> User:
+async def require_admin(current_user: Annotated[User, Depends(get_current_user)]) -> User:
     """
     Dependency that requires the current user to be an admin.
 
@@ -88,7 +86,7 @@ async def require_admin(current_user: User = Depends(get_current_user)) -> User:
 
 
 # Alias for backward compatibility
-async def get_current_admin_user(current_user: User = Depends(get_current_user)) -> User:
+async def get_current_admin_user(current_user: Annotated[User, Depends(get_current_user)]) -> User:
     """
     Deprecated: Use require_admin instead.
 
@@ -100,8 +98,8 @@ async def get_current_admin_user(current_user: User = Depends(get_current_user))
 
 async def require_account_owner(
     account_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
     Dependency that requires the current user to own the account.
@@ -139,8 +137,8 @@ async def require_account_owner(
 
 async def require_admin_or_owner(
     account_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
     Dependency that requires the current user to be admin or own the account.

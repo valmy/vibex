@@ -4,7 +4,7 @@ API routes for market analysis powered by LLM.
 Provides endpoints for market analysis, trading signals, and market summaries.
 """
 
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,8 +22,8 @@ router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
 @router.post("/market/{symbol}")
 async def analyze_market(
     symbol: str,
-    context: Optional[str] = Query(None, description="Additional context for analysis"),
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
+    context: Annotated[Optional[str], Query(description="Additional context for analysis")] = None,
 ):
     """
     Analyze market data for a symbol using LLM.
@@ -68,11 +68,11 @@ async def analyze_market(
         raise
     except Exception as e:
         logger.error(f"Error analyzing market for {symbol}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to analyze market: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to analyze market: {str(e)}") from e
 
 
 @router.post("/signal/{symbol}")
-async def get_trading_signal(symbol: str, db: AsyncSession = Depends(get_db)):
+async def get_trading_signal(symbol: str, db: Annotated[AsyncSession, Depends(get_db)]):
     """
     Get trading signal for a symbol using LLM analysis.
 
@@ -119,11 +119,13 @@ async def get_trading_signal(symbol: str, db: AsyncSession = Depends(get_db)):
         raise
     except Exception as e:
         logger.error(f"Error generating trading signal for {symbol}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate trading signal: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to generate trading signal: {str(e)}"
+        ) from e
 
 
 @router.post("/summary")
-async def get_market_summary(db: AsyncSession = Depends(get_db)):
+async def get_market_summary(db: Annotated[AsyncSession, Depends(get_db)]):
     """
     Get overall market summary for all configured assets.
 
@@ -173,15 +175,17 @@ async def get_market_summary(db: AsyncSession = Depends(get_db)):
         raise
     except Exception as e:
         logger.error(f"Error generating market summary: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate market summary: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to generate market summary: {str(e)}"
+        ) from e
 
 
 @router.get("/health")
 async def analysis_health():
     """Check health of analysis services."""
     try:
-        llm_service = get_llm_service()
-        market_service = get_market_data_service()
+        get_llm_service()
+        get_market_data_service()
 
         return {
             "status": "healthy",
@@ -191,4 +195,4 @@ async def analysis_health():
         }
     except Exception as e:
         logger.error(f"Analysis health check failed: {e}")
-        raise HTTPException(status_code=503, detail="Analysis services unavailable")
+        raise HTTPException(status_code=503, detail="Analysis services unavailable") from e

@@ -7,7 +7,7 @@ performance analytics, and operational metrics.
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -136,7 +136,7 @@ async def get_system_health():
 
         # Check Decision Validator health
         try:
-            decision_validator = get_decision_validator()
+            get_decision_validator()
             # Decision validator doesn't have a health check method, so we'll do a basic check
             components["decision_validator"] = {"status": "healthy"}
         except Exception as e:
@@ -172,12 +172,14 @@ async def get_system_health():
 
     except Exception as e:
         logger.error(f"Error getting system health: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Health check failed")
+        raise HTTPException(status_code=500, detail="Health check failed") from e
 
 
 @router.get("/performance", response_model=PerformanceMetrics)
 async def get_performance_metrics(
-    timeframe_hours: int = Query(24, ge=1, le=168, description="Hours to look back for metrics"),
+    timeframe_hours: Annotated[
+        int, Query(ge=1, le=168, description="Hours to look back for metrics")
+    ] = 24,
 ):
     """
     Get comprehensive performance metrics for all system components.
@@ -252,7 +254,7 @@ async def get_performance_metrics(
 
     except Exception as e:
         logger.error(f"Error getting performance metrics: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to get performance metrics")
+        raise HTTPException(status_code=500, detail="Failed to get performance metrics") from e
 
 
 @router.get("/models", response_model=ModelManagementResponse)
@@ -293,7 +295,7 @@ async def get_model_management_info():
 
     except Exception as e:
         logger.error(f"Error getting model management info: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to get model management info")
+        raise HTTPException(status_code=500, detail="Failed to get model management info") from e
 
 
 @router.post("/models/{model_name}/switch")
@@ -321,13 +323,15 @@ async def switch_llm_model(model_name: str):
         raise
     except Exception as e:
         logger.error(f"Error switching to model {model_name}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Model switch failed")
+        raise HTTPException(status_code=500, detail="Model switch failed") from e
 
 
 @router.get("/models/{model_name}/performance")
 async def get_model_performance(
     model_name: str,
-    timeframe_hours: int = Query(24, ge=1, le=168, description="Hours to look back for metrics"),
+    timeframe_hours: Annotated[
+        int, Query(ge=1, le=168, description="Hours to look back for metrics")
+    ] = 24,
 ):
     """
     Get performance metrics for a specific LLM model.
@@ -368,16 +372,18 @@ async def get_model_performance(
         raise
     except Exception as e:
         logger.error(f"Error getting performance for model {model_name}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to get model performance")
+        raise HTTPException(status_code=500, detail="Failed to get model performance") from e
 
 
 @router.get("/alerts", response_model=AlertsResponse)
 async def get_system_alerts(
-    severity: Optional[str] = Query(
-        None, description="Filter by severity (low, medium, high, critical)"
-    ),
-    component: Optional[str] = Query(None, description="Filter by component"),
-    limit: int = Query(50, ge=1, le=200, description="Maximum number of alerts to return"),
+    severity: Annotated[
+        Optional[str], Query(description="Filter by severity (low, medium, high, critical)")
+    ] = None,
+    component: Annotated[Optional[str], Query(description="Filter by component")] = None,
+    limit: Annotated[
+        int, Query(ge=1, le=200, description="Maximum number of alerts to return")
+    ] = 50,
 ):
     """
     Get system alerts and notifications.
@@ -430,12 +436,14 @@ async def get_system_alerts(
 
     except Exception as e:
         logger.error(f"Error getting system alerts: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to get system alerts")
+        raise HTTPException(status_code=500, detail="Failed to get system alerts") from e
 
 
 @router.get("/analytics/summary")
 async def get_analytics_summary(
-    timeframe_hours: int = Query(24, ge=1, le=168, description="Hours to look back for analytics"),
+    timeframe_hours: Annotated[
+        int, Query(ge=1, le=168, description="Hours to look back for analytics")
+    ] = 24,
 ):
     """
     Get analytics summary for the specified timeframe.
@@ -492,7 +500,7 @@ async def get_analytics_summary(
 
     except Exception as e:
         logger.error(f"Error getting analytics summary: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to get analytics summary")
+        raise HTTPException(status_code=500, detail="Failed to get analytics summary") from e
 
 
 @router.post("/health/check")
@@ -519,4 +527,4 @@ async def trigger_health_check():
 
     except Exception as e:
         logger.error(f"Error triggering health check: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Health check failed")
+        raise HTTPException(status_code=500, detail="Health check failed") from e

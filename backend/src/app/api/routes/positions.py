@@ -4,7 +4,9 @@ API routes for position management.
 Provides endpoints for creating, reading, updating, and deleting trading positions.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +14,7 @@ from ...core.exceptions import ResourceNotFoundError, to_http_exception
 from ...core.logging import get_logger
 from ...core.security import get_current_user
 from ...db.session import get_db
+from ...models import User
 from ...models.position import Position
 from ...schemas.position import PositionCreate, PositionListResponse, PositionRead, PositionUpdate
 
@@ -23,8 +26,8 @@ router = APIRouter(prefix="/api/v1/positions", tags=["Trading"])
 @router.post("", response_model=PositionRead, status_code=status.HTTP_201_CREATED)
 async def create_position(
     position_data: PositionCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ):
     """Create a new position."""
     try:
@@ -37,11 +40,15 @@ async def create_position(
     except Exception as e:
         await db.rollback()
         logger.error(f"Error creating position: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create position")
+        raise HTTPException(status_code=500, detail="Failed to create position") from e
 
 
 @router.get("", response_model=PositionListResponse)
-async def list_positions(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+async def list_positions(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    skip: Annotated[int, Query()] = 0,
+    limit: Annotated[int, Query()] = 100,
+):
     """List all positions with pagination."""
     try:
         # Get total count
@@ -55,11 +62,11 @@ async def list_positions(skip: int = 0, limit: int = 100, db: AsyncSession = Dep
         return PositionListResponse(items=positions, total=total)
     except Exception as e:
         logger.error(f"Error listing positions: {e}")
-        raise HTTPException(status_code=500, detail="Failed to list positions")
+        raise HTTPException(status_code=500, detail="Failed to list positions") from e
 
 
 @router.get("/{position_id}", response_model=PositionRead)
-async def get_position(position_id: int, db: AsyncSession = Depends(get_db)):
+async def get_position(position_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
     """Get a specific position by ID."""
     try:
         result = await db.execute(select(Position).where(Position.id == position_id))
@@ -70,18 +77,18 @@ async def get_position(position_id: int, db: AsyncSession = Depends(get_db)):
 
         return position
     except ResourceNotFoundError as e:
-        raise to_http_exception(e)
+        raise to_http_exception(e) from e
     except Exception as e:
         logger.error(f"Error getting position: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get position")
+        raise HTTPException(status_code=500, detail="Failed to get position") from e
 
 
 @router.put("/{position_id}", response_model=PositionRead)
 async def update_position(
     position_id: int,
     position_data: PositionUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ):
     """Update a position."""
     try:
@@ -101,16 +108,18 @@ async def update_position(
         logger.info(f"Updated position {position_id}")
         return position
     except ResourceNotFoundError as e:
-        raise to_http_exception(e)
+        raise to_http_exception(e) from e
     except Exception as e:
         await db.rollback()
         logger.error(f"Error updating position: {e}")
-        raise HTTPException(status_code=500, detail="Failed to update position")
+        raise HTTPException(status_code=500, detail="Failed to update position") from e
 
 
 @router.delete("/{position_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_position(
-    position_id: int, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
+    position_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ):
     """Delete a position."""
     try:
@@ -124,8 +133,8 @@ async def delete_position(
         await db.commit()
         logger.info(f"Deleted position {position_id}")
     except ResourceNotFoundError as e:
-        raise to_http_exception(e)
+        raise to_http_exception(e) from e
     except Exception as e:
         await db.rollback()
         logger.error(f"Error deleting position: {e}")
-        raise HTTPException(status_code=500, detail="Failed to delete position")
+        raise HTTPException(status_code=500, detail="Failed to delete position") from e

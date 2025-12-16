@@ -4,7 +4,9 @@ API routes for performance metrics management.
 Provides endpoints for reading and managing performance metrics.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +23,9 @@ router = APIRouter(prefix="/api/v1/performance", tags=["Performance"])
 
 @router.get("", response_model=PerformanceMetricListResponse)
 async def list_performance_metrics(
-    skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)
+    db: Annotated[AsyncSession, Depends(get_db)],
+    skip: Annotated[int, Query()] = 0,
+    limit: Annotated[int, Query()] = 100,
 ):
     """List all performance metrics with pagination."""
     try:
@@ -36,11 +40,11 @@ async def list_performance_metrics(
         return PerformanceMetricListResponse(items=metrics, total=total)
     except Exception as e:
         logger.error(f"Error listing performance metrics: {e}")
-        raise HTTPException(status_code=500, detail="Failed to list performance metrics")
+        raise HTTPException(status_code=500, detail="Failed to list performance metrics") from e
 
 
 @router.get("/{metric_id}", response_model=PerformanceMetricRead)
-async def get_performance_metric(metric_id: int, db: AsyncSession = Depends(get_db)):
+async def get_performance_metric(metric_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
     """Get a specific performance metric by ID."""
     try:
         result = await db.execute(
@@ -53,7 +57,7 @@ async def get_performance_metric(metric_id: int, db: AsyncSession = Depends(get_
 
         return metric
     except ResourceNotFoundError as e:
-        raise to_http_exception(e)
+        raise to_http_exception(e) from e
     except Exception as e:
         logger.error(f"Error getting performance metric: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get performance metric")
+        raise HTTPException(status_code=500, detail="Failed to get performance metric") from e

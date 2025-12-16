@@ -4,6 +4,8 @@ API routes for user management.
 Provides endpoints for admin users to manage other users and their admin status.
 """
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,10 +32,12 @@ user_service = UserManagementService()
 
 @router.get("", response_model=UserList)
 async def list_users(
-    skip: int = Query(0, ge=0, description="Number of users to skip for pagination"),
-    limit: int = Query(100, gt=0, le=1000, description="Maximum number of users to return"),
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    skip: Annotated[int, Query(ge=0, description="Number of users to skip for pagination")] = 0,
+    limit: Annotated[
+        int, Query(gt=0, le=1000, description="Maximum number of users to return")
+    ] = 100,
 ):
     """
     List all registered users in the system.
@@ -109,8 +113,8 @@ async def list_users(
 @router.get("/{user_id}", response_model=UserRead)
 async def get_user(
     user_id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
     Get detailed information about a specific user.
@@ -183,8 +187,8 @@ async def get_user(
 @router.put("/{user_id}/promote", response_model=UserRead)
 async def promote_user(
     user_id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
     Promote a user to admin status.
@@ -269,8 +273,8 @@ async def promote_user(
 @router.put("/{user_id}/revoke", response_model=UserRead)
 async def revoke_admin(
     user_id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
     Revoke admin status from a user.

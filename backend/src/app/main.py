@@ -29,8 +29,10 @@ from .api.routes import (
 )
 from .core.config import config
 from .core.config_manager import get_config_manager
+from .core.exceptions import ConfigurationError, ValidationError
 from .core.logging import get_logger, setup_logging
 from .middleware import AdminOnlyMiddleware
+from .services.llm.decision_engine import DecisionEngineError, RateLimitExceededError
 
 # Initialize logging
 setup_logging(config)
@@ -215,12 +217,6 @@ async def root():
             "Multi-account support",
         ],
     }
-
-
-from .core.exceptions import ConfigurationError, ValidationError
-
-# Error handlers
-from .services.llm.decision_engine import DecisionEngineError, RateLimitExceededError
 
 
 @app.exception_handler(DecisionEngineError)

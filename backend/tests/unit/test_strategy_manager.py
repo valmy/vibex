@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.app.core.exceptions import ValidationError, StrategyNotFoundError
+from src.app.core.exceptions import StrategyNotFoundError, ValidationError
 from src.app.models.account import Account as AccountModel
 from src.app.models.strategy import Strategy as StrategyModel
 from src.app.models.strategy import StrategyAssignment as StrategyAssignmentModel
