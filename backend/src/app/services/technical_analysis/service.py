@@ -94,7 +94,12 @@ class TechnicalAnalysisService:
         for i, candle in enumerate(candles):
             # Check all OHLC fields are present
             # Explicitly cast to float for comparison to avoid _N type issues
-            if not all([float(candle.open), float(candle.high), float(candle.low), float(candle.close)]):
+            try:
+                if not all(
+                    [float(candle.open), float(candle.high), float(candle.low), float(candle.close)]
+                ):
+                    raise InvalidCandleDataError("Missing OHLC data", candle_index=i)
+            except (TypeError, ValueError):
                 raise InvalidCandleDataError("Missing OHLC data", candle_index=i)
 
             # Check high >= low

@@ -349,7 +349,7 @@ async def test_promotion_actions_are_logged(
     assert log_entry.action == "promote_to_admin"
     assert log_entry.admin_address == admin_user.address
     assert log_entry.target_user_address == regular_user.address
-    assert log_entry.target_user_id == regular_user.id
+    assert log_entry.target_user_id == str(regular_user.id)
     assert hasattr(log_entry, "correlation_id")
 
 
@@ -404,7 +404,7 @@ async def test_revocation_actions_are_logged(
     assert log_entry.action == "revoke_admin"
     assert log_entry.admin_address == admin_user.address
     assert log_entry.target_user_address == admin_to_revoke.address
-    assert log_entry.target_user_id == admin_to_revoke.id
+    assert log_entry.target_user_id == str(admin_to_revoke.id)
     assert hasattr(log_entry, "correlation_id")
 
 
@@ -509,7 +509,7 @@ async def test_get_user_actions_are_logged(
     assert log_entry.action == "get_user"
     assert log_entry.admin_address == admin_user.address
     assert log_entry.target_user_address == target_user.address
-    assert log_entry.target_user_id == target_user.id
+    assert log_entry.target_user_id == str(target_user.id)
     assert hasattr(log_entry, "correlation_id")
 
 
@@ -551,7 +551,7 @@ async def test_failed_operations_are_logged(
     # Verify log contains error information in extra fields
     assert log_entry.action == "promote_to_admin"
     assert log_entry.admin_address == admin_user.address
-    assert log_entry.target_user_id == 99999
+    assert log_entry.target_user_id == "99999"
     assert hasattr(log_entry, "error")
     assert "User with id 99999 not found" in log_entry.error
     assert hasattr(log_entry, "correlation_id")

@@ -210,7 +210,7 @@ async def test_list_user_accounts_with_ownership_filtering(
     # Mock the execute method to return count and accounts
     # First call: count query, Second call: accounts query, Third call: user query
     count_result = MagicMock()
-    count_result.scalar.return_value = 3
+    count_result.scalar_one.return_value = 3
 
     accounts_result = MagicMock()
     accounts_result.scalars.return_value.all.return_value = mock_accounts
