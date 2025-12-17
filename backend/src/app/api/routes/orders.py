@@ -28,7 +28,7 @@ async def create_order(
     order_data: OrderCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
-):
+) -> OrderRead:
     """Create a new order."""
     try:
         order = Order(**order_data.model_dump())
@@ -36,7 +36,7 @@ async def create_order(
         await db.commit()
         await db.refresh(order)
         logger.info(f"Created order for account {order.account_id}")
-        return order
+        return OrderRead.model_validate(order)
     except Exception as e:
         await db.rollback()
         logger.error(f"Error creating order: {e}")
@@ -48,25 +48,28 @@ async def list_orders(
     db: Annotated[AsyncSession, Depends(get_db)],
     skip: Annotated[int, Query()] = 0,
     limit: Annotated[int, Query()] = 100,
-):
+) -> OrderListResponse:
     """List all orders with pagination."""
     try:
         # Get total count
         count_result = await db.execute(select(func.count(Order.id)))
-        total = count_result.scalar()
+        total = count_result.scalar() or 0
 
         # Get paginated results
         result = await db.execute(select(Order).offset(skip).limit(limit))
         orders = result.scalars().all()
 
-        return OrderListResponse(items=orders, total=total)
+        return OrderListResponse(
+            items=[OrderRead.model_validate(o) for o in orders],
+            total=total,
+        )
     except Exception as e:
         logger.error(f"Error listing orders: {e}")
         raise HTTPException(status_code=500, detail="Failed to list orders") from e
 
 
 @router.get("/{order_id}", response_model=OrderRead)
-async def get_order(order_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+async def get_order(order_id: int, db: Annotated[AsyncSession, Depends(get_db)]) -> OrderRead:
     """Get a specific order by ID."""
     try:
         result = await db.execute(select(Order).where(Order.id == order_id))
@@ -75,7 +78,7 @@ async def get_order(order_id: int, db: Annotated[AsyncSession, Depends(get_db)])
         if not order:
             raise ResourceNotFoundError("Order", order_id)
 
-        return order
+        return OrderRead.model_validate(order)
     except ResourceNotFoundError as e:
         raise to_http_exception(e) from e
     except Exception as e:
@@ -89,7 +92,7 @@ async def update_order(
     order_data: OrderUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
-):
+) -> OrderRead:
     """Update an order."""
     try:
         result = await db.execute(select(Order).where(Order.id == order_id))
@@ -106,7 +109,7 @@ async def update_order(
         await db.commit()
         await db.refresh(order)
         logger.info(f"Updated order {order_id}")
-        return order
+        return OrderRead.model_validate(order)
     except ResourceNotFoundError as e:
         raise to_http_exception(e) from e
     except Exception as e:
@@ -120,7 +123,7 @@ async def delete_order(
     order_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
-):
+) -> None:
     """Delete an order."""
     try:
         result = await db.execute(select(Order).where(Order.id == order_id))

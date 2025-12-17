@@ -544,7 +544,7 @@ async def get_strategy_performance(
     strategy_id: str,
     strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)],
     timeframe: Annotated[str, Query(description="Timeframe for performance (7d, 30d, 90d)")] = "7d",
-):
+) -> StrategyPerformance:
     """
     Get performance metrics for a specific strategy.
 

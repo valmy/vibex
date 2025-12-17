@@ -30,7 +30,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ...db.session import get_session_factory
 from ...schemas.trading_decision import (
@@ -132,7 +132,7 @@ class DecisionEngine:
     unified interface with caching and rate limiting.
     """
 
-    def __init__(self, session_factory: Optional[AsyncSession] = None):
+    def __init__(self, session_factory: Optional[async_sessionmaker[AsyncSession]] = None):
         """Initialize the Decision Engine."""
         self.session_factory = session_factory
         self.llm_service = get_llm_service()
@@ -152,7 +152,7 @@ class DecisionEngine:
         )  # 60 requests per minute
 
         # Performance metrics
-        self.metrics = {
+        self.metrics: Dict[str, Any] = {
             "total_decisions": 0,
             "successful_decisions": 0,
             "failed_decisions": 0,
@@ -165,14 +165,14 @@ class DecisionEngine:
 
         # Concurrent processing limits
         self.max_concurrent_decisions = 10
-        self._active_decisions: Dict[str, asyncio.Task] = {}
+        self._active_decisions: Dict[str, asyncio.Task[Any]] = {}
 
         logger.info("Decision Engine initialized")
 
     async def make_trading_decision(
         self,
+        account_id: int,
         symbols: Optional[List[str]] = None,
-        account_id: int = None,
         strategy_override: Optional[str] = None,
         force_refresh: bool = False,
         ab_test_name: Optional[str] = None,
@@ -316,7 +316,7 @@ class DecisionEngine:
         )
         return decision_result
 
-    async def _get_strategy(self, account_id, strategy_override):
+    async def _get_strategy(self, account_id: int, strategy_override: Optional[str]) -> Any:
         if strategy_override:
             strategy = await self.strategy_manager.get_strategy(strategy_override)
             if not strategy:
@@ -324,7 +324,7 @@ class DecisionEngine:
             return strategy
         return await self.strategy_manager.get_account_strategy(account_id)
 
-    def _get_timeframes(self, strategy):
+    def _get_timeframes(self, strategy: Any) -> List[str]:
         timeframes = strategy.timeframe_preference or ["5m", "1h"]
         if len(timeframes) != 2:
             logger.warning(
@@ -334,10 +334,10 @@ class DecisionEngine:
         return timeframes
 
     async def _build_context(
-        self, symbols, account_id, timeframes, force_refresh, strategy_override
-    ):
+        self, symbols: Optional[List[str]], account_id: int, timeframes: List[str], force_refresh: bool, strategy_override: Optional[str]
+    ) -> TradingContext:
         context = await self._build_multi_asset_context_with_recovery(
-            symbols, account_id, timeframes, force_refresh
+            symbols or [], account_id, timeframes, force_refresh
         )
         if strategy_override:
             strategy = await self.strategy_manager.get_strategy(strategy_override)
@@ -348,7 +348,7 @@ class DecisionEngine:
             context.account_state.active_strategy = strategy
         return context
 
-    async def _generate_decision(self, symbols, context, strategy_override, ab_test_name):
+    async def _generate_decision(self, symbols: List[str], context: TradingContext, strategy_override: Optional[str], ab_test_name: Optional[str]) -> Any:
         return await self.llm_service.generate_trading_decision(
             symbols=symbols,
             context=context,
@@ -356,7 +356,7 @@ class DecisionEngine:
             ab_test_name=ab_test_name,
         )
 
-    async def _validate_and_handle_fallback(self, decision_result, context, symbols, account_id):
+    async def _validate_and_handle_fallback(self, decision_result: Any, context: TradingContext, symbols: List[str], account_id: int) -> Any:
         if decision_result.validation_passed:
             validation_result = await self.decision_validator.validate_decision(
                 decision_result.decision, context
@@ -381,8 +381,8 @@ class DecisionEngine:
         return decision_result
 
     async def _persist_decision_if_repository_exists(
-        self, account_id, strategy_id, decision_result, context
-    ):
+        self, account_id: int, strategy_id: str, decision_result: Any, context: TradingContext
+    ) -> None:
         if self.decision_repository:
             try:
                 await self._persist_decision(
@@ -520,7 +520,7 @@ class DecisionEngine:
                 current_avg * (total_decisions - 1) + processing_time_ms
             ) / total_decisions
 
-    def _generate_cache_key(self, symbol: str, account_id: int, **kwargs) -> str:
+    def _generate_cache_key(self, symbol: str, account_id: int, **kwargs: Any) -> str:
         """Generate a cache key for the given parameters."""
         key_data = {"symbol": symbol, "account_id": account_id, **kwargs}
         key_string = json.dumps(key_data, sort_keys=True)
@@ -555,21 +555,22 @@ class DecisionEngine:
                 context.risk_metrics.model_dump(mode="json") if context.risk_metrics else {}
             )
 
-            # Save decision to database
-            await self.decision_repository.save_decision(
-                account_id=account_id,
-                strategy_id=strategy_id,
-                trading_decision=decision_result.decision,
-                model_used=decision_result.model_used,
-                processing_time_ms=decision_result.processing_time_ms,
-                validation_passed=decision_result.validation_passed,
-                validation_errors=decision_result.validation_errors,
-                validation_warnings=None,  # Add if available in decision_result
-                market_context=market_context_dict,
-                account_context=account_context_dict,
-                risk_metrics=risk_metrics_dict,
-                api_cost=None,  # Add if available in decision_result
-            )
+            # Save decision to database if repository is available
+            if self.decision_repository:
+                await self.decision_repository.save_decision(
+                    account_id=account_id,
+                    strategy_id=strategy_id,
+                    trading_decision=decision_result.decision,
+                    model_used=decision_result.model_used,
+                    processing_time_ms=decision_result.processing_time_ms,
+                    validation_passed=decision_result.validation_passed,
+                    validation_errors=decision_result.validation_errors,
+                    validation_warnings=None,  # Add if available in decision_result
+                    market_context=market_context_dict,
+                    account_context=account_context_dict,
+                    risk_metrics=risk_metrics_dict,
+                    api_cost=None,  # Add if available in decision_result
+                )
 
             logger.info(
                 f"Persisted multi-asset decision for account {account_id} with "
@@ -661,7 +662,7 @@ class DecisionEngine:
                     # Multi-asset decision
                     from ...schemas.trading_decision import AssetDecision, TradingDecision
 
-                    asset_decisions = [AssetDecision(**ad) for ad in decision.asset_decisions]
+                    asset_decisions = [AssetDecision(**ad) for ad in decision.asset_decisions] if decision.asset_decisions else []
 
                     # If symbol filter is provided, filter asset decisions
                     if symbol:
@@ -669,9 +670,9 @@ class DecisionEngine:
 
                     trading_decision = TradingDecision(
                         decisions=asset_decisions,
-                        portfolio_rationale=decision.portfolio_rationale,
-                        total_allocation_usd=decision.total_allocation_usd,
-                        portfolio_risk_level=decision.portfolio_risk_level,
+                        portfolio_rationale=decision.portfolio_rationale or "No rationale provided",
+                        total_allocation_usd=decision.total_allocation_usd or 0.0,
+                        portfolio_risk_level=decision.portfolio_risk_level or "medium",  # type: ignore[arg-type]
                         timestamp=decision.timestamp,
                     )
                 else:
@@ -683,32 +684,44 @@ class DecisionEngine:
                     from ...schemas.trading_decision import AssetDecision, TradingDecision
 
                     asset_decision = AssetDecision(
-                        asset=decision.symbol,
-                        action=decision.action,
-                        allocation_usd=decision.allocation_usd,
+                        asset=decision.symbol or "Unknown",
+                        action=decision.action,  # type: ignore[arg-type]
+                        allocation_usd=decision.allocation_usd or 0.0,
                         tp_price=decision.tp_price,
                         sl_price=decision.sl_price,
-                        exit_plan=decision.exit_plan,
-                        rationale=decision.rationale,
-                        confidence=decision.confidence,
-                        risk_level=decision.risk_level,
-                        position_adjustment=decision.position_adjustment,
-                        order_adjustment=decision.order_adjustment,
+                        exit_plan=decision.exit_plan or "No exit plan",
+                        rationale=decision.rationale or "No rationale",
+                        confidence=decision.confidence or 0.0,
+                        risk_level=decision.risk_level,  # type: ignore[arg-type]
+                        position_adjustment=decision.position_adjustment,  # type: ignore[arg-type]
+                        order_adjustment=decision.order_adjustment,  # type: ignore[arg-type]
                     )
 
                     trading_decision = TradingDecision(
                         decisions=[asset_decision],
-                        portfolio_rationale=decision.rationale,
-                        total_allocation_usd=decision.allocation_usd,
-                        portfolio_risk_level=decision.risk_level,
+                        portfolio_rationale=decision.rationale or "No rationale provided",
+                        total_allocation_usd=decision.allocation_usd or 0.0,
+                        portfolio_risk_level=decision.risk_level or "medium",  # type: ignore[arg-type]
                         timestamp=decision.timestamp,
                     )
 
                 # Create DecisionResult
                 # Note: We don't have the full context stored, so we create a minimal one
+                default_context = TradingContext(
+                    symbols=[],
+                    account_id=account_id,
+                    timeframes=[],
+                    market_data=None,  # type: ignore[arg-type]
+                    account_state=None,  # type: ignore[arg-type]
+                    recent_trades={},
+                    risk_metrics=None,  # type: ignore[arg-type]
+                    timestamp=decision.timestamp,
+                    errors=[]
+                )
+
                 decision_result = DecisionResult(
                     decision=trading_decision,
-                    context=None,  # Context not stored in history
+                    context=default_context,
                     validation_passed=decision.validation_passed,
                     validation_errors=decision.validation_errors or [],
                     processing_time_ms=decision.processing_time_ms,

@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 market_data_service = None
 
 
-async def candle_close_handler(event: CandleCloseEvent):
+async def candle_close_handler(event: CandleCloseEvent) -> None:
     """Handle candle close events."""
     logger.info(
         f"Candle closed - Symbol: {event.symbol}, "
@@ -38,7 +38,7 @@ async def candle_close_handler(event: CandleCloseEvent):
     )
 
 
-async def main():
+async def main() -> None:
     """Test the candle-close scheduler."""
     global market_data_service
 

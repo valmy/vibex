@@ -122,7 +122,7 @@ class AsterClient:
                 try:
                     client = self._client
                     # Build kwargs dynamically to handle None values
-                    kwargs = {"limit": limit}
+                    kwargs: Dict[str, Any] = {"limit": limit}
                     if symbol is not None:
                         kwargs["symbol"] = symbol
                     if startTime is not None:

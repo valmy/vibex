@@ -38,7 +38,7 @@ async def list_users(
     limit: Annotated[
         int, Query(gt=0, le=1000, description="Maximum number of users to return")
     ] = 100,
-):
+) -> UserList:
     """
     List all registered users in the system.
 
@@ -79,7 +79,7 @@ async def list_users(
     try:
         # Get total count
         count_result = await db.execute(select(func.count(User.id)))
-        total = count_result.scalar()
+        total = count_result.scalar() or 0
 
         # Get users
         users = await user_service.list_users(db, skip=skip, limit=limit, admin_user=current_user)
@@ -95,7 +95,12 @@ async def list_users(
             },
         )
 
-        return UserList(users=users, total=total, skip=skip, limit=limit)
+        return UserList(
+            users=[UserRead.model_validate(u) for u in users],
+            total=total,
+            skip=skip,
+            limit=limit,
+        )
 
     except ValueError as e:
         raise HTTPException(
@@ -115,7 +120,7 @@ async def get_user(
     user_id: int,
     current_user: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
-):
+) -> UserRead:
     """
     Get detailed information about a specific user.
 
@@ -172,7 +177,7 @@ async def get_user(
             },
         )
 
-        return user
+        return UserRead.model_validate(user)
 
     except HTTPException:
         raise
@@ -189,7 +194,7 @@ async def promote_user(
     user_id: int,
     current_user: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
-):
+) -> UserRead:
     """
     Promote a user to admin status.
 
@@ -232,7 +237,7 @@ async def promote_user(
             },
         )
 
-        return user
+        return UserRead.model_validate(user)
 
     except UserNotFoundError as e:
         logger.warning(
@@ -275,7 +280,7 @@ async def revoke_admin(
     user_id: int,
     current_user: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
-):
+) -> UserRead:
     """
     Revoke admin status from a user.
 
@@ -318,7 +323,7 @@ async def revoke_admin(
             },
         )
 
-        return user
+        return UserRead.model_validate(user)
 
     except UserNotFoundError as e:
         logger.warning(

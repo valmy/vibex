@@ -76,7 +76,7 @@ class MarketDataRepository:
                     logger.debug(f"Updated existing market data for {symbol} at {candle_time}")
                 else:
                     # Create new record
-                    market_data = MarketData(
+                    market_data = MarketData(  # type: ignore[call-arg]
                         symbol=symbol,
                         interval=interval,
                         time=candle_time,
@@ -207,7 +207,7 @@ class MarketDataRepository:
                 )
                 .order_by(MarketData.time.asc())
             )
-            return result.scalars().all()
+            return list(result.scalars().all())
         except Exception as e:
             logger.error(f"Error retrieving market data range: {e}")
             raise

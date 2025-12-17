@@ -105,7 +105,7 @@ def custom_openapi() -> Dict[str, Any]:
     return app.openapi_schema
 
 
-app.openapi = custom_openapi
+app.openapi = custom_openapi  # type: ignore[method-assign]
 
 # Add CORS middleware
 app.add_middleware(AdminOnlyMiddleware)

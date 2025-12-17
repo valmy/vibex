@@ -30,12 +30,14 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from statistics import stdev
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from ...models.account import Account
+from ...models.market_data import MarketData
 from ...models.position import Position
 from ...models.trade import Trade
 from ...schemas.trading_decision import (
@@ -91,7 +93,7 @@ class ContextBuilderService:
     RECENT_TRADES_LIMIT = 20  # Number of recent trades to include
     PERFORMANCE_LOOKBACK_DAYS = 30  # Days to look back for performance metrics
 
-    def __init__(self, session_factory=None):
+    def __init__(self, session_factory: Optional[async_sessionmaker[AsyncSession]] = None):
         """Initialize the Context Builder Service.
 
         Args:
@@ -99,14 +101,14 @@ class ContextBuilderService:
         """
         self.market_data_service = get_market_data_service()
         self.technical_analysis_service = TechnicalAnalysisService()
-        self._cache: Dict[str, Tuple[datetime, any]] = {}
+        self._cache: Dict[str, Tuple[datetime, Any]] = {}
         self._cache_ttl_seconds = 300  # 5 minutes cache TTL
         self._session_factory = session_factory
         self.strategy_manager = StrategyManager(session_factory=session_factory)
 
         logger.info("ContextBuilderService initialized")
 
-    def cleanup_expired_cache(self):
+    def cleanup_expired_cache(self) -> None:
         """Remove expired entries from the cache."""
         now = datetime.now(timezone.utc)
         expired_keys = []
@@ -148,7 +150,7 @@ class ContextBuilderService:
             atr=get_last_10(indicators.atr),
         )
 
-    def _calculate_market_sentiment(self, assets: Dict[str, "AssetMarketData"]) -> str:
+    def _calculate_market_sentiment(self, assets: Dict[str, AssetMarketData]) -> str:
         """Calculate overall market sentiment based on asset price changes.
 
         Args:
@@ -231,7 +233,7 @@ class ContextBuilderService:
         concentration_risk = 0.0
         if account_context.open_positions and total_exposure > 0:
             # Group positions by asset
-            asset_exposures = {}
+            asset_exposures: Dict[str, float] = {}
             for pos in account_context.open_positions:
                 position_value = pos.size * pos.current_price
                 asset_exposures[pos.symbol] = asset_exposures.get(pos.symbol, 0) + position_value
@@ -279,7 +281,7 @@ class ContextBuilderService:
         )
 
         self.cleanup_expired_cache()
-        all_errors = []
+        all_errors: List[str] = []
 
         market_context_task = self.get_market_context(symbols, timeframes, force_refresh)
         account_context_task = self.get_account_context(account_id, force_refresh)
@@ -318,7 +320,7 @@ class ContextBuilderService:
         )
         return context
 
-    def _process_context_results(self, results, symbols, all_errors):
+    def _process_context_results(self, results: List[Any], symbols: List[str], all_errors: List[str]) -> Tuple[MarketContext, AccountContext, Dict[str, List[TradeHistory]]]:
         market_context_result, account_context, *recent_trades_results = results
 
         if isinstance(market_context_result, Exception):
@@ -329,7 +331,7 @@ class ContextBuilderService:
         if isinstance(account_context, Exception):
             raise account_context
 
-        recent_trades_by_symbol = {}
+        recent_trades_by_symbol: Dict[str, List[TradeHistory]] = {}
         for i, symbol in enumerate(symbols):
             if isinstance(recent_trades_results[i], Exception):
                 logger.warning(
@@ -341,7 +343,7 @@ class ContextBuilderService:
 
         return market_context, account_context, recent_trades_by_symbol
 
-    def _validate_full_context(self, market_context, account_context):
+    def _validate_full_context(self, market_context: MarketContext, account_context: AccountContext) -> None:
         """Validate that we have sufficient context data."""
         if not market_context.assets:
             raise InsufficientMarketDataError("No market data available for any assets")
@@ -384,6 +386,8 @@ class ContextBuilderService:
             if not force_refresh and (cached_data := self._get_cached_data(cache_key)):
                 return cached_data
 
+            if self._session_factory is None:
+                raise ContextBuilderError("No database session factory provided.")
             async with self._session_factory() as db:
                 interval_indicators, long_interval_indicators = await self._fetch_indicators(
                     symbol, primary_timeframe, long_timeframe, db
@@ -421,7 +425,7 @@ class ContextBuilderService:
 
         return market_context, errors
 
-    def _get_cached_data(self, cache_key):
+    def _get_cached_data(self, cache_key: str) -> Optional[Any]:
         if cache_key in self._cache:
             cached_time, cached_data = self._cache[cache_key]
             if (datetime.now(timezone.utc) - cached_time).total_seconds() < self._cache_ttl_seconds:
@@ -429,12 +433,12 @@ class ContextBuilderService:
                 return cached_data
         return None
 
-    async def _fetch_indicators(self, symbol, primary_timeframe, long_timeframe, db):
+    async def _fetch_indicators(self, symbol: str, primary_timeframe: str, long_timeframe: str, db: AsyncSession) -> Tuple[TechnicalIndicatorsSet, TechnicalIndicatorsSet]:
         interval_indicators = await self._get_indicator_set(symbol, primary_timeframe, db)
         long_interval_indicators = await self._get_indicator_set(symbol, long_timeframe, db)
         return interval_indicators, long_interval_indicators
 
-    async def _get_indicator_set(self, symbol, timeframe, db):
+    async def _get_indicator_set(self, symbol: str, timeframe: str, db: AsyncSession) -> TechnicalIndicatorsSet:
         market_data = await self.market_data_service.get_latest_market_data(
             db, symbol, timeframe, self.DEFAULT_PRICE_HISTORY_LIMIT
         )
@@ -459,7 +463,11 @@ class ContextBuilderService:
             logger.error(f"Failed to calculate indicators for {symbol} ({timeframe}): {e}")
             return TechnicalIndicatorsSet()
 
-    async def _fetch_primary_market_data(self, symbol, timeframe, db):
+    def _create_partial_indicators(self, market_data: List[MarketData]) -> TechnicalIndicatorsSet:
+        """Create a partial indicators set when full indicators can't be calculated."""
+        return TechnicalIndicatorsSet()
+
+    async def _fetch_primary_market_data(self, symbol: str, timeframe: str, db: AsyncSession) -> List[MarketData]:
         primary_market_data = await self.market_data_service.get_latest_market_data(
             db, symbol, timeframe, self.DEFAULT_PRICE_HISTORY_LIMIT
         )
@@ -468,7 +476,7 @@ class ContextBuilderService:
         primary_market_data.sort(key=lambda x: x.time)
         return primary_market_data
 
-    def _build_asset_market_data(self, symbol, primary_market_data, technical_indicators):
+    def _build_asset_market_data(self, symbol: str, primary_market_data: List[MarketData], technical_indicators: TechnicalIndicators) -> AssetMarketData:
         latest_candle = primary_market_data[-1]
         current_price = latest_candle.close
         price_24h_ago = (
@@ -507,7 +515,7 @@ class ContextBuilderService:
             technical_indicators=technical_indicators,
         )
 
-    def _calculate_volatility(self, market_data):
+    def _calculate_volatility(self, market_data: List[MarketData]) -> float:
         if len(market_data) < 20:
             return 0.0
         returns = [
@@ -516,7 +524,7 @@ class ContextBuilderService:
         ]
         return stdev(returns) * 100 if len(returns) > 1 else 0.0
 
-    def _process_asset_data_results(self, asset_data_results, symbols):
+    def _process_asset_data_results(self, asset_data_results: List[Any], symbols: List[str]) -> Tuple[Dict[str, AssetMarketData], List[str]]:
         assets, errors = {}, []
         for i, symbol in enumerate(symbols):
             result = asset_data_results[i]
@@ -573,9 +581,14 @@ class ContextBuilderService:
                 # Convert positions to summaries (new schema uses 'size' instead of 'quantity')
                 position_summaries = []
                 for pos in positions:
+                    # Validate the side is one of the expected values
+                    if pos.side not in ["long", "short"]:
+                        raise ContextBuilderError(f"Invalid position side: {pos.side}")
+                    # Cast to Literal type to satisfy mypy
+                    side_literal: Literal["long", "short"] = pos.side  # type: ignore
                     position_summary = PositionSummary(
                         symbol=pos.symbol,
-                        side=pos.side,
+                        side=side_literal,
                         size=pos.quantity,  # Map quantity to size
                         entry_price=pos.entry_price,
                         current_price=pos.current_price,
@@ -690,17 +703,29 @@ class ContextBuilderService:
                 trades = result.scalars().all()
 
                 # Convert to TradeHistory objects (new schema uses 'size' instead of 'quantity')
-                trade_history = [
-                    TradeHistory(
-                        symbol=trade.symbol,
-                        side=trade.side,
-                        size=trade.quantity,  # Map quantity to size
-                        price=trade.price,
-                        timestamp=trade.created_at,
-                        pnl=trade.pnl,
+                trade_history = []
+                for trade in trades:
+                    # Validate the side is one of the expected values
+                    if trade.side not in ["buy", "sell"]:
+                        raise ContextBuilderError(f"Invalid trade side: {trade.side}")
+
+                    # Ensure the timestamp is not None
+                    if trade.created_at is None:
+                        raise ContextBuilderError(f"Trade {trade.id} has no timestamp")
+
+                    # Cast to Literal type to satisfy mypy
+                    side_literal: Literal["buy", "sell"] = trade.side  # type: ignore
+
+                    trade_history.append(
+                        TradeHistory(
+                            symbol=trade.symbol,
+                            side=side_literal,
+                            size=trade.quantity,  # Map quantity to size
+                            price=trade.price,
+                            timestamp=trade.created_at,
+                            pnl=trade.pnl,
+                        )
                     )
-                    for trade in trades
-                ]
 
                 return trade_history
             except Exception as e:
@@ -743,20 +768,20 @@ class ContextBuilderService:
 
         win_rate = len(winning_trades) / len(trades) * 100 if trades else 0
         avg_win = (
-            sum(trade.pnl for trade in winning_trades) / len(winning_trades)
+            sum(trade.pnl for trade in winning_trades if trade.pnl is not None) / len(winning_trades)
             if winning_trades
             else 0
         )
         avg_loss = (
-            sum(trade.pnl for trade in losing_trades) / len(losing_trades) if losing_trades else 0
+            sum(trade.pnl for trade in losing_trades if trade.pnl is not None) / len(losing_trades) if losing_trades else 0
         )
 
         # Calculate max drawdown (simplified)
-        running_pnl = 0
-        peak = 0
-        max_drawdown = 0
+        running_pnl = 0.0
+        peak = 0.0
+        max_drawdown = 0.0
         for trade in trades:
-            if trade.pnl:
+            if trade.pnl is not None:
                 running_pnl += trade.pnl
                 if running_pnl > peak:
                     peak = running_pnl
@@ -781,7 +806,7 @@ class ContextBuilderService:
             sharpe_ratio=sharpe_ratio,
         )
 
-    def clear_cache(self, pattern: Optional[str] = None):
+    def clear_cache(self, pattern: Optional[str] = None) -> None:
         """
         Clear cached data.
 
@@ -803,7 +828,7 @@ _context_builder_service: Optional[ContextBuilderService] = None
 
 
 def get_context_builder_service(
-    session_factory: Optional[AsyncSession] = None,
+    session_factory: Optional[async_sessionmaker[AsyncSession]] = None,
 ) -> "ContextBuilderService":
     """Get or create the context builder service instance.
 

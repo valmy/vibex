@@ -6,14 +6,14 @@ Provides analytics and insights for trading decisions and their outcomes.
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, func, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.future import select
 
 from ..models.decision import Decision, DecisionResult
-from .llm.decision_repository import DecisionRepository
+from .decision_repository import DecisionRepository
 
 
 @dataclass
@@ -67,7 +67,6 @@ class DecisionAnalyticsService:
             session_factory: Async session factory for creating database sessions.
         """
         self.session_factory = session_factory
-        self.decision_repo = DecisionRepository(session_factory)
 
     async def get_decision_metrics(
         self,
@@ -78,14 +77,16 @@ class DecisionAnalyticsService:
     ) -> DecisionMetrics:
         """Get comprehensive decision metrics."""
 
-        analytics = await self.decision_repo.get_decision_analytics(
-            account_id=account_id, start_date=start_date, end_date=end_date, strategy_id=strategy_id
-        )
+        async with self.session_factory() as session:
+            decision_repo = DecisionRepository(session)
+            analytics = await decision_repo.get_decision_analytics(
+                account_id=account_id, start_date=start_date, end_date=end_date, strategy_id=strategy_id
+            )
 
-        # Calculate error rate
-        error_summary = await self.decision_repo.get_validation_errors_summary(
-            account_id=account_id, start_date=start_date, end_date=end_date
-        )
+            # Calculate error rate
+            error_summary = await decision_repo.get_validation_errors_summary(
+                account_id=account_id, start_date=start_date, end_date=end_date
+            )
 
         total_errors = sum(error_summary.values())
         error_rate = (
@@ -113,9 +114,11 @@ class DecisionAnalyticsService:
     ) -> List[StrategyMetrics]:
         """Get metrics for all strategies used by an account."""
 
-        performance_data = await self.decision_repo.get_performance_by_strategy(
-            account_id=account_id, start_date=start_date, end_date=end_date
-        )
+        async with self.session_factory() as session:
+            decision_repo = DecisionRepository(session)
+            performance_data = await decision_repo.get_performance_by_strategy(
+                account_id=account_id, start_date=start_date, end_date=end_date
+            )
 
         strategy_metrics = []
 
@@ -153,10 +156,12 @@ class DecisionAnalyticsService:
         end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=lookback_days)
 
-        # Get recent decisions
-        decisions = await self.decision_repo.get_decisions_by_account(
-            account_id=account_id, start_date=start_date, end_date=end_date, limit=1000
-        )
+        async with self.session_factory() as session:
+            decision_repo = DecisionRepository(session)
+            # Get recent decisions
+            decisions = await decision_repo.get_decisions_by_account(
+                account_id=account_id, start_date=start_date, end_date=end_date, limit=1000
+            )
 
         if not decisions:
             return TradingInsights(
@@ -175,13 +180,15 @@ class DecisionAnalyticsService:
         high_confidence_decisions = [
             f"{d.symbol} {d.action}"
             for d in decisions
-            if d.confidence >= 80 and d.validation_passed
+            if d.confidence is not None and d.confidence >= 80 and d.validation_passed
         ][:5]
 
-        # Get common validation errors
-        error_summary = await self.decision_repo.get_validation_errors_summary(
-            account_id=account_id, start_date=start_date, end_date=end_date
-        )
+        async with self.session_factory() as session:
+            decision_repo = DecisionRepository(session)
+            # Get common validation errors
+            error_summary = await decision_repo.get_validation_errors_summary(
+                account_id=account_id, start_date=start_date, end_date=end_date
+            )
         common_errors = sorted(error_summary.items(), key=lambda x: x[1], reverse=True)[:3]
         common_error_messages = [error[0] for error in common_errors]
 
@@ -228,7 +235,7 @@ class DecisionAnalyticsService:
                 {"account_id": account_id, "start_date": start_date, "end_date": end_date},
             )
 
-            heatmap = {}
+            heatmap: Dict[str, Dict[str, int]] = {}
             for row in result:
                 day = int(row.day_of_week)
                 hour = int(row.hour_of_day)
@@ -255,7 +262,7 @@ class DecisionAnalyticsService:
         account_id: int,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
-    ) -> Dict[str, Dict]:
+    ) -> Dict[str, Dict[str, Any]]:
         """Compare performance of different LLM models."""
 
         query = select(Decision).where(Decision.account_id == account_id)
@@ -269,7 +276,7 @@ class DecisionAnalyticsService:
             result = await session.execute(query)
             decisions = result.scalars().all()
 
-        model_stats = {}
+        model_stats: Dict[str, Dict[str, Any]] = {}
 
         for decision in decisions:
             model = decision.model_used
@@ -419,7 +426,7 @@ class DecisionAnalyticsService:
 
     def _get_action_recommendations(self, action_pnl: Dict[str, float]) -> List[str]:
         """Get action-based recommendations."""
-        recommendations = []
+        recommendations: List[str] = []
         if not action_pnl:
             return recommendations
 
@@ -443,7 +450,8 @@ class DecisionAnalyticsService:
         """Get confidence-based recommendations."""
         if not decisions:
             return []
-        avg_confidence = sum(d.confidence for d in decisions) / len(decisions)
+        confidences = [d.confidence for d in decisions if d.confidence is not None]
+        avg_confidence = sum(confidences) / len(confidences) if confidences else 0
         if avg_confidence < 60:
             return ["Low average confidence - consider adjusting strategy parameters"]
         if avg_confidence > 85:

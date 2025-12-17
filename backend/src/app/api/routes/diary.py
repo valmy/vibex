@@ -29,7 +29,7 @@ router = APIRouter(prefix="/api/v1/diary", tags=["diary"])
 @router.post("", response_model=DiaryEntryRead, status_code=status.HTTP_201_CREATED)
 async def create_diary_entry(
     entry_data: DiaryEntryCreate, db: Annotated[AsyncSession, Depends(get_db)]
-):
+) -> DiaryEntryRead:
     """Create a new diary entry."""
     try:
         entry = DiaryEntry(**entry_data.model_dump())
@@ -37,7 +37,7 @@ async def create_diary_entry(
         await db.commit()
         await db.refresh(entry)
         logger.info(f"Created diary entry for account {entry.account_id}")
-        return entry
+        return DiaryEntryRead.model_validate(entry)
     except Exception as e:
         await db.rollback()
         logger.error(f"Error creating diary entry: {e}")
@@ -49,25 +49,30 @@ async def list_diary_entries(
     db: Annotated[AsyncSession, Depends(get_db)],
     skip: Annotated[int, Query()] = 0,
     limit: Annotated[int, Query()] = 100,
-):
+) -> DiaryEntryListResponse:
     """List all diary entries with pagination."""
     try:
         # Get total count
         count_result = await db.execute(select(func.count(DiaryEntry.id)))
-        total = count_result.scalar()
+        total = count_result.scalar() or 0
 
         # Get paginated results
         result = await db.execute(select(DiaryEntry).offset(skip).limit(limit))
         entries = result.scalars().all()
 
-        return DiaryEntryListResponse(items=entries, total=total)
+        return DiaryEntryListResponse(
+            items=[DiaryEntryRead.model_validate(e) for e in entries],
+            total=total,
+        )
     except Exception as e:
         logger.error(f"Error listing diary entries: {e}")
         raise HTTPException(status_code=500, detail="Failed to list diary entries") from e
 
 
 @router.get("/{entry_id}", response_model=DiaryEntryRead)
-async def get_diary_entry(entry_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+async def get_diary_entry(
+    entry_id: int, db: Annotated[AsyncSession, Depends(get_db)]
+) -> DiaryEntryRead:
     """Get a specific diary entry by ID."""
     try:
         result = await db.execute(select(DiaryEntry).where(DiaryEntry.id == entry_id))
@@ -76,7 +81,7 @@ async def get_diary_entry(entry_id: int, db: Annotated[AsyncSession, Depends(get
         if not entry:
             raise ResourceNotFoundError("DiaryEntry", entry_id)
 
-        return entry
+        return DiaryEntryRead.model_validate(entry)
     except ResourceNotFoundError as e:
         raise to_http_exception(e) from e
     except Exception as e:
@@ -87,7 +92,7 @@ async def get_diary_entry(entry_id: int, db: Annotated[AsyncSession, Depends(get
 @router.put("/{entry_id}", response_model=DiaryEntryRead)
 async def update_diary_entry(
     entry_id: int, entry_data: DiaryEntryUpdate, db: Annotated[AsyncSession, Depends(get_db)]
-):
+) -> DiaryEntryRead:
     """Update a diary entry."""
     try:
         result = await db.execute(select(DiaryEntry).where(DiaryEntry.id == entry_id))
@@ -104,7 +109,7 @@ async def update_diary_entry(
         await db.commit()
         await db.refresh(entry)
         logger.info(f"Updated diary entry {entry_id}")
-        return entry
+        return DiaryEntryRead.model_validate(entry)
     except ResourceNotFoundError as e:
         raise to_http_exception(e) from e
     except Exception as e:
@@ -114,7 +119,9 @@ async def update_diary_entry(
 
 
 @router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_diary_entry(entry_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+async def delete_diary_entry(
+    entry_id: int, db: Annotated[AsyncSession, Depends(get_db)]
+) -> None:
     """Delete a diary entry."""
     try:
         result = await db.execute(select(DiaryEntry).where(DiaryEntry.id == entry_id))

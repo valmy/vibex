@@ -6,15 +6,15 @@ Tracks and analyzes strategy performance metrics, comparisons, and alerts.
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from sqlalchemy import and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from ..models.decision import Decision, DecisionResult
-from ..models.strategy import Strategy, StrategyAssignment, StrategyPerformance
-from ..schemas.trading_decision import StrategyComparison
+from ..models.strategy import Strategy, StrategyAssignment, StrategyPerformance as StrategyPerformanceModel
+from ..schemas.trading_decision import StrategyComparison, StrategyPerformance as StrategyPerformanceSchema
 
 
 @dataclass
@@ -44,7 +44,7 @@ class StrategyRanking:
     max_drawdown: float
 
 
-class StrategyPerformanceTracker:
+class StrategyPerformanceModelTracker:
     """Service for tracking and analyzing strategy performance."""
 
     def __init__(self, db_session: AsyncSession):
@@ -53,7 +53,7 @@ class StrategyPerformanceTracker:
 
     async def update_strategy_performance(
         self, strategy_id: int, account_id: Optional[int] = None, period_days: int = 30
-    ) -> StrategyPerformance:
+    ) -> StrategyPerformanceModel:
         """Update strategy performance metrics for a given period."""
 
         end_date = datetime.now(timezone.utc)
@@ -85,7 +85,7 @@ class StrategyPerformanceTracker:
             )
 
         # Calculate performance metrics
-        metrics = self._calculate_performance_metrics(decision_results)
+        metrics = self._calculate_performance_metrics([tuple(row) for row in decision_results])
 
         # Check if performance record exists
         existing_perf = await self._get_existing_performance_record(
@@ -94,7 +94,7 @@ class StrategyPerformanceTracker:
 
         if existing_perf:
             # Update existing record
-            await self._update_performance_record(existing_perf, metrics, decision_results)
+            await self._update_performance_record(existing_perf, metrics, [tuple(row) for row in decision_results])
             performance = existing_perf
         else:
             # Create new record
@@ -105,7 +105,7 @@ class StrategyPerformanceTracker:
                 end_date,
                 period_days,
                 metrics,
-                decision_results,
+                [tuple(row) for row in decision_results],
             )
 
         await self.db.commit()
@@ -115,24 +115,24 @@ class StrategyPerformanceTracker:
 
     async def get_strategy_performance(
         self, strategy_id: int, account_id: Optional[int] = None, period_days: int = 30
-    ) -> Optional[StrategyPerformance]:
+    ) -> Optional[StrategyPerformanceModel]:
         """Get strategy performance for a specific period."""
 
         end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=period_days)
 
-        query = select(StrategyPerformance).where(
+        query = select(StrategyPerformanceModel).where(
             and_(
-                StrategyPerformance.strategy_id == strategy_id,
-                StrategyPerformance.period_start >= start_date,
-                StrategyPerformance.period_end <= end_date,
+                StrategyPerformanceModel.strategy_id == strategy_id,
+                StrategyPerformanceModel.period_start >= start_date,
+                StrategyPerformanceModel.period_end <= end_date,
             )
         )
 
         if account_id:
-            query = query.where(StrategyPerformance.account_id == account_id)
+            query = query.where(StrategyPerformanceModel.account_id == account_id)
         else:
-            query = query.where(StrategyPerformance.account_id.is_(None))
+            query = query.where(StrategyPerformanceModel.account_id.is_(None))
 
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
@@ -150,8 +150,39 @@ class StrategyPerformanceTracker:
 
         for strategy_id in strategy_ids:
             # Update performance first
-            perf = await self.update_strategy_performance(strategy_id, account_id, period_days)
+            perf = await self.update_strategy_performance(int(strategy_id), account_id, period_days)
             strategy_performances.append(perf)
+
+        # Convert model performance objects to schema objects for comparison
+        # Convert model performance objects to schema objects for comparison
+        schema_performances: list[StrategyPerformanceSchema] = []
+        for perf in strategy_performances:
+            # Convert to schema object (note: schema expects different field names)
+            schema_perf = StrategyPerformanceSchema(
+                strategy_id=str(perf.strategy_id),
+                total_trades=perf.total_trades,
+                winning_trades=perf.winning_trades,
+                losing_trades=perf.losing_trades,
+                win_rate=perf.win_rate,
+                total_pnl=perf.total_pnl,
+                avg_win=perf.avg_win,
+                avg_loss=perf.avg_loss,
+                max_win=perf.max_win,
+                max_loss=perf.max_loss,
+                max_drawdown=perf.max_drawdown,
+                sharpe_ratio=perf.sharpe_ratio,
+                sortino_ratio=perf.sortino_ratio,
+                profit_factor=perf.profit_factor,
+                avg_trade_duration_hours=perf.avg_trade_duration_hours,
+                total_volume_traded=perf.total_volume_traded,
+                total_fees_paid=perf.total_fees_paid,
+                total_funding_paid=perf.total_funding_paid,
+                total_liquidations=perf.total_liquidations,
+                start_date=perf.period_start,
+                end_date=perf.period_end,
+                period_days=perf.period_days,
+            )
+            schema_performances.append(schema_perf)
 
         # Rank strategies based on criteria
         rankings = self._rank_strategies(strategy_performances, ranking_criteria)
@@ -161,10 +192,10 @@ class StrategyPerformanceTracker:
         best_strategy_id = str(best_strategy.strategy_id) if best_strategy else ""
 
         return StrategyComparison(
-            strategies=strategy_performances,
+            strategies=schema_performances,
             comparison_period_days=period_days,
             best_performing_strategy=best_strategy_id,
-            ranking_criteria=ranking_criteria,
+            ranking_criteria=ranking_criteria,  # type: ignore
             timestamp=datetime.now(timezone.utc),
         )
 
@@ -184,7 +215,7 @@ class StrategyPerformanceTracker:
 
         for strategy in strategies:
             # Get or update performance
-            perf = await self.update_strategy_performance(strategy.id, account_id, period_days)
+            perf = await self.update_strategy_performance(int(strategy.id), account_id, period_days)
 
             # Calculate ranking score based on criteria
             score = self._calculate_ranking_score(perf, ranking_criteria)
@@ -220,10 +251,10 @@ class StrategyPerformanceTracker:
         end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=lookback_days)
 
-        query = select(StrategyPerformance).where(StrategyPerformance.period_end >= start_date)
+        query = select(StrategyPerformanceModel).where(StrategyPerformanceModel.period_end >= start_date)
 
         if account_id:
-            query = query.where(StrategyPerformance.account_id == account_id)
+            query = query.where(StrategyPerformanceModel.account_id == account_id)
 
         result = await self.db.execute(query)
         performances = result.scalars().all()
@@ -241,7 +272,7 @@ class StrategyPerformanceTracker:
         account_id: Optional[int] = None,
         periods: int = 12,
         period_days: int = 7,
-    ) -> List[Dict]:
+    ) -> List[Dict[str, Any]]:
         """Get performance trends over multiple periods."""
 
         trends = []
@@ -251,16 +282,16 @@ class StrategyPerformanceTracker:
             start_date = end_date - timedelta(days=period_days)
 
             # Get performance for this period
-            query = select(StrategyPerformance).where(
+            query = select(StrategyPerformanceModel).where(
                 and_(
-                    StrategyPerformance.strategy_id == strategy_id,
-                    StrategyPerformance.period_start >= start_date,
-                    StrategyPerformance.period_end <= end_date,
+                    StrategyPerformanceModel.strategy_id == strategy_id,
+                    StrategyPerformanceModel.period_start >= start_date,
+                    StrategyPerformanceModel.period_end <= end_date,
                 )
             )
 
             if account_id:
-                query = query.where(StrategyPerformance.account_id == account_id)
+                query = query.where(StrategyPerformanceModel.account_id == account_id)
 
             result = await self.db.execute(query)
             perf = result.scalar_one_or_none()
@@ -300,12 +331,12 @@ class StrategyPerformanceTracker:
         for strategy in strategies:
             try:
                 # Update aggregate performance (all accounts)
-                await self.update_strategy_performance(strategy.id, None, period_days)
+                await self.update_strategy_performance(int(strategy.id), None, period_days)
                 updated_count += 1
 
                 # Update per-account performance
                 for account_id in account_ids:
-                    await self.update_strategy_performance(strategy.id, account_id, period_days)
+                    await self.update_strategy_performance(int(strategy.id), account_id, period_days)
                     updated_count += 1
 
             except Exception as e:
@@ -321,7 +352,7 @@ class StrategyPerformanceTracker:
 
     def _calculate_performance_metrics(
         self, decision_results: List[Tuple[Decision, Optional[DecisionResult]]]
-    ) -> Dict:
+    ) -> Dict[str, Any]:
         """Calculate performance metrics from decision results."""
 
         decisions = [dr[0] for dr in decision_results]
@@ -329,7 +360,7 @@ class StrategyPerformanceTracker:
         closed_results = [r for r in results if r.is_closed]
 
         # Basic counts
-        total_trades = len(decisions)
+        total_trades: int = len(decisions)
 
         if not closed_results:
             return {
@@ -381,9 +412,9 @@ class StrategyPerformanceTracker:
         total_volume = sum(volumes)
 
         # Drawdown calculation
-        running_pnl = 0
-        peak = 0
-        max_drawdown = 0
+        running_pnl: float = 0
+        peak: float = 0
+        max_drawdown: float = 0
 
         for pnl in pnls:
             running_pnl += pnl
@@ -411,21 +442,21 @@ class StrategyPerformanceTracker:
 
     async def _get_existing_performance_record(
         self, strategy_id: int, account_id: Optional[int], start_date: datetime, end_date: datetime
-    ) -> Optional[StrategyPerformance]:
+    ) -> Optional[StrategyPerformanceModel]:
         """Get existing performance record for the period."""
 
-        query = select(StrategyPerformance).where(
+        query = select(StrategyPerformanceModel).where(
             and_(
-                StrategyPerformance.strategy_id == strategy_id,
-                StrategyPerformance.period_start == start_date,
-                StrategyPerformance.period_end == end_date,
+                StrategyPerformanceModel.strategy_id == strategy_id,
+                StrategyPerformanceModel.period_start == start_date,
+                StrategyPerformanceModel.period_end == end_date,
             )
         )
 
         if account_id:
-            query = query.where(StrategyPerformance.account_id == account_id)
+            query = query.where(StrategyPerformanceModel.account_id == account_id)
         else:
-            query = query.where(StrategyPerformance.account_id.is_(None))
+            query = query.where(StrategyPerformanceModel.account_id.is_(None))
 
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
@@ -437,26 +468,38 @@ class StrategyPerformanceTracker:
         start_date: datetime,
         end_date: datetime,
         period_days: int,
-        metrics: Dict,
-        decision_results: List,
-    ) -> StrategyPerformance:
+        metrics: Dict[str, Any],
+        decision_results: List[Any],
+    ) -> StrategyPerformanceModel:
         """Create new performance record."""
 
-        performance = StrategyPerformance(
+        performance = StrategyPerformanceModel(
             strategy_id=strategy_id,
-            account_id=account_id,
             period_start=start_date,
             period_end=end_date,
             period_days=period_days,
-            **metrics,
+            account_id=account_id,
+            total_trades=metrics.get("total_trades", 0),
+            winning_trades=metrics.get("winning_trades", 0),  # Note: fixing typo here
+            losing_trades=metrics.get("losing_trades", 0),
+            win_rate=metrics.get("win_rate", 0.0),
+            total_pnl=metrics.get("total_pnl", 0.0),
+            avg_win=metrics.get("avg_win", 0.0),
+            avg_loss=metrics.get("avg_loss", 0.0),
+            max_win=metrics.get("max_win", 0.0),
+            max_loss=metrics.get("max_loss", 0.0),
+            max_drawdown=metrics.get("max_drawdown", 0.0),
+            profit_factor=metrics.get("profit_factor", 0.0),
+            avg_trade_duration_hours=metrics.get("avg_trade_duration_hours", 0.0),
+            total_volume_traded=metrics.get("total_volume_traded", 0.0),
         )
 
         self.db.add(performance)
         return performance
 
     async def _update_performance_record(
-        self, performance: StrategyPerformance, metrics: Dict, decision_results: List
-    ):
+        self, performance: StrategyPerformanceModel, metrics: Dict[str, Any], decision_results: List[Any]
+    ) -> None:
         """Update existing performance record."""
 
         for key, value in metrics.items():
@@ -469,10 +512,10 @@ class StrategyPerformanceTracker:
         start_date: datetime,
         end_date: datetime,
         period_days: int,
-    ) -> StrategyPerformance:
+    ) -> StrategyPerformanceModel:
         """Create empty performance record when no data available."""
 
-        performance = StrategyPerformance(
+        performance = StrategyPerformanceModel(
             strategy_id=strategy_id,
             account_id=account_id,
             period_start=start_date,
@@ -497,7 +540,7 @@ class StrategyPerformanceTracker:
         return performance
 
     def _rank_strategies(
-        self, performances: List[StrategyPerformance], criteria: str
+        self, performances: List[StrategyPerformanceModel], criteria: str
     ) -> List[StrategyRanking]:
         """Rank strategies based on specified criteria."""
 
@@ -529,7 +572,7 @@ class StrategyPerformanceTracker:
 
         return rankings
 
-    def _calculate_ranking_score(self, performance: StrategyPerformance, criteria: str) -> float:
+    def _calculate_ranking_score(self, performance: StrategyPerformanceModel, criteria: str) -> float:
         """Calculate ranking score based on criteria."""
 
         if criteria == "total_pnl":
@@ -542,7 +585,7 @@ class StrategyPerformanceTracker:
             return performance.profit_factor
         else:
             # Default composite score
-            score = 0
+            score: float = 0
             score += performance.total_pnl * 0.3
             score += performance.win_rate * 0.2
             score += (performance.sharpe_ratio or 0) * 100 * 0.3
@@ -550,7 +593,7 @@ class StrategyPerformanceTracker:
             return score
 
     async def _check_strategy_alerts(
-        self, performance: StrategyPerformance
+        self, performance: StrategyPerformanceModel
     ) -> List[PerformanceAlert]:
         """Check for performance alerts for a strategy."""
 

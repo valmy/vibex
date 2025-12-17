@@ -28,7 +28,7 @@ async def create_position(
     position_data: PositionCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
-):
+) -> PositionRead:
     """Create a new position."""
     try:
         position = Position(**position_data.model_dump())
@@ -36,7 +36,7 @@ async def create_position(
         await db.commit()
         await db.refresh(position)
         logger.info(f"Created position for account {position.account_id}")
-        return position
+        return PositionRead.model_validate(position)
     except Exception as e:
         await db.rollback()
         logger.error(f"Error creating position: {e}")
@@ -48,25 +48,30 @@ async def list_positions(
     db: Annotated[AsyncSession, Depends(get_db)],
     skip: Annotated[int, Query()] = 0,
     limit: Annotated[int, Query()] = 100,
-):
+) -> PositionListResponse:
     """List all positions with pagination."""
     try:
         # Get total count
         count_result = await db.execute(select(func.count(Position.id)))
-        total = count_result.scalar()
+        total = count_result.scalar() or 0
 
         # Get paginated results
         result = await db.execute(select(Position).offset(skip).limit(limit))
         positions = result.scalars().all()
 
-        return PositionListResponse(items=positions, total=total)
+        return PositionListResponse(
+            items=[PositionRead.model_validate(p) for p in positions],
+            total=total,
+        )
     except Exception as e:
         logger.error(f"Error listing positions: {e}")
         raise HTTPException(status_code=500, detail="Failed to list positions") from e
 
 
 @router.get("/{position_id}", response_model=PositionRead)
-async def get_position(position_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+async def get_position(
+    position_id: int, db: Annotated[AsyncSession, Depends(get_db)]
+) -> PositionRead:
     """Get a specific position by ID."""
     try:
         result = await db.execute(select(Position).where(Position.id == position_id))
@@ -75,7 +80,7 @@ async def get_position(position_id: int, db: Annotated[AsyncSession, Depends(get
         if not position:
             raise ResourceNotFoundError("Position", position_id)
 
-        return position
+        return PositionRead.model_validate(position)
     except ResourceNotFoundError as e:
         raise to_http_exception(e) from e
     except Exception as e:
@@ -89,7 +94,7 @@ async def update_position(
     position_data: PositionUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
-):
+) -> PositionRead:
     """Update a position."""
     try:
         result = await db.execute(select(Position).where(Position.id == position_id))
@@ -106,7 +111,7 @@ async def update_position(
         await db.commit()
         await db.refresh(position)
         logger.info(f"Updated position {position_id}")
-        return position
+        return PositionRead.model_validate(position)
     except ResourceNotFoundError as e:
         raise to_http_exception(e) from e
     except Exception as e:
@@ -120,7 +125,7 @@ async def delete_position(
     position_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
-):
+) -> None:
     """Delete a position."""
     try:
         result = await db.execute(select(Position).where(Position.id == position_id))

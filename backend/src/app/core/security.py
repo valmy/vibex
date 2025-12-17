@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db.session import get_db
-from ..models.account import User
+from ..models.account import Account, User
 from .config import config
 
 http_bearer = HTTPBearer(auto_error=True, scheme_name="BearerAuth")
@@ -100,7 +100,7 @@ async def require_account_owner(
     account_id: int,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-):
+) -> Account:
     """
     Dependency that requires the current user to own the account.
 
@@ -115,8 +115,6 @@ async def require_account_owner(
     Raises:
         HTTPException: 404 if account not found, 403 if user doesn't own the account
     """
-    from ..models.account import Account
-
     result = await db.execute(select(Account).where(Account.id == account_id))
     account = result.scalar_one_or_none()
 
@@ -139,7 +137,7 @@ async def require_admin_or_owner(
     account_id: int,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-):
+) -> Account:
     """
     Dependency that requires the current user to be admin or own the account.
 
@@ -154,8 +152,6 @@ async def require_admin_or_owner(
     Raises:
         HTTPException: 404 if account not found, 403 if neither admin nor owner
     """
-    from ..models.account import Account
-
     result = await db.execute(select(Account).where(Account.id == account_id))
     account = result.scalar_one_or_none()
 

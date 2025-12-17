@@ -35,7 +35,7 @@ async def create_account(
     account_data: AccountCreate,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-):
+) -> AccountRead:
     """
     Create a new trading account for the authenticated user.
 
@@ -63,9 +63,13 @@ async def create_account(
     - 422: Invalid request data
     """
     try:
+        # Ensure user ID is available (it should be for authenticated users)
+        if current_user.id is None:
+            raise HTTPException(status_code=500, detail="User ID not found")
+
         account = await account_service.create_account(
             db=db,
-            user_id=current_user.id,
+            user_id=int(current_user.id),
             data=account_data,
         )
         return AccountRead.from_account(account)
@@ -86,7 +90,7 @@ async def list_accounts(
     limit: Annotated[
         int, Query(gt=0, le=1000, description="Maximum number of accounts to return")
     ] = 100,
-):
+) -> AccountListResponse:
     """
     List all trading accounts owned by the authenticated user.
 
@@ -102,9 +106,13 @@ async def list_accounts(
     - 401: Invalid or missing authentication token
     """
     try:
+        # Ensure user ID is available
+        if current_user.id is None:
+            raise HTTPException(status_code=500, detail="User ID not found")
+
         accounts, total = await account_service.list_user_accounts(
             db=db,
-            user_id=current_user.id,
+            user_id=int(current_user.id),
             skip=skip,
             limit=limit,
         )
@@ -123,7 +131,7 @@ async def get_account(
     account_id: int,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-):
+) -> AccountRead:
     """
     Get a specific trading account by ID.
 
@@ -161,7 +169,7 @@ async def update_account(
     account_data: AccountUpdate,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-):
+) -> AccountRead:
     """
     Update a trading account.
 
@@ -214,7 +222,7 @@ async def delete_account(
     force: Annotated[
         bool, Query(description="Force delete even if account has active positions")
     ] = False,
-):
+) -> None:
     """
     Delete a trading account.
 
@@ -259,7 +267,7 @@ async def sync_balance(
     account_id: int,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-):
+) -> AccountRead:
     """
     Sync account balance from AsterDEX API.
 

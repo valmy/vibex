@@ -69,7 +69,7 @@ def get_strategy_manager() -> StrategyManager:
 
 # API Endpoints
 @router.get("/health/system", response_model=SystemHealthResponse)
-async def get_system_health():
+async def get_system_health() -> SystemHealthResponse:
     """
     Get comprehensive system health status.
 
@@ -77,7 +77,7 @@ async def get_system_health():
     decision engine, LLM service, context builder, and strategy manager.
     """
     try:
-        components = {}
+        components: Dict[str, Dict[str, Any]] = {}
         issues = []
         overall_healthy = True
 
@@ -180,7 +180,7 @@ async def get_performance_metrics(
     timeframe_hours: Annotated[
         int, Query(ge=1, le=168, description="Hours to look back for metrics")
     ] = 24,
-):
+) -> PerformanceMetrics:
     """
     Get comprehensive performance metrics for all system components.
 
@@ -258,7 +258,7 @@ async def get_performance_metrics(
 
 
 @router.get("/models", response_model=ModelManagementResponse)
-async def get_model_management_info():
+async def get_model_management_info() -> ModelManagementResponse:
     """
     Get LLM model management information.
 
@@ -269,11 +269,11 @@ async def get_model_management_info():
         llm_service = get_llm_service()
 
         # Get current model and available models
-        current_model = getattr(llm_service, "current_model", "unknown")
+        current_model = getattr(llm_service, "model", "unknown")
         available_models = list(getattr(llm_service, "supported_models", {}).keys())
 
         # Get model performance (placeholder - would implement actual tracking)
-        model_performance = {}
+        model_performance: Dict[str, Dict[str, Any]] = {}
         for model in available_models:
             model_performance[model] = {
                 "total_requests": 0,  # Would track actual metrics
@@ -299,7 +299,7 @@ async def get_model_management_info():
 
 
 @router.post("/models/{model_name}/switch")
-async def switch_llm_model(model_name: str):
+async def switch_llm_model(model_name: str) -> Dict[str, Any]:
     """
     Switch to a different LLM model.
 
@@ -307,6 +307,7 @@ async def switch_llm_model(model_name: str):
     """
     try:
         llm_service = get_llm_service()
+        # Ensure switch_model is available on LLMService
         success = await llm_service.switch_model(model_name)
 
         if not success:
@@ -332,7 +333,7 @@ async def get_model_performance(
     timeframe_hours: Annotated[
         int, Query(ge=1, le=168, description="Hours to look back for metrics")
     ] = 24,
-):
+) -> Dict[str, Any]:
     """
     Get performance metrics for a specific LLM model.
 
@@ -384,7 +385,7 @@ async def get_system_alerts(
     limit: Annotated[
         int, Query(ge=1, le=200, description="Maximum number of alerts to return")
     ] = 50,
-):
+) -> AlertsResponse:
     """
     Get system alerts and notifications.
 
@@ -392,8 +393,8 @@ async def get_system_alerts(
     by severity level or component.
     """
     try:
-        active_alerts = []
-        alert_counts = {"low": 0, "medium": 0, "high": 0, "critical": 0}
+        active_alerts: List[Dict[str, Any]] = []
+        alert_counts: Dict[str, int] = {"low": 0, "medium": 0, "high": 0, "critical": 0}
 
         # Get strategy alerts
         strategy_manager = get_strategy_manager()
@@ -427,7 +428,7 @@ async def get_system_alerts(
         # Get recent alerts (last 24 hours)
         recent_cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
         recent_alerts = [
-            a for a in active_alerts if datetime.fromisoformat(a["created_at"]) > recent_cutoff
+            a for a in active_alerts if datetime.fromisoformat(str(a["created_at"])) > recent_cutoff
         ]
 
         return AlertsResponse(
@@ -444,7 +445,7 @@ async def get_analytics_summary(
     timeframe_hours: Annotated[
         int, Query(ge=1, le=168, description="Hours to look back for analytics")
     ] = 24,
-):
+) -> Dict[str, Any]:
     """
     Get analytics summary for the specified timeframe.
 
@@ -504,7 +505,7 @@ async def get_analytics_summary(
 
 
 @router.post("/health/check")
-async def trigger_health_check():
+async def trigger_health_check() -> Dict[str, Any]:
     """
     Trigger a comprehensive health check of all system components.
 

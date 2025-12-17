@@ -115,7 +115,10 @@ async def get_market_data_by_symbol(
         service = get_market_data_service()
         data, total = await service.get_latest_market_data_with_total(db, symbol, interval, limit)
 
-        return MarketDataListResponse(items=data, total=total)
+        # Convert SQLAlchemy models to Pydantic schemas
+        items = [MarketDataRead.model_validate(item) for item in data]
+
+        return MarketDataListResponse(items=items, total=total)
     except Exception as e:
         logger.error(f"Error getting market data for {symbol}: {e}")
         raise HTTPException(status_code=500, detail="Failed to get market data") from e
@@ -187,7 +190,10 @@ async def get_market_data_range(
         service = get_market_data_service()
         data = await service.get_market_data_range(db, symbol, interval, start_time, end_time)
 
-        return MarketDataListResponse(items=data, total=len(data))
+        # Convert SQLAlchemy models to Pydantic schemas
+        items = [MarketDataRead.model_validate(item) for item in data]
+
+        return MarketDataListResponse(items=items, total=len(data))
     except Exception as e:
         logger.error(f"Error getting market data range for {symbol}: {e}")
         raise HTTPException(status_code=500, detail="Failed to get market data range") from e

@@ -26,25 +26,28 @@ async def list_trades(
     db: Annotated[AsyncSession, Depends(get_db)],
     skip: Annotated[int, Query()] = 0,
     limit: Annotated[int, Query()] = 100,
-):
+) -> TradeListResponse:
     """List all trades with pagination."""
     try:
         # Get total count
         count_result = await db.execute(select(func.count(Trade.id)))
-        total = count_result.scalar()
+        total = count_result.scalar() or 0
 
         # Get paginated results
         result = await db.execute(select(Trade).offset(skip).limit(limit))
         trades = result.scalars().all()
 
-        return TradeListResponse(items=trades, total=total)
+        return TradeListResponse(
+            items=[TradeRead.model_validate(t) for t in trades],
+            total=total,
+        )
     except Exception as e:
         logger.error(f"Error listing trades: {e}")
         raise HTTPException(status_code=500, detail="Failed to list trades") from e
 
 
 @router.get("/{trade_id}", response_model=TradeRead)
-async def get_trade(trade_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+async def get_trade(trade_id: int, db: Annotated[AsyncSession, Depends(get_db)]) -> TradeRead:
     """Get a specific trade by ID."""
     try:
         result = await db.execute(select(Trade).where(Trade.id == trade_id))
@@ -53,7 +56,7 @@ async def get_trade(trade_id: int, db: Annotated[AsyncSession, Depends(get_db)])
         if not trade:
             raise ResourceNotFoundError("Trade", trade_id)
 
-        return trade
+        return TradeRead.model_validate(trade)
     except ResourceNotFoundError as e:
         raise to_http_exception(e) from e
     except Exception as e:

@@ -499,7 +499,7 @@ async def clear_cache(
     try:
         decision_engine = get_decision_engine()
 
-        def clear_caches():
+        def clear_caches() -> None:
             if account_id:
                 decision_engine._invalidate_account_caches(account_id)
                 logger.info(f"Cleared caches for account {account_id}")
@@ -548,7 +548,7 @@ async def reset_metrics() -> Dict[str, Any]:
 
 # WebSocket endpoint for real-time decision streaming
 @router.websocket("/stream/{account_id}")
-async def decision_stream(websocket: WebSocket, account_id: int):
+async def decision_stream(websocket: WebSocket, account_id: int) -> None:
     """
     WebSocket endpoint for real-time decision streaming.
 
