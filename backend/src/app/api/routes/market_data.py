@@ -6,7 +6,7 @@ Integrates with MarketDataService for real-time data fetching and storage.
 """
 
 from datetime import datetime
-from typing import Annotated, List, Optional, Dict, Any
+from typing import Annotated, Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
@@ -52,14 +52,18 @@ async def list_market_data(
         result = await db.execute(select(MarketData).offset(skip).limit(limit))
         data = result.scalars().all()
 
-        return MarketDataListResponse(items=[MarketDataRead.model_validate(d) for d in data], total=total)
+        return MarketDataListResponse(
+            items=[MarketDataRead.model_validate(d) for d in data], total=total
+        )
     except Exception as e:
         logger.error(f"Error listing market data: {e}")
         raise HTTPException(status_code=500, detail="Failed to list market data") from e
 
 
 @router.get("/{data_id}", response_model=MarketDataRead)
-async def get_market_data(data_id: int, db: Annotated[AsyncSession, Depends(get_db)]) -> MarketDataRead:
+async def get_market_data(
+    data_id: int, db: Annotated[AsyncSession, Depends(get_db)]
+) -> MarketDataRead:
     """
     Get a specific market data entry by ID.
 

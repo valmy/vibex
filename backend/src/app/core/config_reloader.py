@@ -97,7 +97,9 @@ class ConfigReloader:
         self._watching = False
         self._watch_task: Optional[asyncio.Task[Any]] = None
         self._last_reload_time = 0.0
-        self._subscribers: Dict[str, Callable[[BaseConfig, BaseConfig, Dict[str, Tuple[Any, Any]]], Any]] = {}
+        self._subscribers: Dict[
+            str, Callable[[BaseConfig, BaseConfig, Dict[str, Tuple[Any, Any]]], Any]
+        ] = {}
         self._change_history: List[ConfigChange] = []
         self._max_history_size = 100
         self._validator = ConfigValidator()
@@ -186,7 +188,9 @@ class ConfigReloader:
             logger.error(f"Configuration reload failed: {e}", exc_info=True)
             return False
 
-    def subscribe(self, callback: Callable[[BaseConfig, BaseConfig, Dict[str, Tuple[Any, Any]]], Any]) -> str:
+    def subscribe(
+        self, callback: Callable[[BaseConfig, BaseConfig, Dict[str, Tuple[Any, Any]]], Any]
+    ) -> str:
         """
         Subscribe to configuration changes.
 

@@ -4,7 +4,7 @@ API routes for market analysis powered by LLM.
 Provides endpoints for market analysis, trading signals, and market summaries.
 """
 
-from typing import Annotated, Optional, Dict, Any
+from typing import Annotated, Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -72,7 +72,9 @@ async def analyze_market(
 
 
 @router.post("/signal/{symbol}")
-async def get_trading_signal(symbol: str, db: Annotated[AsyncSession, Depends(get_db)]) -> Dict[str, Any]:
+async def get_trading_signal(
+    symbol: str, db: Annotated[AsyncSession, Depends(get_db)]
+) -> Dict[str, Any]:
     """
     Get trading signal for a symbol using LLM analysis.
 

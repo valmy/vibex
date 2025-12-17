@@ -28,7 +28,7 @@ The old context.py file has been deleted and should not be used.
 """
 
 from datetime import datetime, timezone
-from typing import Dict, List, Literal, Optional, Any
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -670,49 +670,46 @@ class StrategyPerformance(BaseModel):
             return 0.0
         return (self.total_pnl / initial_capital) * 100
 
-    def get_performance_grade(self) -> str:
-        """Get performance grade based on multiple metrics."""
+    def _calculate_score_component(
+        self, value: Optional[float], thresholds: Dict[float, int]
+    ) -> int:
+        """Calculate score based on value thresholds."""
+        if value is None:
+            return 0
+        # Sort thresholds descending to find highest match
+        for threshold, points in sorted(thresholds.items(), key=lambda x: x[0], reverse=True):
+            if value >= threshold:
+                return points
+        return 0
+
+    def _calculate_performance_score(self) -> int:
+        """Calculate numeric performance score."""
         score = 0
 
         # Win rate scoring (0-25 points)
-        if self.win_rate >= 70:
-            score += 25
-        elif self.win_rate >= 60:
-            score += 20
-        elif self.win_rate >= 50:
-            score += 15
-        elif self.win_rate >= 40:
-            score += 10
+        score += self._calculate_score_component(self.win_rate, {70: 25, 60: 20, 50: 15, 40: 10})
 
         # Profit factor scoring (0-25 points)
-        if self.profit_factor >= 2.0:
-            score += 25
-        elif self.profit_factor >= 1.5:
-            score += 20
-        elif self.profit_factor >= 1.2:
-            score += 15
-        elif self.profit_factor >= 1.0:
-            score += 10
+        score += self._calculate_score_component(
+            self.profit_factor, {2.0: 25, 1.5: 20, 1.2: 15, 1.0: 10}
+        )
 
         # Sharpe ratio scoring (0-25 points)
-        if self.sharpe_ratio and self.sharpe_ratio >= 2.0:
-            score += 25
-        elif self.sharpe_ratio and self.sharpe_ratio >= 1.5:
-            score += 20
-        elif self.sharpe_ratio and self.sharpe_ratio >= 1.0:
-            score += 15
-        elif self.sharpe_ratio and self.sharpe_ratio >= 0.5:
-            score += 10
+        score += self._calculate_score_component(
+            self.sharpe_ratio, {2.0: 25, 1.5: 20, 1.0: 15, 0.5: 10}
+        )
 
         # Total PnL scoring (0-25 points)
+        # Handle > 0 check separately or use epsilon
         if self.total_pnl > 0:
             score += 25
-        elif self.total_pnl >= -100:
-            score += 15
-        elif self.total_pnl >= -500:
-            score += 10
+        else:
+            score += self._calculate_score_component(self.total_pnl, {-100: 15, -500: 10})
 
-        # Grade assignment
+        return score
+
+    def _get_grade_from_score(self, score: int) -> str:
+        """Map numeric score to letter grade."""
         if score >= 85:
             return "A+"
         elif score >= 75:
@@ -729,6 +726,11 @@ class StrategyPerformance(BaseModel):
             return "D"
         else:
             return "F"
+
+    def get_performance_grade(self) -> str:
+        """Get performance grade based on multiple metrics."""
+        score = self._calculate_performance_score()
+        return self._get_grade_from_score(score)
 
     def needs_attention(self) -> bool:
         """Check if strategy performance needs attention."""

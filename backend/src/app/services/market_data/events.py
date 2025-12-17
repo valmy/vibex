@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum, auto
-from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
+from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,9 @@ class EventType(Enum):
 _EventHandlerCallable = TypeVar("_EventHandlerCallable", bound=Callable[..., Any])
 
 
-def event_handler(event_type: EventType, interval: Optional[str] = None) -> Callable[[_EventHandlerCallable], _EventHandlerCallable]:
+def event_handler(
+    event_type: EventType, interval: Optional[str] = None
+) -> Callable[[_EventHandlerCallable], _EventHandlerCallable]:
     """
     Decorator for event handler methods.
 
@@ -64,11 +66,16 @@ class EventManager:
 
     def __init__(self) -> None:
         """Initialize the event manager."""
-        self._event_handlers: Dict[EventType, Dict[Optional[str], List[Callable[[BaseEvent], Any]]]] = {
-            EventType.CANDLE_CLOSE: {}
-        }
+        self._event_handlers: Dict[
+            EventType, Dict[Optional[str], List[Callable[[BaseEvent], Any]]]
+        ] = {EventType.CANDLE_CLOSE: {}}
 
-    def register_handler(self, event_type: EventType, handler: Callable[[BaseEvent], Any], interval: Optional[str] = None) -> None:
+    def register_handler(
+        self,
+        event_type: EventType,
+        handler: Callable[[BaseEvent], Any],
+        interval: Optional[str] = None,
+    ) -> None:
         """Register an event handler for a specific event type and optional interval.
 
         Args:
@@ -87,7 +94,9 @@ class EventManager:
             f"Registered {event_type.name} handler for interval {interval}: {handler.__name__}"
         )
 
-    async def trigger_event(self, event: BaseEvent, event_type: EventType, interval: Optional[str] = None) -> None:
+    async def trigger_event(
+        self, event: BaseEvent, event_type: EventType, interval: Optional[str] = None
+    ) -> None:
         """Trigger all handlers for a specific event type and optional interval.
 
         Args:
@@ -112,7 +121,9 @@ class EventManager:
                 return_exceptions=True,
             )
 
-    async def _safe_execute_handler(self, handler: Callable[[BaseEvent], Any], event: BaseEvent) -> None:
+    async def _safe_execute_handler(
+        self, handler: Callable[[BaseEvent], Any], event: BaseEvent
+    ) -> None:
         """Execute a single event handler with error handling.
 
         Args:

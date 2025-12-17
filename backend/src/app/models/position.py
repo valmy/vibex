@@ -6,7 +6,7 @@ Represents an open position in a trading pair.
 
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Column, Float, ForeignKey, Index, Integer, String
+from sqlalchemy import Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import BaseModel
@@ -29,12 +29,16 @@ class Position(BaseModel):
     )
 
     # Foreign key
-    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("trading.accounts.id"), nullable=False, index=True)
+    account_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("trading.accounts.id"), nullable=False, index=True
+    )
 
     # Position identification
     symbol: Mapped[str] = mapped_column(String(50), nullable=False)  # e.g., BTCUSDT
     side: Mapped[str] = mapped_column(String(10), nullable=False)  # long or short
-    status: Mapped[str] = mapped_column(String(50), default="open", nullable=False)  # open, closed, liquidated
+    status: Mapped[str] = mapped_column(
+        String(50), default="open", nullable=False
+    )  # open, closed, liquidated
 
     # Position details
     entry_price: Mapped[float] = mapped_column(Float, nullable=False)
@@ -54,8 +58,12 @@ class Position(BaseModel):
 
     # Relationships
     account: Mapped["Account"] = relationship("Account", back_populates="positions")
-    orders: Mapped[List["Order"]] = relationship("Order", back_populates="position", cascade="all, delete-orphan")
-    trades: Mapped[List["Trade"]] = relationship("Trade", back_populates="position", cascade="all, delete-orphan")
+    orders: Mapped[List["Order"]] = relationship(
+        "Order", back_populates="position", cascade="all, delete-orphan"
+    )
+    trades: Mapped[List["Trade"]] = relationship(
+        "Trade", back_populates="position", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         """String representation."""

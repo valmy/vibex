@@ -207,9 +207,9 @@ class TestAccountManagementAPIE2E:
 
         response = await client.post("/api/v1/accounts", json=account_data, headers=headers)
 
-        assert response.status_code == 201, (
-            f"Expected 201, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == 201
+        ), f"Expected 201, got {response.status_code}: {response.text}"
         data = response.json()
 
         # Verify response data

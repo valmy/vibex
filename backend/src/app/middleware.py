@@ -1,4 +1,5 @@
-from typing import Callable, Awaitable
+from typing import Awaitable, Callable
+
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import func
@@ -12,7 +13,9 @@ from .models.account import User
 
 
 class AdminOnlyMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         if request.method in ["POST", "PUT", "DELETE"]:
             # A list of routes that are exempt from the admin check
             exempt_routes = ["/api/v1/auth/login", "/api/v1/auth/challenge"]

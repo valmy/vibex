@@ -585,9 +585,9 @@ class TestDecisionAccuracyRegression:
 
         # Validate we got results for most patterns
         successful_patterns = [k for k, v in pattern_results.items() if "error" not in v]
-        assert len(successful_patterns) >= 2, (
-            f"At least 2 patterns should succeed, got {len(successful_patterns)}"
-        )
+        assert (
+            len(successful_patterns) >= 2
+        ), f"At least 2 patterns should succeed, got {len(successful_patterns)}"
 
         # Log summary
         logger.info("Pattern recognition summary:")
@@ -728,9 +728,9 @@ class TestDecisionAccuracyRegression:
 
             # Validate allocation consistency
             total_from_assets = sum(d.allocation_usd for d in result.decision.decisions)
-            assert abs(total_from_assets - result.decision.total_allocation_usd) < 0.01, (
-                "Total allocation should match sum of asset allocations"
-            )
+            assert (
+                abs(total_from_assets - result.decision.total_allocation_usd) < 0.01
+            ), "Total allocation should match sum of asset allocations"
 
             logger.info("✓ Multi-asset decision quality test passed")
 

@@ -237,9 +237,9 @@ class TestGenerateAPIE2E:
             headers=headers,
         )
 
-        assert response.status_code == 200, (
-            f"Expected 200, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == 200
+        ), f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
 
         # Validate DecisionResult structure
@@ -293,9 +293,9 @@ class TestGenerateAPIE2E:
             headers=headers,
         )
 
-        assert response.status_code == 200, (
-            f"Expected 200, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == 200
+        ), f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
 
         # Validate decisions contain entries for specified symbols
@@ -325,9 +325,9 @@ class TestGenerateAPIE2E:
             headers=headers,
         )
 
-        assert response.status_code == 200, (
-            f"Expected 200, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == 200
+        ), f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
 
         # Validate exactly one asset decision
@@ -360,9 +360,9 @@ class TestGenerateAPIE2E:
             headers=headers,
         )
 
-        assert response.status_code == 200, (
-            f"Expected 200, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == 200
+        ), f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
 
         # Validate decision was generated with fresh data
@@ -400,9 +400,9 @@ class TestGenerateAPIE2E:
             headers=headers,
         )
 
-        assert response.status_code == 200, (
-            f"Expected 200, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == 200
+        ), f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
 
         # Validate decision was generated
@@ -438,9 +438,9 @@ class TestGenerateAPIE2E:
             headers=headers,
         )
 
-        assert response.status_code == 400, (
-            f"Expected 400, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == 400
+        ), f"Expected 400, got {response.status_code}: {response.text}"
         data = response.json()
         assert "detail" in data
         assert "strategy" in data["detail"].lower() or "not found" in data["detail"].lower()
@@ -479,9 +479,9 @@ class TestGenerateAPIE2E:
         assert isinstance(data["context"], dict), "context should be a dict"
         assert isinstance(data["validation_passed"], bool), "validation_passed should be bool"
         assert isinstance(data["validation_errors"], list), "validation_errors should be list"
-        assert isinstance(data["processing_time_ms"], (int, float)), (
-            "processing_time_ms should be numeric"
-        )
+        assert isinstance(
+            data["processing_time_ms"], (int, float)
+        ), "processing_time_ms should be numeric"
         assert isinstance(data["model_used"], str), "model_used should be string"
 
         # Validate TradingDecision fields
@@ -635,9 +635,9 @@ class TestGenerateAPIE2E:
             headers=headers,
         )
 
-        assert response.status_code == 400, (
-            f"Expected 400, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == 400
+        ), f"Expected 400, got {response.status_code}: {response.text}"
         data = response.json()
         assert "detail" in data
         assert "symbol" in data["detail"].lower() or "invalid" in data["detail"].lower()
@@ -662,9 +662,9 @@ class TestGenerateAPIE2E:
             headers=headers,
         )
 
-        assert response.status_code == 422, (
-            f"Expected 422, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == 422
+        ), f"Expected 422, got {response.status_code}: {response.text}"
         data = response.json()
         assert "detail" in data
 
@@ -745,15 +745,15 @@ class TestGenerateAPIE2E:
         assert len(decision["portfolio_rationale"]) > 0, "Portfolio rationale should exist"
 
         for asset_decision in decision["decisions"]:
-            assert "rationale" in asset_decision, (
-                f"Rationale should exist for {asset_decision['asset']}"
-            )
-            assert "exit_plan" in asset_decision, (
-                f"Exit plan should exist for {asset_decision['asset']}"
-            )
-            assert 0 <= asset_decision["confidence"] <= 100, (
-                f"Confidence should be 0-100, got {asset_decision['confidence']}"
-            )
+            assert (
+                "rationale" in asset_decision
+            ), f"Rationale should exist for {asset_decision['asset']}"
+            assert (
+                "exit_plan" in asset_decision
+            ), f"Exit plan should exist for {asset_decision['asset']}"
+            assert (
+                0 <= asset_decision["confidence"] <= 100
+            ), f"Confidence should be 0-100, got {asset_decision['confidence']}"
 
         logger.info("✓ Decision quality validation passed")
 
@@ -783,9 +783,9 @@ class TestGenerateAPIE2E:
             headers=headers,
         )
 
-        assert response.status_code == 200, (
-            f"Expected 200, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == 200
+        ), f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         decision = data["decision"]
 
@@ -797,9 +797,9 @@ class TestGenerateAPIE2E:
         # Verify total allocation equals sum of individual allocations
         individual_sum = sum(d["allocation_usd"] for d in decision["decisions"])
         total_allocation = decision["total_allocation_usd"]
-        assert abs(total_allocation - individual_sum) < 0.01, (
-            f"Total allocation {total_allocation} should equal sum of individual allocations {individual_sum}"
-        )
+        assert (
+            abs(total_allocation - individual_sum) < 0.01
+        ), f"Total allocation {total_allocation} should equal sum of individual allocations {individual_sum}"
 
         # Verify portfolio risk level is valid
         assert decision["portfolio_risk_level"] in ["low", "medium", "high", "very_high"]
@@ -842,23 +842,23 @@ class TestGenerateAPIE2E:
 
         # Verify total allocation doesn't exceed available balance
         total_allocation = decision["total_allocation_usd"]
-        assert total_allocation <= available_balance, (
-            f"Total allocation ${total_allocation} exceeds available balance ${available_balance}"
-        )
+        assert (
+            total_allocation <= available_balance
+        ), f"Total allocation ${total_allocation} exceeds available balance ${available_balance}"
 
         # Verify each allocation respects constraints
         for asset_decision in decision["decisions"]:
             allocation = asset_decision["allocation_usd"]
 
             # No negative allocations
-            assert allocation >= 0, (
-                f"Allocation for {asset_decision['asset']} is negative: {allocation}"
-            )
+            assert (
+                allocation >= 0
+            ), f"Allocation for {asset_decision['asset']} is negative: {allocation}"
 
             # Respect max position size
-            assert allocation <= max_position_size, (
-                f"Allocation for {asset_decision['asset']} (${allocation}) exceeds max position size (${max_position_size})"
-            )
+            assert (
+                allocation <= max_position_size
+            ), f"Allocation for {asset_decision['asset']} (${allocation}) exceeds max position size (${max_position_size})"
 
         logger.info(
             f"✓ Allocation constraints validated: "

@@ -273,20 +273,20 @@ class ConfigValidator:
         """
         errors = []
 
-        # Validate INTERVAL
-        if hasattr(config, "INTERVAL"):
-            if config.INTERVAL not in self.VALID_INTERVALS:
-                errors.append(
-                    f"INTERVAL must be one of {self.VALID_INTERVALS}, got {config.INTERVAL}"
-                )
+        # Validate fields with allowed values
+        allowed_values_map = {
+            "INTERVAL": self.VALID_INTERVALS,
+            "LONG_INTERVAL": self.VALID_INTERVALS,
+            "LOG_LEVEL": self.VALID_LOG_LEVELS,
+            "ENVIRONMENT": self.VALID_ENVIRONMENTS,
+            "ASTERDEX_NETWORK": self.VALID_NETWORKS,
+        }
 
-        # Validate LONG_INTERVAL
-        if hasattr(config, "LONG_INTERVAL"):
-            if config.LONG_INTERVAL not in self.VALID_INTERVALS:
-                errors.append(
-                    f"LONG_INTERVAL must be one of {self.VALID_INTERVALS}, "
-                    f"got {config.LONG_INTERVAL}"
-                )
+        for field, valid_set in allowed_values_map.items():
+            if hasattr(config, field):
+                value = getattr(config, field)
+                if value not in valid_set:
+                    errors.append(f"{field} must be one of {valid_set}, got {value}")
 
         # Validate ASSETS
         if hasattr(config, "ASSETS"):
@@ -297,29 +297,6 @@ class ConfigValidator:
                 asset_list = [a.strip() for a in assets.split(",")]
                 if not all(asset for asset in asset_list):
                     errors.append("ASSETS contains empty values")
-
-        # Validate LOG_LEVEL
-        if hasattr(config, "LOG_LEVEL"):
-            if config.LOG_LEVEL not in self.VALID_LOG_LEVELS:
-                errors.append(
-                    f"LOG_LEVEL must be one of {self.VALID_LOG_LEVELS}, got {config.LOG_LEVEL}"
-                )
-
-        # Validate ENVIRONMENT
-        if hasattr(config, "ENVIRONMENT"):
-            if config.ENVIRONMENT not in self.VALID_ENVIRONMENTS:
-                errors.append(
-                    f"ENVIRONMENT must be one of {self.VALID_ENVIRONMENTS}, "
-                    f"got {config.ENVIRONMENT}"
-                )
-
-        # Validate ASTERDEX_NETWORK
-        if hasattr(config, "ASTERDEX_NETWORK"):
-            if config.ASTERDEX_NETWORK not in self.VALID_NETWORKS:
-                errors.append(
-                    f"ASTERDEX_NETWORK must be one of {self.VALID_NETWORKS}, "
-                    f"got {config.ASTERDEX_NETWORK}"
-                )
 
         return errors
 

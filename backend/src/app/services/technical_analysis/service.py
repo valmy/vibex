@@ -99,8 +99,8 @@ class TechnicalAnalysisService:
                     [float(candle.open), float(candle.high), float(candle.low), float(candle.close)]
                 ):
                     raise InvalidCandleDataError("Missing OHLC data", candle_index=i)
-            except (TypeError, ValueError):
-                raise InvalidCandleDataError("Missing OHLC data", candle_index=i)
+            except (TypeError, ValueError) as e:
+                raise InvalidCandleDataError("Missing OHLC data", candle_index=i) from e
 
             # Check high >= low
             if float(candle.high) < float(candle.low):

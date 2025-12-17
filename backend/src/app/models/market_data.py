@@ -7,10 +7,10 @@ Represents candlestick data for trading pairs.
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, Float, Index, Integer, String
-from sqlalchemy.util import hybridproperty  # Import hybridproperty from sqlalchemy.util
-from sqlalchemy.orm import declarative_base, Mapped, mapped_column
+from sqlalchemy import DateTime, Float, Index, Integer, String
+from sqlalchemy.orm import Mapped, declarative_base, mapped_column
 from sqlalchemy.schema import PrimaryKeyConstraint
+from sqlalchemy.util import hybridproperty  # Import hybridproperty from sqlalchemy.util
 
 # Create a separate base for TimescaleDB models since they have different requirements
 TimescaleBase = declarative_base()

@@ -69,7 +69,7 @@ class UserManagementService:
             error: Error message (if applicable)
             error_details: Additional error details
         """
-        log_data = {
+        log_data: Dict[str, Any] = {
             "correlation_id": correlation_id,
             "action": action,
         }
@@ -79,11 +79,13 @@ class UserManagementService:
         if target_user_address:
             log_data["target_user_address"] = target_user_address
         if target_user_id is not None:
-            log_data["target_user_id"] = target_user_id
+            log_data["target_user_id"] = str(
+                target_user_id
+            )  # Convert int to str for logging consistency
         if error:
             log_data["error"] = error
         if error_details:
-            log_data["error_details"] = error_details
+            log_data["error_details"] = error_details  # Keep as dict for JSON logging
 
         if level == "INFO":
             logger.info(message, extra=log_data)

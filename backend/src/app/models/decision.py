@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from sqlalchemy import (
     JSON,
     Boolean,
-    Column,
     DateTime,
     Float,
     ForeignKey,
@@ -38,17 +37,29 @@ class Decision(BaseModel):
     )
 
     # Foreign key relationships
-    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("trading.accounts.id"), nullable=False)
+    account_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("trading.accounts.id"), nullable=False
+    )
     strategy_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
 
     # Multi-asset decision fields
-    asset_decisions: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(JSON, nullable=True)  # List of AssetDecision objects
-    portfolio_rationale: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Overall portfolio strategy
-    total_allocation_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # Total allocation across all assets
-    portfolio_risk_level: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)  # Portfolio-wide risk level
+    asset_decisions: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(
+        JSON, nullable=True
+    )  # List of AssetDecision objects
+    portfolio_rationale: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )  # Overall portfolio strategy
+    total_allocation_usd: Mapped[Optional[float]] = mapped_column(
+        Float, nullable=True
+    )  # Total allocation across all assets
+    portfolio_risk_level: Mapped[Optional[str]] = mapped_column(
+        String(10), nullable=True
+    )  # Portfolio-wide risk level
 
     # Legacy single-asset decision fields (kept for backward compatibility)
-    symbol: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, index=True)  # Nullable for multi-asset decisions
+    symbol: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True, index=True
+    )  # Nullable for multi-asset decisions
     action: Mapped[Optional[str]] = mapped_column(
         String(20), nullable=True
     )  # buy, sell, hold, adjust_position, close_position, adjust_orders
@@ -62,7 +73,9 @@ class Decision(BaseModel):
     exit_plan: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     rationale: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # 0-100
-    risk_level: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)  # low, medium, high
+    risk_level: Mapped[Optional[str]] = mapped_column(
+        String(10), nullable=True
+    )  # low, medium, high
     timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
     # Position and order adjustments (stored as JSON)
@@ -76,8 +89,12 @@ class Decision(BaseModel):
 
     # Validation results
     validation_passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    validation_errors: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)  # List of error messages
-    validation_warnings: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)  # List of warning messages
+    validation_errors: Mapped[Optional[List[str]]] = mapped_column(
+        JSON, nullable=True
+    )  # List of error messages
+    validation_warnings: Mapped[Optional[List[str]]] = mapped_column(
+        JSON, nullable=True
+    )  # List of warning messages
 
     # Context data (stored as JSON for flexibility)
     market_context: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
@@ -119,7 +136,11 @@ class Decision(BaseModel):
                 in ["buy", "sell", "adjust_position", "close_position", "adjust_orders"]
                 for ad in self.asset_decisions
             )
-        return self.action in ["buy", "sell", "adjust_position", "close_position", "adjust_orders"] if self.action is not None else False
+        return (
+            self.action in ["buy", "sell", "adjust_position", "close_position", "adjust_orders"]
+            if self.action is not None
+            else False
+        )
 
     @property
     def requires_execution(self) -> bool:
@@ -144,7 +165,7 @@ class Decision(BaseModel):
             return None
 
         current_price = self.market_context.get("current_price")
-        if not isinstance(current_price, (int, float)): # Ensure current_price is numeric
+        if not isinstance(current_price, (int, float)):  # Ensure current_price is numeric
             return None
 
         if self.action == "buy":
@@ -161,7 +182,9 @@ class Decision(BaseModel):
 
         return potential_profit / potential_loss
 
-    def mark_executed(self, execution_price: float, execution_errors: Optional[List[str]] = None) -> None:
+    def mark_executed(
+        self, execution_price: float, execution_errors: Optional[List[str]] = None
+    ) -> None:
         """Mark decision as executed."""
         self.executed = True
         self.executed_at = datetime.now(timezone.utc)
@@ -182,10 +205,14 @@ class DecisionResult(BaseModel):
     )
 
     # Foreign key relationships
-    decision_id: Mapped[int] = mapped_column(Integer, ForeignKey("trading.decisions.id"), nullable=False)
+    decision_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("trading.decisions.id"), nullable=False
+    )
 
     # Outcome tracking
-    outcome: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # win, loss, breakeven, pending
+    outcome: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True
+    )  # win, loss, breakeven, pending
     realized_pnl: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     unrealized_pnl: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     percentage_return: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -201,8 +228,12 @@ class DecisionResult(BaseModel):
     duration_hours: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Performance metrics
-    max_favorable_excursion: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # Best unrealized profit
-    max_adverse_excursion: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # Worst unrealized loss
+    max_favorable_excursion: Mapped[Optional[float]] = mapped_column(
+        Float, nullable=True
+    )  # Best unrealized profit
+    max_adverse_excursion: Mapped[Optional[float]] = mapped_column(
+        Float, nullable=True
+    )  # Worst unrealized loss
 
     # Execution details
     slippage: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -249,7 +280,11 @@ class DecisionResult(BaseModel):
 
     def update_unrealized_pnl(self, current_price: float) -> None:
         """Update unrealized PnL based on current price."""
-        if not (self.entry_price is not None and self.position_size is not None and self.decision.action is not None):
+        if not (
+            self.entry_price is not None
+            and self.position_size is not None
+            and self.decision.action is not None
+        ):
             return
 
         if self.decision.action == "buy":
@@ -271,6 +306,48 @@ class DecisionResult(BaseModel):
             ):
                 self.max_adverse_excursion = self.unrealized_pnl
 
+    def _calculate_pnl(self, exit_price: float, fees: float) -> None:
+        """Calculate realized PnL and outcome."""
+        if self.entry_price is None or self.position_size is None or self.decision.action is None:
+            return
+
+        if self.decision.action == "buy":
+            gross_pnl = (exit_price - self.entry_price) * self.position_size
+        elif self.decision.action == "sell":
+            gross_pnl = (self.entry_price - exit_price) * self.position_size
+        else:
+            gross_pnl = 0
+
+        self.realized_pnl = gross_pnl - fees
+
+        investment = self.entry_price * self.position_size
+        if investment != 0:
+            self.percentage_return = (self.realized_pnl / investment) * 100
+        else:
+            self.percentage_return = 0.0
+
+        # Determine outcome
+        if self.realized_pnl > 0:
+            self.outcome = "win"
+        elif self.realized_pnl < 0:
+            self.outcome = "loss"
+        else:
+            self.outcome = "breakeven"
+
+    def _check_tp_sl_hit(self, exit_price: float) -> None:
+        """Check if Take Profit or Stop Loss were hit."""
+        if self.decision.tp_price is not None:
+            if self.decision.action == "buy" and exit_price >= self.decision.tp_price:
+                self.hit_tp = True
+            elif self.decision.action == "sell" and exit_price <= self.decision.tp_price:
+                self.hit_tp = True
+
+        if self.decision.sl_price is not None:
+            if self.decision.action == "buy" and exit_price <= self.decision.sl_price:
+                self.hit_sl = True
+            elif self.decision.action == "sell" and exit_price >= self.decision.sl_price:
+                self.hit_sl = True
+
     def close_position(self, exit_price: float, fees: float = 0.0, manual: bool = False) -> None:
         """Close the position and calculate final results."""
         self.exit_price = exit_price
@@ -278,43 +355,8 @@ class DecisionResult(BaseModel):
         self.fees_paid = fees
         self.manual_close = manual
 
-        if self.entry_price is not None and self.position_size is not None and self.decision.action is not None:
-            if self.decision.action == "buy":
-                gross_pnl = (exit_price - self.entry_price) * self.position_size
-            elif self.decision.action == "sell":
-                gross_pnl = (self.entry_price - exit_price) * self.position_size
-            else:
-                gross_pnl = 0
-
-            self.realized_pnl = gross_pnl - fees
-            if self.entry_price * self.position_size != 0: # Avoid division by zero
-                self.percentage_return = (
-                    self.realized_pnl / (self.entry_price * self.position_size)
-                ) * 100
-            else:
-                self.percentage_return = 0.0
-
-
-            # Determine outcome
-            if self.realized_pnl is not None and self.realized_pnl > 0:
-                self.outcome = "win"
-            elif self.realized_pnl is not None and self.realized_pnl < 0:
-                self.outcome = "loss"
-            else:
-                self.outcome = "breakeven"
-
-            # Check if TP or SL was hit
-            if self.decision.tp_price is not None:
-                if self.decision.action == "buy" and exit_price >= self.decision.tp_price:
-                    self.hit_tp = True
-                elif self.decision.action == "sell" and exit_price <= self.decision.tp_price:
-                    self.hit_tp = True
-
-            if self.decision.sl_price is not None:
-                if self.decision.action == "buy" and exit_price <= self.decision.sl_price:
-                    self.hit_sl = True
-                elif self.decision.action == "sell" and exit_price >= self.decision.sl_price:
-                    self.hit_sl = True
+        self._calculate_pnl(exit_price, fees)
+        self._check_tp_sl_hit(exit_price)
 
         self.calculate_duration()
         self.unrealized_pnl = None  # Clear unrealized PnL as position is closed

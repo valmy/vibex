@@ -7,7 +7,7 @@ strategy retrieval, assignment, switching, and performance tracking.
 
 import logging
 from datetime import datetime, timezone
-from typing import Annotated, List, Optional, Any, Dict, Literal, cast
+from typing import Annotated, Any, Dict, List, Literal, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -289,7 +289,7 @@ async def create_custom_strategy(
                 Optional[Literal["fixed", "percentage", "kelly", "volatility_adjusted"]],
                 request.position_sizing,
             ),
-        ) # type: ignore[call-arg]
+        )
 
         return strategy
 
@@ -320,20 +320,9 @@ async def update_strategy(
             raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
 
         # Update fields if provided
-        if request.strategy_name is not None:
-            strategy.strategy_name = request.strategy_name
-        if request.prompt_template is not None:
-            strategy.prompt_template = request.prompt_template
-        if request.risk_parameters is not None:
-            strategy.risk_parameters = request.risk_parameters
-        if request.timeframe_preference is not None:
-            strategy.timeframe_preference = request.timeframe_preference
-        if request.max_positions is not None:
-            strategy.max_positions = request.max_positions
-        if request.position_sizing is not None:
-            strategy.position_sizing = cast(Literal["fixed", "percentage", "kelly", "volatility_adjusted"], request.position_sizing)
-        if request.is_active is not None:
-            strategy.is_active = request.is_active
+        update_data = request.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(strategy, field, value)
 
         # Validate updated strategy
         validation_errors = await strategy_manager.validate_strategy(strategy)
@@ -567,7 +556,7 @@ async def get_strategy_performance(
         if not strategy:
             raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
 
-        performance = await strategy_manager.get_strategy_performance(strategy_id, timeframe)  # type: ignore[attr-defined]  # type: ignore[attr-defined]
+        performance = await strategy_manager.get_strategy_performance(strategy_id, timeframe)
 
         if not performance:
             raise HTTPException(
@@ -610,7 +599,7 @@ async def calculate_strategy_performance(
             start_date=request.start_date,
             end_date=request.end_date,
             trades_data=trades_data,
-        ) # type: ignore[call-arg, misc]
+        )
 
         return performance
 
@@ -664,7 +653,7 @@ async def compare_strategies(
             strategy_ids=strategy_ids,
             comparison_period_days=comparison_period_days,
             ranking_criteria=ranking_criteria,
-        ) # type: ignore[attr-defined]
+        )
 
         return comparison
 
@@ -694,7 +683,7 @@ async def get_strategy_metrics(
         if not strategy:
             raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
 
-        metrics = await strategy_manager.get_strategy_metrics(strategy_id, account_id) # type: ignore[attr-defined] # type: ignore[attr-defined]
+        metrics = await strategy_manager.get_strategy_metrics(strategy_id, account_id)
 
         if not metrics:
             raise HTTPException(
@@ -725,7 +714,7 @@ async def get_strategy_recommendations(
     for optimization or strategy changes.
     """
     try:
-        recommendations = await strategy_manager.get_strategy_recommendations(account_id) # type: ignore[attr-defined] # type: ignore[attr-defined]
+        recommendations = await strategy_manager.get_strategy_recommendations(account_id)
 
         return {
             "account_id": account_id,
@@ -755,7 +744,7 @@ async def get_strategy_alerts(
     strategy, account, or severity level.
     """
     try:
-        alerts = await strategy_manager.get_strategy_alerts( # type: ignore[attr-defined] # type: ignore[attr-defined]
+        alerts = await strategy_manager.get_strategy_alerts(
             strategy_id=strategy_id, account_id=account_id, severity=severity
         )
 
@@ -778,7 +767,7 @@ async def acknowledge_strategy_alert(
     Marks an alert as acknowledged by the specified user.
     """
     try:
-        success = await strategy_manager.acknowledge_alert(alert_index, acknowledged_by) # type: ignore[attr-defined] # type: ignore[attr-defined]
+        success = await strategy_manager.acknowledge_alert(alert_index, acknowledged_by)
 
         if not success:
             raise HTTPException(status_code=404, detail=f"Alert {alert_index} not found")
@@ -811,7 +800,7 @@ async def cleanup_old_alerts(
     acknowledged alerts older than the specified age.
     """
     try:
-        cleared_count = await strategy_manager.clear_old_alerts(max_age_hours) # type: ignore[attr-defined] # type: ignore[attr-defined]
+        cleared_count = await strategy_manager.clear_old_alerts(max_age_hours)
 
         return {
             "message": f"Cleaned up {cleared_count} old alerts",

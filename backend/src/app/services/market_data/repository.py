@@ -3,7 +3,6 @@ from datetime import datetime
 from typing import Any, List, Optional, Tuple
 
 from sqlalchemy import and_, func, select
-from sqlalchemy.engine import Result
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...models.market_data import MarketData
@@ -96,7 +95,7 @@ class MarketDataRepository:
                             if len(candle) > 11 and candle[-1] is not None
                             else None
                         ),
-                    )  # type: ignore[call-arg]
+                    )
                     db.add(market_data)
                     logger.debug(f"Added new market data for {symbol} at {candle_time}")
 
@@ -159,7 +158,7 @@ class MarketDataRepository:
                     and_(MarketData.symbol == symbol, MarketData.interval == interval)
                 )
             )
-            total: int = count_result.scalar_one() # Ensure total is int
+            total: int = count_result.scalar_one()  # Ensure total is int
 
             # Get data
             result = await db.execute(

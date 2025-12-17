@@ -44,7 +44,7 @@ class SensitiveDataFilter(logging.Filter):
 
     def _mask_dict(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Mask sensitive data in dictionary."""
-        masked = {}
+        masked: Dict[str, Any] = {}
         for key, value in data.items():
             if any(sensitive in key.lower() for sensitive in self.SENSITIVE_KEYS):
                 masked[key] = "***MASKED***"
@@ -97,9 +97,10 @@ def setup_logging(config: Any) -> None:
     # Remove existing handlers
     # In testing environment (pytest), we must NOT remove handlers as it breaks caplog
     import sys
+
     is_testing = getattr(config, "ENVIRONMENT", "").lower() == "testing"
     is_pytest = "pytest" in sys.modules
-    
+
     if not (is_testing or is_pytest):
         for handler in root_logger.handlers[:]:
             root_logger.removeHandler(handler)
@@ -112,6 +113,7 @@ def setup_logging(config: Any) -> None:
     console_handler.setLevel(getattr(logging, config.LOG_LEVEL))
     console_handler.addFilter(sensitive_filter)
 
+    console_formatter: logging.Formatter
     if config.LOG_FORMAT == "json":
         console_formatter = JSONFormatter()
     else:
@@ -146,6 +148,7 @@ def setup_logging(config: Any) -> None:
             file_handler.setLevel(getattr(logging, config.LOG_LEVEL))
             file_handler.addFilter(sensitive_filter)
 
+            file_formatter: logging.Formatter
             if config.LOG_FORMAT == "json":
                 file_formatter = JSONFormatter()
             else:

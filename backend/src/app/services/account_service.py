@@ -187,7 +187,7 @@ class AccountService:
                 is_multi_account=data.is_multi_account,
                 status="active",
                 is_enabled=True,
-            ) # type: ignore[call-arg]
+            )
 
             # Set initial balance for paper trading
             if data.is_paper_trading and hasattr(data, "balance_usd") and data.balance_usd:

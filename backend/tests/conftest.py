@@ -13,8 +13,8 @@ import pytest_asyncio
 # Set testing environment before importing app modules
 os.environ["ENVIRONMENT"] = "testing"
 
-from app.db.session import close_db, get_async_engine, get_session_factory, init_db
 from app.db import session as db_session_module
+from app.db.session import close_db, get_session_factory, init_db
 
 
 @pytest_asyncio.fixture(scope="function")

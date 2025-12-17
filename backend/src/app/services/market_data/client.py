@@ -38,7 +38,7 @@ class AsterClient:
             Exception: If client initialization fails
         """
         try:
-            from aster.rest_api import Client  # type: ignore[import-untyped]
+            from aster.rest_api import Client
 
             # Create a new client instance for each call.
             client = Client(key=self.api_key, secret=self.api_secret, base_url=self.base_url)
@@ -126,9 +126,9 @@ class AsterClient:
                     if symbol is not None:
                         kwargs["symbol"] = symbol
                     if startTime is not None:
-                        kwargs["startTime"] = int(startTime)  # type: ignore[assignment]
+                        kwargs["startTime"] = int(startTime)
                     if endTime is not None:
-                        kwargs["endTime"] = int(endTime)  # type: ignore[assignment]
+                        kwargs["endTime"] = int(endTime)
 
                     result = client.funding_rate(**kwargs)
                     return result

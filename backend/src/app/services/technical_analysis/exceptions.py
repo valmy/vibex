@@ -4,6 +4,8 @@ Custom exceptions for the Technical Analysis Service.
 Provides specific exception types for different error scenarios.
 """
 
+from typing import Optional
+
 
 class TechnicalAnalysisException(Exception):
     """Base exception for technical analysis service."""

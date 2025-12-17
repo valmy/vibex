@@ -32,7 +32,7 @@ async def get_or_create_user(db: AsyncSession, address: str) -> User:
     count_result = await db.execute(select(func.count()).select_from(User))
     is_admin = (count_result.scalar() or 0) == 0
 
-    user = User(address=normalized_address, is_admin=is_admin) # type: ignore[call-arg]
+    user = User(address=normalized_address, is_admin=is_admin)
     db.add(user)
     await db.commit()
     await db.refresh(user)
@@ -46,7 +46,7 @@ async def authenticate_user(
     result = await db.execute(select(Challenge).where(Challenge.challenge == challenge))
     db_challenge = result.scalar_one_or_none()
 
-    if not db_challenge or db_challenge.address.lower() != address.lower(): # type: ignore[union-attr]
+    if not db_challenge or db_challenge.address.lower() != address.lower():
         return None
 
     try:

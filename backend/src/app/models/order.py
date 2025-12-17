@@ -6,7 +6,7 @@ Represents a trading order (pending, filled, cancelled, etc.).
 
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Column, Float, ForeignKey, Index, Integer, String
+from sqlalchemy import Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import BaseModel
@@ -30,13 +30,21 @@ class Order(BaseModel):
     )
 
     # Foreign keys
-    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("trading.accounts.id"), nullable=False, index=True)
-    position_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("trading.positions.id"), nullable=True, index=True)
+    account_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("trading.accounts.id"), nullable=False, index=True
+    )
+    position_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("trading.positions.id"), nullable=True, index=True
+    )
 
     # Order identification
-    exchange_order_id: Mapped[Optional[str]] = mapped_column(String(255), unique=True, nullable=True)
+    exchange_order_id: Mapped[Optional[str]] = mapped_column(
+        String(255), unique=True, nullable=True
+    )
     symbol: Mapped[str] = mapped_column(String(50), nullable=False)
-    order_type: Mapped[str] = mapped_column(String(50), nullable=False)  # market, limit, stop, stop-limit
+    order_type: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # market, limit, stop, stop-limit
     side: Mapped[str] = mapped_column(String(10), nullable=False)  # buy or sell
     status: Mapped[str] = mapped_column(
         String(50), default="pending", nullable=False
@@ -46,7 +54,9 @@ class Order(BaseModel):
     quantity: Mapped[float] = mapped_column(Float, nullable=False)
     price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     stop_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    time_in_force: Mapped[str] = mapped_column(String(20), default="GTC", nullable=False)  # GTC, IOC, FOK
+    time_in_force: Mapped[str] = mapped_column(
+        String(20), default="GTC", nullable=False
+    )  # GTC, IOC, FOK
 
     # Execution details
     filled_quantity: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
@@ -57,7 +67,9 @@ class Order(BaseModel):
     # Relationships
     account: Mapped["Account"] = relationship("Account", back_populates="orders")
     position: Mapped[Optional["Position"]] = relationship("Position", back_populates="orders")
-    trades: Mapped[List["Trade"]] = relationship("Trade", back_populates="order", cascade="all, delete-orphan")
+    trades: Mapped[List["Trade"]] = relationship(
+        "Trade", back_populates="order", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         """String representation."""

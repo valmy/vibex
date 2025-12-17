@@ -6,7 +6,7 @@ Represents a journal entry for trading analysis and reflection.
 
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Column, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import BaseModel
@@ -26,7 +26,9 @@ class DiaryEntry(BaseModel):
     )
 
     # Foreign key
-    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("trading.accounts.id"), nullable=False, index=True)
+    account_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("trading.accounts.id"), nullable=False, index=True
+    )
 
     # Entry details
     entry_type: Mapped[str] = mapped_column(
@@ -37,8 +39,12 @@ class DiaryEntry(BaseModel):
 
     # Entry metadata
     tags: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # comma-separated tags
-    sentiment: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # bullish, bearish, neutral
-    confidence: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # high, medium, low
+    sentiment: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True
+    )  # bullish, bearish, neutral
+    confidence: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True
+    )  # high, medium, low
 
     # Relationships
     account: Mapped["Account"] = relationship("Account", back_populates="diary_entries")

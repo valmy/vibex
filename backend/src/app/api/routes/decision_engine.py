@@ -7,7 +7,7 @@ decision generation, batch processing, history, and management.
 
 import logging
 from datetime import datetime, timezone
-from typing import Annotated, List, Optional, Dict, Any
+from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, WebSocket
 from pydantic import BaseModel, Field

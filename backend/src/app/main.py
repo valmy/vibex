@@ -6,8 +6,7 @@ Initializes the FastAPI app with middleware, routes, and WebSocket handlers.
 
 import os
 from datetime import datetime, timezone
-
-from typing import Dict, Any
+from typing import Any, Dict
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -106,7 +105,7 @@ def custom_openapi() -> Dict[str, Any]:
     return app.openapi_schema
 
 
-app.openapi = custom_openapi # type: ignore[method-assign]
+app.openapi = custom_openapi
 
 # Add CORS middleware
 app.add_middleware(AdminOnlyMiddleware)
@@ -222,7 +221,9 @@ async def root() -> Dict[str, Any]:
 
 
 @app.exception_handler(DecisionEngineError)
-async def decision_engine_exception_handler(request: Request, exc: DecisionEngineError) -> JSONResponse:
+async def decision_engine_exception_handler(
+    request: Request, exc: DecisionEngineError
+) -> JSONResponse:
     """Handle decision engine specific exceptions."""
     logger.error(f"Decision engine error: {exc}", exc_info=True)
     return JSONResponse(
@@ -232,7 +233,9 @@ async def decision_engine_exception_handler(request: Request, exc: DecisionEngin
 
 
 @app.exception_handler(RateLimitExceededError)
-async def rate_limit_exception_handler(request: Request, exc: RateLimitExceededError) -> JSONResponse:
+async def rate_limit_exception_handler(
+    request: Request, exc: RateLimitExceededError
+) -> JSONResponse:
     """Handle rate limit exceeded exceptions."""
     logger.warning(f"Rate limit exceeded: {exc}")
     return JSONResponse(
@@ -252,7 +255,9 @@ async def validation_exception_handler(request: Request, exc: ValidationError) -
 
 
 @app.exception_handler(ConfigurationError)
-async def configuration_exception_handler(request: Request, exc: ConfigurationError) -> JSONResponse:
+async def configuration_exception_handler(
+    request: Request, exc: ConfigurationError
+) -> JSONResponse:
     """Handle configuration errors."""
     logger.error(f"Configuration error: {exc}", exc_info=True)
     return JSONResponse(

@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from sqlalchemy import (
     JSON,
     Boolean,
-    Column,
     DateTime,
     Float,
     ForeignKey,
@@ -80,12 +79,18 @@ class StrategyAssignment(BaseModel):
         {"schema": "trading"},
     )
 
-    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("trading.accounts.id"), nullable=False)
-    strategy_id: Mapped[int] = mapped_column(Integer, ForeignKey("trading.strategies.id"), nullable=False)
+    account_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("trading.accounts.id"), nullable=False
+    )
+    strategy_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("trading.strategies.id"), nullable=False
+    )
     assigned_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     assigned_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    previous_strategy_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("trading.strategies.id"), nullable=True)
+    previous_strategy_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("trading.strategies.id"), nullable=True
+    )
     switch_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     total_trades: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_pnl: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
@@ -98,7 +103,9 @@ class StrategyAssignment(BaseModel):
     strategy: Mapped["Strategy"] = relationship(
         "Strategy", foreign_keys=[strategy_id], back_populates="strategy_assignments"
     )
-    previous_strategy: Mapped[Optional["Strategy"]] = relationship("Strategy", foreign_keys=[previous_strategy_id])
+    previous_strategy: Mapped[Optional["Strategy"]] = relationship(
+        "Strategy", foreign_keys=[previous_strategy_id]
+    )
 
 
 class StrategyPerformance(BaseModel):
@@ -112,8 +119,12 @@ class StrategyPerformance(BaseModel):
         {"schema": "trading"},
     )
 
-    strategy_id: Mapped[int] = mapped_column(Integer, ForeignKey("trading.strategies.id"), nullable=False)
-    account_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("trading.accounts.id"), nullable=True)
+    strategy_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("trading.strategies.id"), nullable=False
+    )
+    account_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("trading.accounts.id"), nullable=True
+    )
     period_start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     period_end: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     period_days: Mapped[int] = mapped_column(Integer, nullable=False)

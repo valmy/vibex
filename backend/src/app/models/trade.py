@@ -6,15 +6,15 @@ Represents a completed trade execution.
 
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Float, ForeignKey, Index, Integer, String
+from sqlalchemy import Float, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import BaseModel
 
 if TYPE_CHECKING:
     from .account import Account
-    from .position import Position
     from .order import Order
+    from .position import Position
 
 
 class Trade(BaseModel):
@@ -30,12 +30,20 @@ class Trade(BaseModel):
     )
 
     # Foreign keys
-    account_id: Mapped[int] = mapped_column(ForeignKey("trading.accounts.id"), nullable=False, index=True)
-    position_id: Mapped[Optional[int]] = mapped_column(ForeignKey("trading.positions.id"), nullable=True, index=True)
-    order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("trading.orders.id"), nullable=True, index=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("trading.accounts.id"), nullable=False, index=True
+    )
+    position_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("trading.positions.id"), nullable=True, index=True
+    )
+    order_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("trading.orders.id"), nullable=True, index=True
+    )
 
     # Trade identification
-    exchange_trade_id: Mapped[Optional[str]] = mapped_column(String(255), unique=True, nullable=True)
+    exchange_trade_id: Mapped[Optional[str]] = mapped_column(
+        String(255), unique=True, nullable=True
+    )
     symbol: Mapped[str] = mapped_column(String(50), nullable=False)
     side: Mapped[str] = mapped_column(String(10), nullable=False)  # buy or sell
 

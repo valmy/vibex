@@ -228,9 +228,9 @@ class TestStrategyAPIE2E:
 
         response = await client.get(f"/api/v1/strategies/account/{account_id}", headers=headers)
 
-        assert response.status_code == 200, (
-            f"Expected 200, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == 200
+        ), f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
 
         # Verify response contains expected strategy fields
@@ -354,9 +354,9 @@ class TestStrategyAPIE2E:
             headers=headers,
         )
 
-        assert response.status_code == 200, (
-            f"Expected 200, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == 200
+        ), f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
 
         assert data["account_id"] == account_id
@@ -629,9 +629,9 @@ class TestStrategyAPIE2E:
             headers=headers,
         )
 
-        assert response.status_code == 200, (
-            f"Expected 200, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == 200
+        ), f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
 
         assert data["account_id"] == account_id

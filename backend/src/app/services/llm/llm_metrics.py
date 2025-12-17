@@ -7,7 +7,7 @@ Tracks API usage, costs, performance, and decision accuracy.
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
 
 from ...core.logging import get_logger
 

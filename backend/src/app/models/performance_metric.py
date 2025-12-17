@@ -6,7 +6,7 @@ Represents performance metrics and statistics.
 
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Column, Float, ForeignKey, Index, Integer, String
+from sqlalchemy import Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import BaseModel
@@ -26,10 +26,14 @@ class PerformanceMetric(BaseModel):
     )
 
     # Foreign key
-    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("trading.accounts.id"), nullable=False, index=True)
+    account_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("trading.accounts.id"), nullable=False, index=True
+    )
 
     # Period identification
-    period: Mapped[str] = mapped_column(String(50), nullable=False)  # daily, weekly, monthly, yearly
+    period: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # daily, weekly, monthly, yearly
     period_start: Mapped[str] = mapped_column(String(50), nullable=False)  # ISO format date
     period_end: Mapped[str] = mapped_column(String(50), nullable=False)  # ISO format date
 

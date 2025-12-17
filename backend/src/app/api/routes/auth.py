@@ -13,7 +13,9 @@ router = APIRouter()
 
 
 @router.post("/challenge", response_model=Challenge)
-async def request_challenge(address: str, db: Annotated[AsyncSession, Depends(get_db)]) -> Challenge:
+async def request_challenge(
+    address: str, db: Annotated[AsyncSession, Depends(get_db)]
+) -> Challenge:
     """
     Requests a challenge message for a user to sign.
     """

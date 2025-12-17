@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Callable, Dict, List, Any
+from typing import Any, Callable, Dict, List
 
 from .events import EventManager
 from .utils import calculate_next_candle_close, get_interval_seconds
