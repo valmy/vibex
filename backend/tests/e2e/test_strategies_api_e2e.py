@@ -70,12 +70,8 @@ class TestStrategyAPIE2E:
                         StrategyAssignmentModel.account_id >= TEST_ACCOUNT_ID_BASE
                     )
                 )
-                await db_session.execute(
-                    delete(Account).where(Account.id >= TEST_ACCOUNT_ID_BASE)
-                )
-                await db_session.execute(
-                    delete(User).where(User.id >= TEST_USER_ID_BASE)
-                )
+                await db_session.execute(delete(Account).where(Account.id >= TEST_ACCOUNT_ID_BASE))
+                await db_session.execute(delete(User).where(User.id >= TEST_USER_ID_BASE))
                 await db_session.commit()
                 logger.info("Cleaned up existing test data")
             except Exception as e:
@@ -230,9 +226,7 @@ class TestStrategyAPIE2E:
         headers = get_auth_headers(admin)
         account_id = assigned_strategy["account"].id
 
-        response = await client.get(
-            f"/api/v1/strategies/account/{account_id}", headers=headers
-        )
+        response = await client.get(f"/api/v1/strategies/account/{account_id}", headers=headers)
 
         assert response.status_code == 200, (
             f"Expected 200, got {response.status_code}: {response.text}"
@@ -260,9 +254,7 @@ class TestStrategyAPIE2E:
         headers = get_auth_headers(admin)
         account_id = assigned_strategy["account"].id
 
-        response = await client.get(
-            f"/api/v1/strategies/account/{account_id}", headers=headers
-        )
+        response = await client.get(f"/api/v1/strategies/account/{account_id}", headers=headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -301,18 +293,14 @@ class TestStrategyAPIE2E:
         # Use second account which has no strategy assigned
         account_id = test_accounts[1].id
 
-        response = await client.get(
-            f"/api/v1/strategies/account/{account_id}", headers=headers
-        )
+        response = await client.get(f"/api/v1/strategies/account/{account_id}", headers=headers)
 
         assert response.status_code == 404
         data = response.json()
         assert "no strategy" in data["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_get_account_strategy_unauthenticated_returns_401(
-        self, client, test_accounts
-    ):
+    async def test_get_account_strategy_unauthenticated_returns_401(self, client, test_accounts):
         """
         Test GET /api/v1/strategies/account/{account_id} returns 401/403 without auth.
 
@@ -327,10 +315,10 @@ class TestStrategyAPIE2E:
         response = await client.get(f"/api/v1/strategies/account/{account_id}")
 
         # Application returns 403 for unauthenticated requests
-        assert response.status_code in [401, 403], (
-            f"Expected 401 or 403, got {response.status_code}: {response.text}"
-        )
-
+        assert response.status_code in [
+            401,
+            403,
+        ], f"Expected 401 or 403, got {response.status_code}: {response.text}"
 
     # ========================================================================
     # POST /api/v1/strategies/account/{account_id}/assign - Happy Path Tests
@@ -598,10 +586,10 @@ class TestStrategyAPIE2E:
         )
 
         # Should return 400 or 404 for non-existent account
-        assert response.status_code in [400, 404], (
-            f"Expected 400 or 404, got {response.status_code}: {response.text}"
-        )
-
+        assert response.status_code in [
+            400,
+            404,
+        ], f"Expected 400 or 404, got {response.status_code}: {response.text}"
 
     # ========================================================================
     # POST /api/v1/strategies/account/{account_id}/switch - Happy Path Tests
@@ -799,9 +787,7 @@ class TestStrategyAPIE2E:
         assert "not found" in data["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_switch_strategy_unauthenticated_returns_401(
-        self, client, assigned_strategy
-    ):
+    async def test_switch_strategy_unauthenticated_returns_401(self, client, assigned_strategy):
         """
         Test POST /api/v1/strategies/account/{account_id}/switch returns 401 without auth.
 
@@ -847,7 +833,6 @@ class TestStrategyAPIE2E:
 
         assert response.status_code == 403
 
-
     # ========================================================================
     # Edge Case Tests
     # ========================================================================
@@ -878,9 +863,7 @@ class TestStrategyAPIE2E:
         assert assign_response.status_code == 200
 
         # Immediately get the strategy
-        get_response = await client.get(
-            f"/api/v1/strategies/account/{account_id}", headers=headers
-        )
+        get_response = await client.get(f"/api/v1/strategies/account/{account_id}", headers=headers)
 
         assert get_response.status_code == 200
         data = get_response.json()
@@ -905,7 +888,11 @@ class TestStrategyAPIE2E:
         if len(all_strategies) >= 2:
             # Switch to a different strategy
             new_strategy = next(
-                (s for s in all_strategies if s.strategy_id != assigned_strategy["strategy"].strategy_id),
+                (
+                    s
+                    for s in all_strategies
+                    if s.strategy_id != assigned_strategy["strategy"].strategy_id
+                ),
                 None,
             )
 
@@ -924,9 +911,7 @@ class TestStrategyAPIE2E:
         # Query all assignments for this account (active and inactive)
         await db_session.commit()
         result = await db_session.execute(
-            select(StrategyAssignmentModel).where(
-                StrategyAssignmentModel.account_id == account_id
-            )
+            select(StrategyAssignmentModel).where(StrategyAssignmentModel.account_id == account_id)
         )
         all_assignments = result.scalars().all()
 
@@ -981,4 +966,3 @@ class TestStrategyAPIE2E:
             f"got '{data['previous_strategy_id']}'. "
             "This indicates Bug #2 - returning DB ID instead of strategy_id string."
         )
-

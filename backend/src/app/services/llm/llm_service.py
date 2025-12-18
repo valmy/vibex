@@ -9,18 +9,24 @@ and comprehensive error handling.
 import asyncio
 import json
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from pydantic import ValidationError as PydanticValidationError
 
 from ...core.config import config
 from ...core.logging import get_logger
-from ...schemas.trading_decision import DecisionResult, TradingContext, TradingDecision
+from ...schemas.trading_decision import (
+    DecisionResult,
+    HealthStatus,
+    TradingContext,
+    TradingDecision,
+    UsageMetrics,
+)
 from .ab_testing import get_ab_test_manager
 from .circuit_breaker import CircuitBreaker
 from .llm_exceptions import InsufficientDataError, LLMAPIError, ModelSwitchError, ValidationError
-from .llm_metrics import HealthStatus, UsageMetrics, get_metrics_tracker
+from .llm_metrics import get_metrics_tracker
 
 logger = get_logger(__name__)
 
@@ -28,7 +34,7 @@ logger = get_logger(__name__)
 class LLMService:
     """Service for LLM-powered market analysis and trading decisions."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the LLM Service."""
         self.api_key = config.OPENROUTER_API_KEY
         self.base_url = config.OPENROUTER_BASE_URL
@@ -37,7 +43,7 @@ class LLMService:
         self.app_title = config.OPENROUTER_APP_TITLE
 
         # Initialize OpenRouter client (lazy loaded)
-        self._client = None
+        self._client: Optional[Any] = None
 
         # Enhanced features
         self.metrics_tracker = get_metrics_tracker()
@@ -61,6 +67,7 @@ class LLMService:
 
     @property
     def client(self):
+        # type: () -> Any  # Return type depends on imported client
         """Lazy load OpenRouter client."""
         if self._client is None:
             try:
@@ -81,10 +88,12 @@ class LLMService:
         return self._client
 
     async def analyze_market(
-        self, symbol: str, market_data: Dict[str, Any], additional_context: Optional[str] = None
+        self,
+        symbol: str,
+        market_data: Dict[str, Any],
+        additional_context: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """
-        Analyze market data and provide trading insights.
+        """Analyze market data and provide trading insights.
 
         Args:
             symbol: Trading pair symbol
@@ -139,8 +148,7 @@ class LLMService:
         market_data: Dict[str, Any],
         account_info: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """
-        Get trading signal based on market analysis.
+        """Get trading signal based on market analysis.
 
         Args:
             symbol: Trading pair symbol
@@ -193,10 +201,10 @@ class LLMService:
             raise
 
     async def summarize_market_conditions(
-        self, market_data_list: List[Dict[str, Any]]
+        self,
+        market_data_list: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """
-        Summarize overall market conditions.
+        """Summarize overall market conditions.
 
         Args:
             market_data_list: List of market data for multiple symbols
@@ -238,7 +246,10 @@ class LLMService:
             raise
 
     def _build_analysis_prompt(
-        self, symbol: str, market_data: Dict[str, Any], additional_context: Optional[str] = None
+        self,
+        symbol: str,
+        market_data: Dict[str, Any],
+        additional_context: Optional[str] = None,
     ) -> str:
         """Build market analysis prompt."""
         prompt = f"""
@@ -313,8 +324,7 @@ Provide:
         strategy_override: Optional[str] = None,
         ab_test_name: Optional[str] = None,
     ) -> DecisionResult:
-        """
-        Generate structured multi-asset trading decision using LLM analysis.
+        """Generate structured multi-asset trading decision using LLM analysis.
 
         Args:
             symbols: List of trading pair symbols to analyze
@@ -418,8 +428,7 @@ Provide:
                 self.model = original_model
 
     async def switch_model(self, model_name: str) -> bool:
-        """
-        Switch to a different LLM model.
+        """Switch to a different LLM model.
 
         Args:
             model_name: Name of the model to switch to
@@ -456,23 +465,31 @@ Provide:
             raise ModelSwitchError(f"Model switch failed: {e}") from e
 
     async def validate_api_health(self) -> HealthStatus:
-        """
-        Validate API health and connectivity.
+        """Validate API health and connectivity.
 
         Returns:
             HealthStatus with current service health
         """
         try:
-            health_status = self.metrics_tracker.get_health_status()
-            health_status.circuit_breaker_open = self.circuit_breaker.is_open
+            tracker_status = self.metrics_tracker.get_health_status()
+            circuit_open = self.circuit_breaker.is_open
 
             # Test connectivity if needed
-            if health_status.consecutive_failures > 3:
+            if tracker_status.consecutive_failures > 3:
                 test_successful = await self._test_model_connection()
                 if not test_successful:
-                    health_status.is_healthy = False
+                    tracker_status.is_healthy = False
 
-            return health_status
+            return HealthStatus(
+                is_healthy=tracker_status.is_healthy and not circuit_open,
+                response_time_ms=tracker_status.avg_response_time_ms,
+                last_successful_request=tracker_status.last_successful_call,
+                consecutive_failures=tracker_status.consecutive_failures,
+                circuit_breaker_open=circuit_open,
+                available_models=list(self.supported_models.keys()),
+                current_model=self.model,
+                error_message=None if tracker_status.is_healthy else "Health check failed",
+            )
 
         except Exception as e:
             logger.error(f"Error validating API health: {e}")
@@ -480,11 +497,13 @@ Provide:
                 is_healthy=False,
                 consecutive_failures=999,
                 circuit_breaker_open=self.circuit_breaker.is_open,
+                available_models=list(self.supported_models.keys()),
+                current_model=self.model,
+                error_message=str(e),
             )
 
     def get_usage_metrics(self, timeframe_hours: int = 24) -> UsageMetrics:
-        """
-        Get usage metrics for specified timeframe.
+        """Get usage metrics for specified timeframe.
 
         Args:
             timeframe_hours: Hours to look back for metrics
@@ -492,7 +511,30 @@ Provide:
         Returns:
             UsageMetrics summary
         """
-        return self.metrics_tracker.get_usage_metrics(timeframe_hours)
+        tracker_metrics = self.metrics_tracker.get_usage_metrics(timeframe_hours)
+
+        requests_per_hour = (
+            tracker_metrics.total_calls / timeframe_hours if timeframe_hours > 0 else 0
+        )
+        cost_per_req = (
+            tracker_metrics.total_cost / tracker_metrics.total_calls
+            if tracker_metrics.total_calls > 0
+            else 0.0
+        )
+
+        return UsageMetrics(
+            total_requests=tracker_metrics.total_calls,
+            successful_requests=tracker_metrics.successful_calls,
+            failed_requests=tracker_metrics.failed_calls,
+            avg_response_time_ms=tracker_metrics.avg_response_time_ms,
+            total_cost_usd=tracker_metrics.total_cost,
+            cost_per_request=cost_per_req,
+            requests_per_hour=requests_per_hour,
+            error_rate=tracker_metrics.error_rate,
+            uptime_percentage=100.0 - tracker_metrics.error_rate,
+            period_start=datetime.now(timezone.utc) - timedelta(hours=timeframe_hours),
+            period_end=datetime.now(timezone.utc),
+        )
 
     def start_ab_test(
         self,
@@ -502,8 +544,7 @@ Provide:
         traffic_split: float = 0.5,
         duration_hours: int = 24,
     ) -> bool:
-        """
-        Start A/B test between two models.
+        """Start A/B test between two models.
 
         Args:
             test_name: Unique name for the test
@@ -520,8 +561,7 @@ Provide:
         )
 
     def get_ab_test_model(self, test_name: str, account_id: int) -> Optional[str]:
-        """
-        Get model to use based on A/B test configuration.
+        """Get model to use based on A/B test configuration.
 
         Args:
             test_name: Name of the A/B test
@@ -532,9 +572,10 @@ Provide:
         """
         return self.ab_test_manager.get_model_for_decision(test_name, account_id)
 
-    def end_ab_test(self, test_name: str):
-        """
-        End an A/B test and get results.
+    def end_ab_test(
+        self, test_name: str
+    ) -> Any:  # Return type should match what ab_test_manager.end_ab_test returns
+        """End an A/B test and get results.
 
         Args:
             test_name: Name of the test to end
@@ -544,9 +585,8 @@ Provide:
         """
         return self.ab_test_manager.end_ab_test(test_name)
 
-    def get_active_ab_tests(self) -> Dict:
-        """
-        Get all active A/B tests.
+    def get_active_ab_tests(self) -> Dict[str, Any]:
+        """Get all active A/B tests.
 
         Returns:
             Dictionary of active tests
@@ -554,8 +594,7 @@ Provide:
         return self.ab_test_manager.get_active_tests()
 
     async def _call_llm_for_decision(self, prompt: str) -> Dict[str, Any]:
-        """
-        Make LLM API call for decision generation with retry logic.
+        """Make LLM API call for decision generation with retry logic.
 
         Args:
             prompt: Decision generation prompt
@@ -638,8 +677,7 @@ Provide:
         raise LLMAPIError(f"API call failed after {self.max_retries} attempts: {last_exception}")
 
     def _validate_context(self, context: TradingContext) -> bool:
-        """
-        Validate that context has sufficient data for multi-asset decision generation.
+        """Validate that context has sufficient data for multi-asset decision generation.
 
         Args:
             context: Trading context to validate
@@ -682,8 +720,7 @@ Provide:
         context: TradingContext,
         strategy_override: Optional[str] = None,
     ) -> str:
-        """
-        Build comprehensive prompt for multi-asset trading decision generation.
+        """Build comprehensive prompt for multi-asset trading decision generation.
 
         Args:
             symbols: List of trading pair symbols
@@ -869,10 +906,11 @@ Rules:
 - Only recommend actions you can justify with the provided data"""
 
     def _parse_multi_asset_decision_response(
-        self, response_data: Dict[str, Any], symbols: List[str]
+        self,
+        response_data: Dict[str, Any],
+        symbols: List[str],
     ) -> TradingDecision:
-        """
-        Parse and validate LLM response into multi-asset TradingDecision.
+        """Parse and validate LLM response into multi-asset TradingDecision.
 
         Args:
             response_data: LLM response data
@@ -931,8 +969,7 @@ Rules:
             raise ValidationError(f"Invalid multi-asset decision format: {e}") from e
 
     def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
-        """
-        Extract JSON from text response.
+        """Extract JSON from text response.
 
         Args:
             text: Text containing JSON
@@ -958,8 +995,7 @@ Rules:
         raise ValidationError("No valid JSON found in response")
 
     def _create_multi_asset_fallback_decision(self, symbols: List[str]) -> TradingDecision:
-        """
-        Create conservative multi-asset fallback decision when LLM fails.
+        """Create conservative multi-asset fallback decision when LLM fails.
 
         Args:
             symbols: List of trading symbols
@@ -995,8 +1031,7 @@ Rules:
         )
 
     def _get_strategy_template(self, strategy_type: str) -> str:
-        """
-        Get prompt template for strategy type.
+        """Get prompt template for strategy type.
 
         Args:
             strategy_type: Strategy type
@@ -1068,8 +1103,7 @@ Generate an aggressive trading decision.
         return templates.get(strategy_type, templates["conservative"])
 
     async def _test_model_connection(self) -> bool:
-        """
-        Test connection to current model.
+        """Test connection to current model.
 
         Returns:
             True if connection successful

@@ -346,7 +346,7 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Execute decision generation for multiple assets
-        result = await decision_engine.make_trading_decision(["BTCUSDT"], 1)
+        result = await decision_engine.make_trading_decision(1, ["BTCUSDT"])
 
         # Verify the workflow was executed correctly
         assert isinstance(result, DecisionResult)
@@ -414,7 +414,7 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Execute decision generation
-        result = await decision_engine.make_trading_decision(["BTCUSDT"], 1)
+        result = await decision_engine.make_trading_decision(1, ["BTCUSDT"])
 
         # Verify fallback was used
         assert len(result.decision.decisions) > 0
@@ -508,7 +508,7 @@ class TestLLMDecisionEngineIntegration:
         )
 
         # Test multi-asset decision generation after strategy switch
-        decision_result = await decision_engine.make_trading_decision(["BTCUSDT"], 1)
+        decision_result = await decision_engine.make_trading_decision(1, ["BTCUSDT"])
 
         # Verify decision was generated
         assert isinstance(decision_result, DecisionResult)
@@ -540,7 +540,7 @@ class TestLLMDecisionEngineIntegration:
 
         # Execute decision generation - should handle error gracefully
         with pytest.raises(DecisionEngineError):
-            await decision_engine.make_trading_decision(["BTCUSDT"], 1)
+            await decision_engine.make_trading_decision(1, ["BTCUSDT"])
 
     @pytest.mark.asyncio
     async def test_decision_caching_and_rate_limiting(
@@ -559,12 +559,12 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Make first decision
-        result1 = await decision_engine.make_trading_decision(["BTCUSDT"], 1)
+        result1 = await decision_engine.make_trading_decision(1, ["BTCUSDT"])
         assert isinstance(result1, DecisionResult)
         assert isinstance(result1.decision, TradingDecision)
 
         # Make second decision immediately (should be rate limited or cached)
-        result2 = await decision_engine.make_trading_decision(["BTCUSDT"], 1)
+        result2 = await decision_engine.make_trading_decision(1, ["BTCUSDT"])
         assert isinstance(result2, DecisionResult)
         assert isinstance(result2.decision, TradingDecision)
 
@@ -591,7 +591,7 @@ class TestLLMDecisionEngineIntegration:
         # Generate several multi-asset decisions
         symbols_list = [["BTCUSDT"], ["ETHUSDT"], ["SOLUSDT"]]
         for symbols in symbols_list:
-            await decision_engine.make_trading_decision(symbols, 1)
+            await decision_engine.make_trading_decision(1, symbols)
 
         # Retrieve decision history
         history = await decision_engine.get_decision_history(1, limit=10)
@@ -636,7 +636,7 @@ class TestLLMDecisionEngineIntegration:
 
         tasks = []
         for i in range(10):  # 10 concurrent decisions
-            task = decision_engine.make_trading_decision(["BTCUSDT"], i + 1)
+            task = decision_engine.make_trading_decision(i + 1, ["BTCUSDT"])
             tasks.append(task)
 
         # Execute all tasks concurrently
@@ -674,7 +674,7 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Make initial decision
-        result1 = await decision_engine.make_trading_decision(["BTCUSDT"], 1)
+        result1 = await decision_engine.make_trading_decision(1, ["BTCUSDT"])
         assert isinstance(result1, DecisionResult)
         assert isinstance(result1.decision, TradingDecision)
 
@@ -682,7 +682,7 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.invalidate_symbol_caches("BTCUSDT")
 
         # Make another decision - should rebuild context
-        result2 = await decision_engine.make_trading_decision(["BTCUSDT"], 1)
+        result2 = await decision_engine.make_trading_decision(1, ["BTCUSDT"])
         assert isinstance(result2, DecisionResult)
         assert isinstance(result2.decision, TradingDecision)
 
@@ -759,7 +759,7 @@ class TestLLMDecisionEngineIntegration:
                 )
                 mock_decision_validator.create_fallback_decision.return_value = fallback_decision
 
-            result = await decision_engine.make_trading_decision(["BTCUSDT"], 1)
+            result = await decision_engine.make_trading_decision(1, ["BTCUSDT"])
 
             # Verify result matches validation outcome
             assert isinstance(result, DecisionResult)
@@ -840,7 +840,7 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Execute multi-asset decision generation
-        result = await decision_engine.make_trading_decision(["BTCUSDT", "ETHUSDT"], 1)
+        result = await decision_engine.make_trading_decision(1, ["BTCUSDT", "ETHUSDT"])
 
         # Verify multi-asset decision structure
         assert isinstance(result, DecisionResult)
@@ -927,7 +927,7 @@ class TestLLMDecisionEngineIntegration:
         decision_engine.strategy_manager = mock_strategy_manager
 
         # Execute decision generation with partial failure
-        result = await decision_engine.make_trading_decision(["BTCUSDT", "ETHUSDT"], 1)
+        result = await decision_engine.make_trading_decision(1, ["BTCUSDT", "ETHUSDT"])
 
         # Verify decision was generated despite partial failure
         assert isinstance(result, DecisionResult)

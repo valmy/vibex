@@ -3,11 +3,12 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.config import config
+from ...models.market_data import MarketData
 from .client import AsterClient
 from .events import CandleCloseEvent, EventManager, EventType
 from .repository import MarketDataRepository
@@ -37,7 +38,7 @@ class MarketDataService:
     DEFAULT_RETRY_DELAY = 1.0  # seconds
     MAX_RETRY_DELAY = 300.0  # 5 minutes
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the Market Data Service."""
         # Configuration
         self.assets = [asset.strip() for asset in config.ASSETS.split(",") if asset.strip()]
@@ -68,28 +69,31 @@ class MarketDataService:
 
         # Register default handler
         self.event_manager.register_handler(
-            EventType.CANDLE_CLOSE, self._default_candle_close_handler
+            EventType.CANDLE_CLOSE,
+            self._default_candle_close_handler,  # type: ignore[arg-type]
         )
 
     # Scheduler delegation methods
-    async def start_scheduler(self):
+    async def start_scheduler(self) -> None:
         """Start the candle close scheduler."""
         await self.scheduler.start()
 
-    async def stop_scheduler(self):
+    async def stop_scheduler(self) -> None:
         """Stop the scheduler."""
         await self.scheduler.stop()
 
-    async def get_scheduler_status(self) -> dict:
+    async def get_scheduler_status(self) -> Dict[str, Any]:
         """Get scheduler status."""
         return await self.scheduler.get_status()
 
     # Event system delegation
-    def register_event_handler(self, event_type: EventType, handler, interval: str = None):
+    def register_event_handler(
+        self, event_type: EventType, handler: Any, interval: Optional[str] = None
+    ) -> None:
         """Register an event handler."""
         self.event_manager.register_handler(event_type, handler, interval)
 
-    async def _default_candle_close_handler(self, event: CandleCloseEvent):
+    async def _default_candle_close_handler(self, event: CandleCloseEvent) -> None:
         """Default handler for candle close events."""
         logger.info(f"Candle closed: {event.symbol} {event.interval} at {event.close_time}")
 
@@ -222,11 +226,34 @@ class MarketDataService:
                         # Commit the transaction
                         await db.commit()
 
+                        # Convert candle list to dictionary format expected by CandleCloseEvent
+                        candle_dict = {
+                            "open_time": latest_candle[0],
+                            "open": latest_candle[1],
+                            "high": latest_candle[2],
+                            "low": latest_candle[3],
+                            "close": latest_candle[4],
+                            "volume": latest_candle[5],
+                            "close_time": latest_candle[6],
+                            "quote_asset_volume": latest_candle[7]
+                            if len(latest_candle) > 7
+                            else None,
+                            "number_of_trades": latest_candle[8]
+                            if len(latest_candle) > 8
+                            else None,
+                            "taker_buy_base_asset_volume": latest_candle[9]
+                            if len(latest_candle) > 9
+                            else None,
+                            "taker_buy_quote_asset_volume": latest_candle[10]
+                            if len(latest_candle) > 10
+                            else None,
+                        }
+
                         # Trigger event handlers
                         event = CandleCloseEvent(
                             symbol=symbol,
                             interval=interval,
-                            candle=latest_candle,
+                            candle=candle_dict,
                             close_time=candle_time,
                         )
                         await self.event_manager.trigger_event(
@@ -261,7 +288,7 @@ class MarketDataService:
     # Public API methods - delegate to components
     async def fetch_market_data(
         self, symbol: str, interval: str = "1h", limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    ) -> List[List[Any]]:
         """
         Fetch market data from Aster DEX.
 
@@ -273,7 +300,7 @@ class MarketDataService:
         Returns:
             List of candle data dictionaries
         """
-        return await self.client.fetch_klines(symbol, interval, limit)
+        return await self.client.fetch_klines(symbol, interval, limit)  # type: ignore[return-value]
 
     async def fetch_funding_rate(
         self,
@@ -297,8 +324,8 @@ class MarketDataService:
         return await self.client.fetch_funding_rate(symbol, startTime, endTime, limit)
 
     def correlate_funding_rates_with_candles(
-        self, candles: List[List], funding_rates: List[Dict[str, Any]], symbol: str
-    ) -> List[List]:
+        self, candles: List[List[Any]], funding_rates: List[Dict[str, Any]], symbol: str
+    ) -> List[List[Any]]:
         """
         Correlate funding rates with candle data based on timestamps.
 
@@ -340,7 +367,7 @@ class MarketDataService:
         return correlated_candles
 
     async def store_market_data(
-        self, db: AsyncSession, symbol: str, interval: str, data: List[List]
+        self, db: AsyncSession, symbol: str, interval: str, data: List[List[Any]]
     ) -> int:
         """
         Store market data in database.
@@ -356,9 +383,25 @@ class MarketDataService:
         """
         return await self.repository.store_candles(db, symbol, interval, data)
 
+    async def list_market_data(
+        self, db: AsyncSession, skip: int = 0, limit: int = 100
+    ) -> Tuple[List[MarketData], int]:
+        """
+        List all market data with pagination.
+
+        Args:
+            db: Database session
+            skip: Number of records to skip
+            limit: Number of records to fetch
+
+        Returns:
+            Tuple containing list of MarketData records and total count
+        """
+        return await self.repository.list_with_count(db, skip, limit)
+
     async def get_latest_market_data(
         self, db: AsyncSession, symbol: str, interval: str = "1h", limit: int = 100
-    ) -> List:
+    ) -> List[MarketData]:
         """
         Get latest market data from database.
 
@@ -375,7 +418,7 @@ class MarketDataService:
 
     async def get_latest_market_data_with_total(
         self, db: AsyncSession, symbol: str, interval: str = "1h", limit: int = 100
-    ) -> tuple[List, int]:
+    ) -> Tuple[List[MarketData], int]:
         """
         Get latest market data and total count from database.
 
@@ -391,8 +434,8 @@ class MarketDataService:
         return await self.repository.get_latest_with_count(db, symbol, interval, limit)
 
     async def get_market_data_range(
-        self, db: AsyncSession, symbol: str, interval: str, start_time, end_time
-    ) -> List:
+        self, db: AsyncSession, symbol: str, interval: str, start_time: datetime, end_time: datetime
+    ) -> List[MarketData]:
         """
         Get market data within a time range.
 
@@ -410,7 +453,7 @@ class MarketDataService:
 
     async def sync_market_data(
         self, db: AsyncSession, symbol: Optional[str] = None, interval: Optional[str] = None
-    ) -> Dict[str, int]:
+    ) -> Dict[str, Any]:  # Can be int (count) or str (error message)
         """
         Sync market data from Aster DEX to database.
 
@@ -424,7 +467,7 @@ class MarketDataService:
         """
         symbols = [symbol] if symbol else self.assets
         intervals = [interval] if interval else [self.interval, self.long_interval]
-        results = {}
+        results: Dict[str, Any] = {}  # Can store both counts (int) and error messages (str)
 
         for sym in symbols:
             try:

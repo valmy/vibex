@@ -4,6 +4,8 @@ Custom exceptions for the Technical Analysis Service.
 Provides specific exception types for different error scenarios.
 """
 
+from typing import Optional
+
 
 class TechnicalAnalysisException(Exception):
     """Base exception for technical analysis service."""
@@ -30,7 +32,7 @@ class InsufficientDataError(TechnicalAnalysisException):
 class InvalidCandleDataError(TechnicalAnalysisException):
     """Raised when candle data is invalid or incomplete."""
 
-    def __init__(self, message: str, candle_index: int = None):
+    def __init__(self, message: str, candle_index: Optional[int] = None):
         """
         Initialize InvalidCandleDataError.
 

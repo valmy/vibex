@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.app.core.exceptions import ValidationError, StrategyNotFoundError
+from src.app.core.exceptions import StrategyNotFoundError, ValidationError
 from src.app.models.account import Account as AccountModel
 from src.app.models.strategy import Strategy as StrategyModel
 from src.app.models.strategy import StrategyAssignment as StrategyAssignmentModel
@@ -170,7 +170,7 @@ class TestStrategyManager:
         mock_session.execute.return_value = mock_result
 
         custom_strategy = await strategy_manager.create_custom_strategy(
-            name="Test Custom",
+            strategy_name="Test Custom",
             prompt_template="Custom prompt",
             risk_parameters=sample_risk_parameters,
             timeframe_preference=["1h", "4h"],
@@ -204,7 +204,7 @@ class TestStrategyManager:
 
         with pytest.raises(ValidationError, match="Strategy 'conservative_perps' already exists"):
             await strategy_manager.create_custom_strategy(
-                name="Conservative Perps",
+                strategy_name="Conservative Perps",
                 prompt_template="Duplicate prompt",
                 risk_parameters=sample_risk_parameters,
             )
@@ -468,11 +468,11 @@ class TestStrategyManager:
             {"pnl": 75.0, "volume": 750.0, "fee": 0.75, "funding": 0.3, "is_liquidation": False},
         ]
 
-        performance = strategy_manager.calculate_strategy_performance(
+        performance = await strategy_manager.calculate_strategy_performance(
             strategy_id=strategy_id,
-            period_start=start_date,
-            period_end=end_date,
-            trades=trades_data,
+            start_date=start_date,
+            end_date=end_date,
+            trades_data=trades_data,
         )
 
         assert performance.strategy_id == strategy_id
@@ -489,8 +489,8 @@ class TestStrategyManager:
         start_date = datetime.now(timezone.utc) - timedelta(days=7)
         end_date = datetime.now(timezone.utc)
 
-        performance = strategy_manager.calculate_strategy_performance(
-            strategy_id=strategy_id, period_start=start_date, period_end=end_date, trades=[]
+        performance = await strategy_manager.calculate_strategy_performance(
+            strategy_id=strategy_id, start_date=start_date, end_date=end_date, trades_data=[]
         )
 
         assert performance.total_trades == 0

@@ -13,19 +13,19 @@ import pytest_asyncio
 # Set testing environment before importing app modules
 os.environ["ENVIRONMENT"] = "testing"
 
-from app.db.session import close_db, get_async_engine, get_session_factory, init_db
+from app.db import session as db_session_module
+from app.db.session import close_db, get_session_factory, init_db
 
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session_factory():
     """Create a database session factory for testing."""
-    # Close any existing database connection from a different event loop
-    try:
-        get_async_engine()
-        await close_db()
-    except RuntimeError:
-        # No existing engine, that's fine
-        pass
+    # Safety check: If global engine is set, it's from a previous loop.
+    # We cannot await close_db() on it because the loop is likely closed.
+    # So we just forcibly reset the global variables.
+    if db_session_module.async_engine is not None:
+        db_session_module.async_engine = None
+        db_session_module.AsyncSessionLocal = None
 
     # Initialize database on the current event loop
     try:
@@ -33,6 +33,9 @@ async def db_session_factory():
         yield get_session_factory()
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
+    finally:
+        # Clean up at the end of the test
+        await close_db()
 
 
 @pytest_asyncio.fixture(scope="function")

@@ -100,7 +100,7 @@ class TestStrategyPersistenceE2E:
         )
 
         custom_strategy = await strategy_manager.create_custom_strategy(
-            name="Integration Test Strategy",
+            strategy_name="Integration Test Strategy",
             prompt_template="Test Prompt",
             risk_parameters=risk_params,
             timeframe_preference=["15m", "1h"],

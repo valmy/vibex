@@ -4,6 +4,8 @@ API routes for user management.
 Provides endpoints for admin users to manage other users and their admin status.
 """
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,11 +32,13 @@ user_service = UserManagementService()
 
 @router.get("", response_model=UserList)
 async def list_users(
-    skip: int = Query(0, ge=0, description="Number of users to skip for pagination"),
-    limit: int = Query(100, gt=0, le=1000, description="Maximum number of users to return"),
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-):
+    current_user: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    skip: Annotated[int, Query(ge=0, description="Number of users to skip for pagination")] = 0,
+    limit: Annotated[
+        int, Query(gt=0, le=1000, description="Maximum number of users to return")
+    ] = 100,
+) -> UserList:
     """
     List all registered users in the system.
 
@@ -73,12 +77,8 @@ async def list_users(
         }
     """
     try:
-        # Get total count
-        count_result = await db.execute(select(func.count(User.id)))
-        total = count_result.scalar()
-
-        # Get users
-        users = await user_service.list_users(db, skip=skip, limit=limit, admin_user=current_user)
+        # Get users and total count from service
+        users, total = await user_service.list_users(db, skip=skip, limit=limit, admin_user=current_user)
 
         logger.info(
             f"Listed users by admin {current_user.address}",
@@ -91,7 +91,12 @@ async def list_users(
             },
         )
 
-        return UserList(users=users, total=total, skip=skip, limit=limit)
+        return UserList(
+            users=[UserRead.model_validate(u) for u in users],
+            total=total,
+            skip=skip,
+            limit=limit,
+        )
 
     except ValueError as e:
         raise HTTPException(
@@ -109,9 +114,9 @@ async def list_users(
 @router.get("/{user_id}", response_model=UserRead)
 async def get_user(
     user_id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-):
+    current_user: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> UserRead:
     """
     Get detailed information about a specific user.
 
@@ -168,7 +173,7 @@ async def get_user(
             },
         )
 
-        return user
+        return UserRead.model_validate(user)
 
     except HTTPException:
         raise
@@ -183,9 +188,9 @@ async def get_user(
 @router.put("/{user_id}/promote", response_model=UserRead)
 async def promote_user(
     user_id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-):
+    current_user: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> UserRead:
     """
     Promote a user to admin status.
 
@@ -228,7 +233,7 @@ async def promote_user(
             },
         )
 
-        return user
+        return UserRead.model_validate(user)
 
     except UserNotFoundError as e:
         logger.warning(
@@ -269,9 +274,9 @@ async def promote_user(
 @router.put("/{user_id}/revoke", response_model=UserRead)
 async def revoke_admin(
     user_id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-):
+    current_user: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> UserRead:
     """
     Revoke admin status from a user.
 
@@ -314,7 +319,7 @@ async def revoke_admin(
             },
         )
 
-        return user
+        return UserRead.model_validate(user)
 
     except UserNotFoundError as e:
         logger.warning(

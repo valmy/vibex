@@ -7,6 +7,7 @@ Includes:
 - TechnicalAnalysisService: Technical indicator calculations
 """
 
+from .data_service import data_service
 from .llm.llm_service import LLMService, get_llm_service
 from .market_data import MarketDataService, get_market_data_service
 from .technical_analysis import (
@@ -23,4 +24,5 @@ __all__ = [
     "TechnicalAnalysisService",
     "TATechnicalIndicators",
     "get_technical_analysis_service",
+    "data_service",
 ]

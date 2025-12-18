@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Callable, Dict, List
+from typing import Any, Callable, Dict, List
 
 from .events import EventManager
 from .utils import calculate_next_candle_close, get_interval_seconds
@@ -23,8 +23,8 @@ class CandleScheduler:
         self,
         intervals: List[str],
         event_manager: EventManager,
-        fetch_callback: Callable,
-    ):
+        fetch_callback: Callable[[str], Any],
+    ) -> None:
         """
         Initialize the candle scheduler.
 
@@ -38,10 +38,10 @@ class CandleScheduler:
         self.fetch_callback = fetch_callback
 
         self._is_running = False
-        self._scheduled_tasks: Dict[str, asyncio.Task] = {}
+        self._scheduled_tasks: Dict[str, asyncio.Task[Any]] = {}
         self._shutdown_event = asyncio.Event()
 
-    async def start(self):
+    async def start(self) -> None:
         """Start the candle close scheduler for all intervals."""
         if self._is_running:
             logger.warning("Scheduler is already running")
@@ -58,7 +58,7 @@ class CandleScheduler:
                 )
                 logger.info(f"Started candle scheduler for interval: {interval}")
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop all scheduled tasks gracefully."""
         if not self._is_running:
             return
@@ -79,7 +79,7 @@ class CandleScheduler:
         self._scheduled_tasks.clear()
         logger.info("All candle schedulers stopped")
 
-    async def _schedule_interval(self, interval: str):
+    async def _schedule_interval(self, interval: str) -> None:
         """
         Schedule candle close events for a specific interval.
 
@@ -145,14 +145,14 @@ class CandleScheduler:
             logger.error("Error processing %s candle close: %s", interval, e, exc_info=True)
             raise
 
-    async def get_status(self) -> dict:
+    async def get_status(self) -> Dict[str, Any]:
         """
         Get the current status of the scheduler.
 
         Returns:
             dict: Status information including next scheduled runs
         """
-        status = {"running": self._is_running, "intervals": {}, "next_runs": {}}
+        status: Dict[str, Any] = {"running": self._is_running, "intervals": {}, "next_runs": {}}
         now = datetime.now(timezone.utc)
         for interval in self.intervals:
             if not interval:

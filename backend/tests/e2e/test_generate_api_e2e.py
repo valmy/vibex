@@ -606,9 +606,10 @@ class TestGenerateAPIE2E:
             headers=headers,
         )
 
-        assert response.status_code in [400, 404], (
-            f"Expected 400 or 404, got {response.status_code}"
-        )
+        assert response.status_code in [
+            400,
+            404,
+        ], f"Expected 400 or 404, got {response.status_code}"
         data = response.json()
         assert "detail" in data
 

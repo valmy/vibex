@@ -5,6 +5,7 @@ Provides technical indicator calculations for market data.
 """
 
 import logging
+from typing import Optional
 
 from .schemas import TATechnicalIndicators
 from .service import TechnicalAnalysisService
@@ -12,7 +13,7 @@ from .service import TechnicalAnalysisService
 logger = logging.getLogger(__name__)
 
 # Singleton instance
-_ta_service: TechnicalAnalysisService = None
+_ta_service: Optional[TechnicalAnalysisService] = None
 
 
 def get_technical_analysis_service() -> TechnicalAnalysisService:

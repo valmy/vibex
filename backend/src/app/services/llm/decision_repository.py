@@ -5,7 +5,7 @@ Handles CRUD operations for trading decisions with multi-asset support.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -37,11 +37,11 @@ class DecisionRepository:
         model_used: str,
         processing_time_ms: float,
         validation_passed: bool,
-        validation_errors: Optional[list] = None,
-        validation_warnings: Optional[list] = None,
-        market_context: Optional[dict] = None,
-        account_context: Optional[dict] = None,
-        risk_metrics: Optional[dict] = None,
+        validation_errors: Optional[List[str]] = None,
+        validation_warnings: Optional[List[str]] = None,
+        market_context: Optional[Dict[str, Any]] = None,
+        account_context: Optional[Dict[str, Any]] = None,
+        risk_metrics: Optional[Dict[str, Any]] = None,
         api_cost: Optional[float] = None,
     ) -> Decision:
         """
@@ -151,7 +151,7 @@ class DecisionRepository:
         limit: int = 100,
         symbol: Optional[str] = None,
         offset: int = 0,
-    ) -> list[Decision]:
+    ) -> List[Decision]:
         """
         Get decision history for an account.
 
@@ -189,8 +189,11 @@ class DecisionRepository:
                     for decision in all_decisions:
                         if decision.is_multi_asset:
                             # Check if symbol is in any asset decision
-                            if any(ad.get("asset") == symbol for ad in decision.asset_decisions):
-                                filtered_decisions.append(decision)
+                            if decision.asset_decisions:  # Check if asset_decisions is not None
+                                if any(
+                                    ad.get("asset") == symbol for ad in decision.asset_decisions
+                                ):
+                                    filtered_decisions.append(decision)
                         elif decision.symbol == symbol:
                             # Legacy single-asset decision
                             filtered_decisions.append(decision)
@@ -208,7 +211,7 @@ class DecisionRepository:
         self,
         decision_id: int,
         execution_price: float,
-        execution_errors: Optional[list] = None,
+        execution_errors: Optional[List[str]] = None,
     ) -> Decision:
         """
         Mark a decision as executed.
@@ -290,7 +293,7 @@ class DecisionRepository:
                 logger.error(f"Failed to create decision result: {e}")
                 raise
 
-    async def get_pending_decisions(self, account_id: int) -> list[Decision]:
+    async def get_pending_decisions(self, account_id: int) -> List[Decision]:
         """
         Get pending decisions that require execution.
 
@@ -321,7 +324,7 @@ class DecisionRepository:
         self,
         strategy_id: str,
         limit: int = 100,
-    ) -> list[Decision]:
+    ) -> List[Decision]:
         """
         Get decisions for a specific strategy.
 

@@ -83,19 +83,20 @@ class TestUserManagementAPIE2E:
         finally:
             # Cleanup: delete test users
             if not created_users:
-                return
-            try:
-                from sqlalchemy import delete
-                from sqlalchemy.exc import SQLAlchemyError
+                pass  # Do nothing if no users were created
+            else:
+                try:
+                    from sqlalchemy import delete
+                    from sqlalchemy.exc import SQLAlchemyError
 
-                user_ids_to_delete = [user.id for user in created_users]
-                delete_stmt = delete(User).where(User.id.in_(user_ids_to_delete))
-                await db_session.execute(delete_stmt)
-                await db_session.commit()
-                logger.info("Cleaned up test users")
-            except SQLAlchemyError as e:
-                logger.warning(f"Error cleaning up test users: {e}")
-                await db_session.rollback()
+                    user_ids_to_delete = [user.id for user in created_users]
+                    delete_stmt = delete(User).where(User.id.in_(user_ids_to_delete))
+                    await db_session.execute(delete_stmt)
+                    await db_session.commit()
+                    logger.info("Cleaned up test users")
+                except SQLAlchemyError as e:
+                    logger.warning(f"Error cleaning up test users: {e}")
+                    await db_session.rollback()
 
     @pytest.mark.asyncio
     async def test_list_users_returns_all_users(self, client, test_users, get_auth_headers):

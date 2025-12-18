@@ -14,7 +14,7 @@ async def test_require_account_owner_success():
     """Test that account owner can access their account."""
     # Create mock user
     user = User(address="0x123", is_admin=False)
-    user.id = 1  # type: ignore[assignment]
+    user.id = 1
 
     # Create mock account
     account = Account(
@@ -26,7 +26,7 @@ async def test_require_account_owner_success():
         balance_usd=10000.0,
         is_paper_trading=True,
     )
-    account.id = 100  # type: ignore[assignment]
+    account.id = 100
 
     # Mock database session
     mock_db = AsyncMock()
@@ -50,7 +50,7 @@ async def test_require_account_owner_not_found():
     """Test that 404 is raised for non-existent account."""
     # Create mock user
     user = User(address="0x123", is_admin=False)
-    user.id = 1  # type: ignore[assignment]
+    user.id = 1
 
     # Mock database session - account not found
     mock_db = AsyncMock()
@@ -75,10 +75,10 @@ async def test_require_account_owner_forbidden():
     """Test that 403 is raised when user doesn't own the account."""
     # Create mock users
     owner = User(address="0x123", is_admin=False)
-    owner.id = 1  # type: ignore[assignment]
+    owner.id = 1
 
     non_owner = User(address="0x456", is_admin=False)
-    non_owner.id = 2  # type: ignore[assignment]
+    non_owner.id = 2
 
     # Create mock account owned by first user
     account = Account(
@@ -90,7 +90,7 @@ async def test_require_account_owner_forbidden():
         balance_usd=10000.0,
         is_paper_trading=True,
     )
-    account.id = 100  # type: ignore[assignment]
+    account.id = 100
 
     # Mock database session
     mock_db = AsyncMock()
@@ -115,7 +115,7 @@ async def test_require_admin_or_owner_owner_success():
     """Test that account owner can access their account."""
     # Create mock user
     user = User(address="0x123", is_admin=False)
-    user.id = 1  # type: ignore[assignment]
+    user.id = 1
 
     # Create mock account
     account = Account(
@@ -127,7 +127,7 @@ async def test_require_admin_or_owner_owner_success():
         balance_usd=10000.0,
         is_paper_trading=True,
     )
-    account.id = 100  # type: ignore[assignment]
+    account.id = 100
 
     # Mock database session
     mock_db = AsyncMock()
@@ -151,10 +151,10 @@ async def test_require_admin_or_owner_admin_success():
     """Test that admin can access any account."""
     # Create mock users
     owner = User(address="0x123", is_admin=False)
-    owner.id = 1  # type: ignore[assignment]
+    owner.id = 1
 
     admin = User(address="0x456", is_admin=True)
-    admin.id = 2  # type: ignore[assignment]
+    admin.id = 2
 
     # Create mock account owned by first user
     account = Account(
@@ -166,7 +166,7 @@ async def test_require_admin_or_owner_admin_success():
         balance_usd=10000.0,
         is_paper_trading=True,
     )
-    account.id = 100  # type: ignore[assignment]
+    account.id = 100
 
     # Mock database session
     mock_db = AsyncMock()
@@ -190,7 +190,7 @@ async def test_require_admin_or_owner_not_found():
     """Test that 404 is raised for non-existent account."""
     # Create mock user
     user = User(address="0x123", is_admin=False)
-    user.id = 1  # type: ignore[assignment]
+    user.id = 1
 
     # Mock database session - account not found
     mock_db = AsyncMock()
@@ -215,10 +215,10 @@ async def test_require_admin_or_owner_forbidden():
     """Test that 403 is raised when user is neither admin nor owner."""
     # Create mock users
     owner = User(address="0x123", is_admin=False)
-    owner.id = 1  # type: ignore[assignment]
+    owner.id = 1
 
     non_owner = User(address="0x456", is_admin=False)
-    non_owner.id = 2  # type: ignore[assignment]
+    non_owner.id = 2
 
     # Create mock account owned by first user
     account = Account(
@@ -230,7 +230,7 @@ async def test_require_admin_or_owner_forbidden():
         balance_usd=10000.0,
         is_paper_trading=True,
     )
-    account.id = 100  # type: ignore[assignment]
+    account.id = 100
 
     # Mock database session
     mock_db = AsyncMock()

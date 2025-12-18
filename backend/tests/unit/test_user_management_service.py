@@ -53,15 +53,18 @@ async def test_list_users_returns_all_users(
     # Mock the execute method to return users
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = mock_users
+    # Mock count result
+    mock_result.scalar.return_value = 5
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     # List all users
-    result = await user_service.list_users(mock_db_session, skip=0, limit=100)
+    users, total = await user_service.list_users(mock_db_session, skip=0, limit=100)
 
     # Verify all users are returned
-    assert len(result) == 5
-    assert all(isinstance(user, MagicMock) for user in result)
-    assert all(user.address in [u.address for u in mock_users] for user in result)
+    assert len(users) == 5
+    assert total == 5
+    assert all(isinstance(user, MagicMock) for user in users)
+    assert all(user.address in [u.address for u in mock_users] for user in users)
 
 
 @pytest.mark.unit
@@ -95,18 +98,21 @@ async def test_pagination_returns_correct_subset(
     expected_count = min(limit, max(0, num_users - skip))
     paginated_users = mock_users[skip : skip + limit]
     mock_result.scalars.return_value.all.return_value = paginated_users
+    # Mock total count
+    mock_result.scalar.return_value = num_users
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     # Get paginated results
-    result = await user_service.list_users(mock_db_session, skip=skip, limit=limit)
+    users, total = await user_service.list_users(mock_db_session, skip=skip, limit=limit)
 
     # Verify correct subset is returned
-    assert len(result) == expected_count
+    assert len(users) == expected_count
+    assert total == num_users
 
     # Verify results are ordered by ID
-    if len(result) > 1:
-        for i in range(len(result) - 1):
-            assert result[i].id < result[i + 1].id
+    if len(users) > 1:
+        for i in range(len(users) - 1):
+            assert users[i].id < users[i + 1].id
 
 
 @pytest.mark.unit
@@ -349,7 +355,7 @@ async def test_promotion_actions_are_logged(
     assert log_entry.action == "promote_to_admin"
     assert log_entry.admin_address == admin_user.address
     assert log_entry.target_user_address == regular_user.address
-    assert log_entry.target_user_id == regular_user.id
+    assert log_entry.target_user_id == str(regular_user.id)
     assert hasattr(log_entry, "correlation_id")
 
 
@@ -404,7 +410,7 @@ async def test_revocation_actions_are_logged(
     assert log_entry.action == "revoke_admin"
     assert log_entry.admin_address == admin_user.address
     assert log_entry.target_user_address == admin_to_revoke.address
-    assert log_entry.target_user_id == admin_to_revoke.id
+    assert log_entry.target_user_id == str(admin_to_revoke.id)
     assert hasattr(log_entry, "correlation_id")
 
 
@@ -431,17 +437,19 @@ async def test_list_actions_are_logged(
     # Mock the execute method to return users
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = mock_users
+    # Mock count
+    mock_result.scalar.return_value = 3
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     # Capture logs
     with caplog.at_level(logging.INFO):
         # List users
-        result = await user_service.list_users(
+        users, total = await user_service.list_users(
             mock_db_session, skip=0, limit=100, admin_user=admin_user
         )
 
     # Verify list was successful
-    assert len(result) == 3
+    assert len(users) == 3
 
     # Verify log entry exists
     assert len(caplog.records) > 0
@@ -509,7 +517,7 @@ async def test_get_user_actions_are_logged(
     assert log_entry.action == "get_user"
     assert log_entry.admin_address == admin_user.address
     assert log_entry.target_user_address == target_user.address
-    assert log_entry.target_user_id == target_user.id
+    assert log_entry.target_user_id == str(target_user.id)
     assert hasattr(log_entry, "correlation_id")
 
 
@@ -551,7 +559,7 @@ async def test_failed_operations_are_logged(
     # Verify log contains error information in extra fields
     assert log_entry.action == "promote_to_admin"
     assert log_entry.admin_address == admin_user.address
-    assert log_entry.target_user_id == 99999
+    assert log_entry.target_user_id == "99999"
     assert hasattr(log_entry, "error")
     assert "User with id 99999 not found" in log_entry.error
     assert hasattr(log_entry, "correlation_id")

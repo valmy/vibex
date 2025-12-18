@@ -95,8 +95,10 @@ class AccountRead(BaseSchema):
     is_enabled: bool
 
     @classmethod
-    def from_account(cls, account):
+    def from_account(cls, account: object) -> "AccountRead":
         """Create AccountRead from Account model with credential masking."""
+        # Using getattr to safely access attributes since account is typed as object
+        # but is expected to be an Account SQLAlchemy model
         return cls(
             id=account.id,
             name=account.name,

@@ -6,9 +6,9 @@ strategy assignment, switching, and performance tracking.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -26,6 +26,7 @@ from ...models.strategy import StrategyAssignment as StrategyAssignmentModel
 from ...schemas.trading_decision import (
     StrategyAlert,
     StrategyAssignment,
+    StrategyComparison,
     StrategyMetrics,
     StrategyPerformance,
     StrategyRiskParameters,
@@ -61,11 +62,6 @@ class StrategyManager:
         self._metrics_cache: Dict[Tuple[str, int], StrategyMetrics] = {}
         self._alerts: List[StrategyAlert] = []
 
-        # Initialize predefined strategies if session factory is available
-        # We can't await here in __init__, so this must be called explicitly or lazily
-        # For now, we'll rely on the application startup to call this or handle it lazily
-        pass
-
     async def initialize(self) -> None:
         """Initialize the service and seed strategies."""
         if self.session_factory:
@@ -97,7 +93,7 @@ class StrategyManager:
                     "max_leverage": 3.0,
                     "cooldown_period": 600,
                     "max_funding_rate_bps": 5.0,
-                    "liquidation_buffer": 0.15,  # Default for perps
+                    "liquidation_buffer": 0.15,
                 },
                 "timeframe_preference": ["5m", "15m", "4h"],
                 "max_positions": 2,
@@ -119,7 +115,7 @@ class StrategyManager:
                     "max_leverage": 15.0,
                     "cooldown_period": 120,
                     "max_funding_rate_bps": 15.0,
-                    "liquidation_buffer": 0.15,  # Default for perps
+                    "liquidation_buffer": 0.15,
                 },
                 "timeframe_preference": ["5m", "15m", "1h"],
                 "max_positions": 4,
@@ -141,7 +137,7 @@ class StrategyManager:
                     "max_leverage": 10.0,
                     "cooldown_period": 30,
                     "max_funding_rate_bps": 3.0,
-                    "liquidation_buffer": 0.15,  # Default for perps
+                    "liquidation_buffer": 0.15,
                 },
                 "timeframe_preference": ["1m", "5m"],
                 "max_positions": 3,
@@ -163,7 +159,7 @@ class StrategyManager:
                     "max_leverage": 5.0,
                     "cooldown_period": 300,
                     "max_funding_rate_bps": 8.0,
-                    "liquidation_buffer": 0.15,  # Default for perps
+                    "liquidation_buffer": 0.15,
                 },
                 "timeframe_preference": ["5m", "15m", "4h"],
                 "max_positions": 3,
@@ -185,7 +181,7 @@ class StrategyManager:
                     "max_leverage": 1.0,
                     "cooldown_period": 900,
                     "max_funding_rate_bps": 10.0,
-                    "liquidation_buffer": 0.15,  # Default for perps
+                    "liquidation_buffer": 0.15,
                 },
                 "timeframe_preference": ["15m", "1h"],
                 "max_positions": 1,
@@ -237,38 +233,33 @@ class StrategyManager:
                 raise ConfigurationError(f"Failed to initialize predefined strategies: {e}") from e
 
     def _get_conservative_prompt_template(self) -> str:
-        """Get prompt template for conservative strategy."""
         return """
 Analyze {symbol} perpetual futures conservatively. Use 5m timeframe for precise entries but confirm bias on 4h trend. Focus on strong support/resistance, funding rate direction, and liquidation cluster avoidance. Prioritize limit orders (maker) for fee efficiency. Current funding rate: {funding_rate}%. Target 3:1+ reward/risk to offset holding costs. Maximum 2 concurrent positions.
 """
 
     def _get_aggressive_prompt_template(self) -> str:
-        """Get prompt template for aggressive strategy."""
         return """
 Analyze {symbol} for aggressive perpetual futures trading on 5m timeframe. Hunt for momentum breakouts, funding rate squeezes, and liquidation hunts. Accept taker fees for immediate entries on confirmed breaks. Monitor open interest changes and funding rate: {funding_rate}%. Use 15x max leverage with 2% stop loss. Target 2:1 risk/reward, exit within 4-6 hours to limit funding. Obey daily loss limits strictly.
 """
 
     def _get_scalping_prompt_template(self) -> str:
-        """Get prompt template for scalping strategy."""
         return """
 Scalp {symbol} perpetuals on 1m/5m timeframes. Focus on order book imbalances, micro-divergences, and funding rate arbitrage. USE LIMIT ORDERS ONLY (maker fee 0.005%). Target 0.2% profit with 0.15% stop. Avoid trading 5 minutes before/after funding. Current funding: {funding_rate}bps. Max hold time: 30 minutes. Check liquidation heatmap for cluster avoidance.
 """
 
     def _get_swing_prompt_template(self) -> str:
-        """Get prompt template for swing strategy."""
         return """
 Swing trade {symbol} perps: use 5m for precision entry, 4h for trend direction. Hold 6-18 hours max. Monitor funding rate trend: {funding_rate}bps. Target 2.5:1 R:R. Use 3-5x leverage. Place limit orders at premium/discount to avoid taker fees. Calculate liquidation price before entry: must be >15% away. Exit if funding flips against position for 2 consecutive periods.
 """
 
     def _get_dca_prompt_template(self) -> str:
-        """Get prompt template for DCA strategy."""
         return """
 Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments. Use 1x leverage ONLY. Current funding {funding_rate}bps - avoid if >10bps. Hedge spot exposure or build gradual directional position. Max 5 entry orders, then take profit at +3% from average entry. No stop loss - manual intervention only. Maker orders essential.
 """
 
     async def create_custom_strategy(
         self,
-        name: str,
+        strategy_name: str,
         prompt_template: str,
         risk_parameters: StrategyRiskParameters,
         timeframe_preference: Optional[List[str]] = None,
@@ -281,32 +272,21 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
         ] = None,
         funding_rate_threshold: Optional[float] = None,
         created_by: Optional[str] = None,
+        strategy_id: Optional[str] = None,
     ) -> TradingStrategy:
-        """Create a custom trading strategy.
-
-        Args:
-            name: Human-readable strategy name.
-            prompt_template: LLM prompt template.
-            risk_parameters: Risk management parameters.
-            timeframe_preference: Preferred timeframes.
-            max_positions: Maximum concurrent positions.
-            position_sizing: Position sizing method.
-            order_preference: Preference for order types.
-            funding_rate_threshold: Funding rate threshold.
-            created_by: Identifier of the user creating the strategy.
-        """
+        """Create a custom trading strategy."""
         if not self.session_factory:
             raise ConfigurationError("Database session not available")
 
-        # Generate a simple identifier from the name.
-        strategy_id = name.lower().replace(" ", "_")
+        if not strategy_id:
+            strategy_id = strategy_name.lower().replace(" ", "_")
+
         if timeframe_preference is None:
             timeframe_preference = ["1h", "4h"]
 
-        # Create Pydantic model for validation
         custom_strategy = TradingStrategy(
             strategy_id=strategy_id,
-            strategy_name=name,
+            strategy_name=strategy_name,
             strategy_type="custom",
             prompt_template=prompt_template,
             risk_parameters=risk_parameters,
@@ -320,7 +300,6 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
             is_active=True,
         )
 
-        # Validate strategy constraints
         validation_errors = custom_strategy.validate_strategy_constraints()
         if validation_errors:
             raise ValidationError(
@@ -329,16 +308,14 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
 
         async with self.session_factory() as session:
             try:
-                # Ensure strategy does not already exist
                 stmt = select(StrategyModel).where(StrategyModel.strategy_id == strategy_id)
                 result = await session.execute(stmt)
                 if result.scalar_one_or_none():
                     raise StrategyAssignmentError(f"Strategy '{strategy_id}' already exists")
 
-                # Persist to DB
                 db_strategy = StrategyModel(
                     strategy_id=strategy_id,
-                    strategy_name=name,
+                    strategy_name=strategy_name,
                     strategy_type="custom",
                     prompt_template=prompt_template,
                     risk_parameters=risk_parameters.model_dump(),
@@ -361,45 +338,26 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 raise ConfigurationError(f"Failed to create strategy: {e}") from e
 
     async def get_available_strategies(self) -> List[TradingStrategy]:
-        """
-        Get all available active trading strategies.
-
-        Returns:
-            List[TradingStrategy]: List of all available strategies
-        """
         if not self.session_factory:
             return []
-
         async with self.session_factory() as session:
             try:
-                stmt = select(StrategyModel).where(StrategyModel.is_active == True)  # noqa: E712
+                stmt = select(StrategyModel).where(StrategyModel.is_active)
                 result = await session.execute(stmt)
                 db_strategies = result.scalars().all()
-
                 return [self._map_db_to_pydantic(s) for s in db_strategies]
             except Exception as e:
                 logger.error(f"Failed to get available strategies: {e}")
                 return []
 
     async def get_strategy(self, strategy_id: str) -> Optional[TradingStrategy]:
-        """
-        Get a specific strategy by ID.
-
-        Args:
-            strategy_id: Strategy identifier
-
-        Returns:
-            Optional[TradingStrategy]: Strategy if found, None otherwise
-        """
         if not self.session_factory:
             return None
-
         async with self.session_factory() as session:
             try:
                 stmt = select(StrategyModel).where(StrategyModel.strategy_id == strategy_id)
                 result = await session.execute(stmt)
                 db_strategy = result.scalar_one_or_none()
-
                 if db_strategy:
                     return self._map_db_to_pydantic(db_strategy)
                 return None
@@ -408,15 +366,6 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 return None
 
     async def validate_strategy(self, strategy: TradingStrategy) -> List[str]:
-        """
-        Validate a strategy configuration.
-
-        Args:
-            strategy: Strategy to validate
-
-        Returns:
-            List[str]: List of validation errors (empty if valid)
-        """
         return strategy.validate_strategy_constraints()
 
     async def assign_strategy_to_account(
@@ -426,55 +375,38 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
         assigned_by: Optional[str] = None,
         switch_reason: Optional[str] = None,
     ) -> StrategyAssignment:
-        """
-        Assign a strategy to an account.
-
-        Args:
-            account_id: Account identifier
-            strategy_id: Strategy to assign
-            assigned_by: User who assigned the strategy
-            switch_reason: Reason for strategy assignment/switch
-
-        Returns:
-            StrategyAssignment: Assignment record
-        """
         if not self.session_factory:
             raise ConfigurationError("Database session not available")
-
         async with self.session_factory() as session:
             try:
-                # 0. Validate account exists
                 account_stmt = select(AccountModel).where(AccountModel.id == account_id)
                 account_result = await session.execute(account_stmt)
                 account = account_result.scalar_one_or_none()
-
                 if not account:
                     raise AccountNotFoundError(account_id)
 
-                # 1. Get the strategy to assign
-                stmt = select(StrategyModel).where(StrategyModel.strategy_id == strategy_id)
-                result = await session.execute(stmt)
+                strategy_stmt = select(StrategyModel).where(
+                    StrategyModel.strategy_id == strategy_id
+                )
+                result = await session.execute(strategy_stmt)
                 strategy = result.scalar_one_or_none()
-
                 if not strategy:
                     raise StrategyNotFoundError(strategy_id)
                 if not strategy.is_active:
                     raise StrategyAssignmentError(f"Strategy '{strategy_id}' is not active")
 
-                # 2. Get current active assignment
-                stmt = select(StrategyAssignmentModel).where(
+                assignment_stmt = select(StrategyAssignmentModel).where(
                     and_(
                         StrategyAssignmentModel.account_id == account_id,
-                        StrategyAssignmentModel.is_active == True,  # noqa: E712
+                        StrategyAssignmentModel.is_active,
                     )
                 )
-                result = await session.execute(stmt)
+                result = await session.execute(assignment_stmt)
                 current_assignment = result.scalar_one_or_none()
 
                 previous_strategy_id_str = None
                 previous_strategy_db_id = None
                 if current_assignment:
-                    # Look up the previous strategy's string identifier
                     prev_strategy_stmt = select(StrategyModel).where(
                         StrategyModel.id == current_assignment.strategy_id
                     )
@@ -484,16 +416,14 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                         previous_strategy_id_str = prev_strategy.strategy_id
                     previous_strategy_db_id = current_assignment.strategy_id
 
-                    # Deactivate current assignment
                     current_assignment.is_active = False
-                    current_assignment.deactivated_at = datetime.utcnow()
-                    current_assignment.deactivated_by = assigned_by
-                    current_assignment.deactivation_reason = switch_reason
+                    current_assignment.deactivated_at = datetime.utcnow()  # type: ignore[attr-defined]
+                    current_assignment.deactivated_by = assigned_by  # type: ignore[attr-defined]
+                    current_assignment.deactivation_reason = switch_reason  # type: ignore[attr-defined]
 
-                # 3. Create new assignment
                 new_assignment = StrategyAssignmentModel(
                     account_id=account_id,
-                    strategy_id=strategy.id,  # Use DB ID
+                    strategy_id=strategy.id,
                     assigned_by=assigned_by,
                     previous_strategy_id=previous_strategy_db_id,
                     switch_reason=switch_reason,
@@ -505,7 +435,6 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 await session.refresh(new_assignment)
 
                 logger.info(f"Assigned strategy '{strategy_id}' to account {account_id}")
-
                 return StrategyAssignment(
                     account_id=account_id,
                     strategy_id=strategy_id,
@@ -514,7 +443,6 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                     switch_reason=switch_reason,
                     assigned_at=new_assignment.assigned_at,
                 )
-
             except (AccountNotFoundError, StrategyNotFoundError, StrategyAssignmentError):
                 raise
             except Exception as e:
@@ -522,21 +450,10 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 raise ConfigurationError(f"Failed to assign strategy: {e}") from e
 
     async def get_account_strategy(self, account_id: int) -> Optional[TradingStrategy]:
-        """
-        Get the currently assigned strategy for an account.
-
-        Args:
-            account_id: Account identifier
-
-        Returns:
-            Optional[TradingStrategy]: Assigned strategy or None if no assignment
-        """
         if not self.session_factory:
             return None
-
         async with self.session_factory() as session:
             try:
-                # Join StrategyAssignment with Strategy to get details
                 stmt = (
                     select(StrategyModel)
                     .join(
@@ -546,17 +463,15 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                     .where(
                         and_(
                             StrategyAssignmentModel.account_id == account_id,
-                            StrategyAssignmentModel.is_active == True,  # noqa: E712
+                            StrategyAssignmentModel.is_active,
                         )
                     )
                 )
                 result = await session.execute(stmt)
                 db_strategy = result.scalar_one_or_none()
-
                 if db_strategy:
                     return self._map_db_to_pydantic(db_strategy)
                 return None
-
             except Exception as e:
                 logger.error(f"Failed to get account strategy: {e}")
                 return None
@@ -568,18 +483,6 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
         switch_reason: str,
         switched_by: Optional[str] = None,
     ) -> StrategyAssignment:
-        """
-        Switch an account's strategy.
-
-        Args:
-            account_id: Account identifier
-            new_strategy_id: New strategy to assign
-            switch_reason: Reason for the switch
-            switched_by: User who initiated the switch
-
-        Returns:
-            StrategyAssignment: New assignment record
-        """
         current_strategy = await self.get_account_strategy(account_id)
         current_strategy_id = current_strategy.strategy_id if current_strategy else None
 
@@ -588,10 +491,7 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 f"Account {account_id} is already using strategy '{new_strategy_id}'"
             )
 
-        # Validate the switch
         await self._validate_strategy_switch(account_id, current_strategy_id, new_strategy_id)
-
-        # Perform the assignment
         return await self.assign_strategy_to_account(
             account_id=account_id,
             strategy_id=new_strategy_id,
@@ -602,45 +502,24 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
     async def _validate_strategy_switch(
         self, account_id: int, current_strategy_id: Optional[str], new_strategy_id: str
     ) -> None:
-        """
-        Validate a strategy switch operation.
-
-        Args:
-            account_id: Account identifier
-            current_strategy_id: Current strategy (if any)
-            new_strategy_id: New strategy to switch to
-        """
         strategy = await self.get_strategy(new_strategy_id)
         if not strategy:
             raise StrategyNotFoundError(new_strategy_id)
-
         if not strategy.is_active:
             raise StrategyAssignmentError(f"Strategy '{new_strategy_id}' is not active")
-
         if current_strategy_id == "conservative" and new_strategy_id == "aggressive":
             logger.warning(
                 f"Switching account {account_id} from conservative to aggressive strategy"
             )
 
     async def deactivate_strategy(self, strategy_id: str) -> bool:
-        """
-        Deactivate a strategy (prevent new assignments).
-
-        Args:
-            strategy_id: Strategy to deactivate
-
-        Returns:
-            bool: True if deactivated, False if not found
-        """
         if not self.session_factory:
             return False
-
         async with self.session_factory() as session:
             try:
                 stmt = select(StrategyModel).where(StrategyModel.strategy_id == strategy_id)
                 result = await session.execute(stmt)
                 strategy = result.scalar_one_or_none()
-
                 if strategy:
                     strategy.is_active = False
                     await session.commit()
@@ -653,24 +532,13 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 return False
 
     async def activate_strategy(self, strategy_id: str) -> bool:
-        """
-        Activate a strategy (allow new assignments).
-
-        Args:
-            strategy_id: Strategy to activate
-
-        Returns:
-            bool: True if activated, False if not found
-        """
         if not self.session_factory:
             return False
-
         async with self.session_factory() as session:
             try:
                 stmt = select(StrategyModel).where(StrategyModel.strategy_id == strategy_id)
                 result = await session.execute(stmt)
                 strategy = result.scalar_one_or_none()
-
                 if strategy:
                     strategy.is_active = True
                     await session.commit()
@@ -683,25 +551,17 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 return False
 
     async def get_strategy_assignments(self) -> Dict[int, str]:
-        """
-        Get all current strategy assignments.
-
-        Returns:
-            Dict[int, str]: Mapping of account_id to strategy_id
-        """
         if not self.session_factory:
             return {}
-
         async with self.session_factory() as session:
             try:
                 stmt = (
                     select(StrategyAssignmentModel, StrategyModel.strategy_id)
                     .join(StrategyModel, StrategyAssignmentModel.strategy_id == StrategyModel.id)
-                    .where(StrategyAssignmentModel.is_active == True)  # noqa: E712
+                    .where(StrategyAssignmentModel.is_active)
                 )
                 result = await session.execute(stmt)
                 assignments = result.all()
-
                 return {
                     assignment[0].account_id: strategy_id for assignment, strategy_id in assignments
                 }
@@ -710,18 +570,8 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 return {}
 
     async def get_accounts_using_strategy(self, strategy_id: str) -> List[int]:
-        """
-        Get all accounts currently using a specific strategy.
-
-        Args:
-            strategy_id: Strategy identifier
-
-        Returns:
-            List[int]: List of account IDs using the strategy
-        """
         if not self.session_factory:
             return []
-
         async with self.session_factory() as session:
             try:
                 stmt = (
@@ -730,7 +580,7 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                     .where(
                         and_(
                             StrategyModel.strategy_id == strategy_id,
-                            StrategyAssignmentModel.is_active == True,  # noqa: E712
+                            StrategyAssignmentModel.is_active,
                         )
                     )
                 )
@@ -741,21 +591,10 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 return []
 
     async def resolve_strategy_conflicts(self, account_id: int) -> List[str]:
-        """
-        Check for and resolve strategy conflicts for an account.
-
-        Args:
-            account_id: Account to check
-
-        Returns:
-            List[str]: List of conflicts found and resolved
-        """
         conflicts = []
         strategy = await self.get_account_strategy(account_id)
-
         if not strategy:
             conflicts.append("No strategy assigned to account")
-            # Auto-assign default strategy
             try:
                 await self.assign_strategy_to_account(
                     account_id=account_id,
@@ -769,7 +608,6 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
 
         if not strategy.is_active:
             conflicts.append(f"Assigned strategy '{strategy.strategy_id}' is inactive")
-            # Switch to default active strategy
             try:
                 await self.switch_account_strategy(
                     account_id=account_id,
@@ -779,23 +617,11 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 conflicts.append("Switched to conservative strategy")
             except Exception as e:
                 conflicts.append(f"Failed to switch strategy: {e}")
-
         return conflicts
 
     async def switch_by_funding_regime(
-        self, account_id: int, market_context: Dict
+        self, account_id: int, market_context: Dict[str, Any]
     ) -> Optional[StrategyAssignment]:
-        """
-        Switch strategy based on funding rate regime.
-
-        Args:
-            account_id: Account identifier
-            market_context: Market context containing funding rates
-
-        Returns:
-            Optional[StrategyAssignment]: New assignment if switched, None otherwise
-        """
-        # Calculate average funding rate
         funding_rates = []
         if "assets" in market_context:
             for asset_data in market_context["assets"].values():
@@ -809,7 +635,6 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
         current_strategy = await self.get_account_strategy(account_id)
         current_strategy_id = current_strategy.strategy_id if current_strategy else None
 
-        # Define thresholds (0.05% = 5 bps)
         HIGH_FUNDING_THRESHOLD = 0.0005
         NEGATIVE_FUNDING_THRESHOLD = -0.0005
 
@@ -834,21 +659,19 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 switch_reason=reason,
                 switched_by="system_funding_monitor",
             )
-
         return None
 
-    def calculate_strategy_performance(
+    async def calculate_strategy_performance(
         self,
         strategy_id: str,
-        trades: List[Dict],
-        period_start: datetime,
-        period_end: datetime,
+        trades_data: List[Dict[str, Any]],
+        start_date: datetime,
+        end_date: datetime,
     ) -> StrategyPerformance:
-        """
-        Calculate performance metrics for a strategy.
-        """
+        """Calculate performance metrics for a strategy."""
+        trades = trades_data
         total_trades = len(trades)
-        period_days = max(1, (period_end - period_start).days)
+        period_days = max(1, (end_date - start_date).days)
 
         if total_trades == 0:
             return StrategyPerformance(
@@ -865,52 +688,41 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 max_drawdown=0.0,
                 sharpe_ratio=0.0,
                 sortino_ratio=0.0,
-                profit_factor=1.0,  # Default to 1.0 for no trades
+                profit_factor=1.0,
                 avg_trade_duration_hours=0.0,
                 total_volume_traded=0.0,
                 total_fees_paid=0.0,
                 total_funding_paid=0.0,
                 total_liquidations=0,
-                start_date=period_start,
-                end_date=period_end,
+                start_date=start_date,
+                end_date=end_date,
                 period_days=period_days,
             )
 
         winning_trades = [t for t in trades if t.get("pnl", 0) > 0]
         losing_trades = [t for t in trades if t.get("pnl", 0) <= 0]
-
         total_pnl = sum(t.get("pnl", 0) for t in trades)
         win_rate = (len(winning_trades) / total_trades * 100) if total_trades > 0 else 0.0
-
         gross_profit = sum(t.get("pnl", 0) for t in winning_trades)
         gross_loss = abs(sum(t.get("pnl", 0) for t in losing_trades))
         profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else float("inf")
         if profit_factor == float("inf"):
-            profit_factor = 100.0  # Cap at reasonable value
+            profit_factor = 100.0
 
-        # Calculate averages
         avg_win = (gross_profit / len(winning_trades)) if winning_trades else 0.0
         avg_loss = (-gross_loss / len(losing_trades)) if losing_trades else 0.0
-
-        # Max win/loss
         max_win = max([t.get("pnl", 0) for t in trades], default=0.0)
         max_loss = min([t.get("pnl", 0) for t in trades], default=0.0)
-
-        # Volume
         total_volume = sum(t.get("volume", 0) for t in trades)
-
-        # Fees and Funding
         total_fees = sum(t.get("fee", 0) for t in trades)
         total_funding = sum(t.get("funding", 0) for t in trades)
         total_liquidations = sum(1 for t in trades if t.get("is_liquidation"))
 
-        # Duration (mock calculation if entry/exit times not available)
         total_duration_hours = 0.0
         for t in trades:
             if "entry_time" in t and "exit_time" in t:
                 duration = (t["exit_time"] - t["entry_time"]).total_seconds() / 3600
                 total_duration_hours += duration
-
         avg_duration = (total_duration_hours / total_trades) if total_trades > 0 else 0.0
 
         return StrategyPerformance(
@@ -924,49 +736,51 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
             avg_loss=avg_loss,
             max_win=max_win,
             max_loss=max_loss,
-            max_drawdown=0.0,  # Placeholder, requires equity curve
-            sharpe_ratio=0.0,  # Placeholder
-            sortino_ratio=0.0,  # Placeholder
+            max_drawdown=0.0,
+            sharpe_ratio=0.0,
+            sortino_ratio=0.0,
             profit_factor=profit_factor,
             avg_trade_duration_hours=avg_duration,
             total_volume_traded=total_volume,
             total_fees_paid=total_fees,
             total_funding_paid=total_funding,
             total_liquidations=total_liquidations,
-            start_date=period_start,
-            end_date=period_end,
+            start_date=start_date,
+            end_date=end_date,
             period_days=period_days,
         )
 
+    async def get_strategy_performance(
+        self, strategy_id: str, timeframe: str = "7d"
+    ) -> Optional[StrategyPerformance]:
+        """Get strategy performance for a specific timeframe."""
+        days = int(timeframe.replace("d", ""))
+        end_date = datetime.now(timezone.utc)
+        start_date = end_date - timedelta(days=days)
+
+        # In a real impl, fetch trades here. For now return placeholder
+        return await self.calculate_strategy_performance(
+            strategy_id=strategy_id, trades_data=[], start_date=start_date, end_date=end_date
+        )
+
     async def delete_strategy(self, strategy_id: str) -> bool:
-        """
-        Delete a strategy and its associated assignments.
-
-        Args:
-            strategy_id: Strategy to delete
-
-        Returns:
-            bool: True if deleted, False if not found
-        """
         if not self.session_factory:
             return False
-
         async with self.session_factory() as session:
             try:
-                stmt = select(StrategyModel).where(StrategyModel.strategy_id == strategy_id)
-                result = await session.execute(stmt)
+                strategy_stmt = select(StrategyModel).where(
+                    StrategyModel.strategy_id == strategy_id
+                )
+                result = await session.execute(strategy_stmt)
                 strategy = result.scalar_one_or_none()
-
                 if strategy:
-                    # Clear previous_strategy_id references to avoid FK constraint violation
-                    stmt = select(StrategyAssignmentModel).where(
+                    assignment_stmt = select(StrategyAssignmentModel).where(
                         StrategyAssignmentModel.previous_strategy_id == strategy.id
                     )
-                    result = await session.execute(stmt)
+                    result = await session.execute(assignment_stmt)
                     assignments = result.scalars().all()
                     for assignment in assignments:
-                        assignment.previous_strategy_id = None
-
+                        assignment.previous_strategy_id = None  # type: ignore[attr-defined]
                     await session.delete(strategy)
                     await session.commit()
                     logger.info(f"Deleted strategy '{strategy_id}'")
@@ -978,17 +792,95 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 return False
 
     def _map_db_to_pydantic(self, db_strategy: StrategyModel) -> TradingStrategy:
-        """Map database model to Pydantic model."""
         return TradingStrategy(
             strategy_id=db_strategy.strategy_id,
             strategy_name=db_strategy.strategy_name,
-            strategy_type=db_strategy.strategy_type,
+            strategy_type=db_strategy.strategy_type,  # type: ignore[arg-type]
             prompt_template=db_strategy.prompt_template,
             risk_parameters=StrategyRiskParameters(**db_strategy.risk_parameters),
             timeframe_preference=db_strategy.timeframe_preference,
             max_positions=db_strategy.max_positions,
-            position_sizing=db_strategy.position_sizing,
-            order_preference=db_strategy.order_preference,
+            position_sizing=db_strategy.position_sizing,  # type: ignore[arg-type]
+            order_preference=db_strategy.order_preference,  # type: ignore[arg-type]
             funding_rate_threshold=db_strategy.funding_rate_threshold,
             is_active=db_strategy.is_active,
         )
+
+    async def compare_strategies(
+        self,
+        strategy_ids: List[str],
+        comparison_period_days: int = 30,
+        ranking_criteria: str = "sharpe_ratio",
+    ) -> StrategyComparison:
+        """Compare multiple strategies performance."""
+        perfs = []
+        end_date = datetime.now(timezone.utc)
+        start_date = end_date - timedelta(days=comparison_period_days)
+
+        for sid in strategy_ids:
+            # Mock empty trades for now
+            perf = await self.calculate_strategy_performance(
+                strategy_id=sid, trades_data=[], start_date=start_date, end_date=end_date
+            )
+            perfs.append(perf)
+
+        best_strategy = strategy_ids[0] if strategy_ids else ""
+
+        return StrategyComparison(
+            strategies=perfs,
+            comparison_period_days=comparison_period_days,
+            best_performing_strategy=best_strategy,
+            ranking_criteria=ranking_criteria,  # type: ignore[arg-type]
+            timestamp=datetime.now(timezone.utc),
+        )
+
+    async def get_strategy_metrics(
+        self, strategy_id: str, account_id: int
+    ) -> Optional[StrategyMetrics]:
+        """Get metrics for a strategy on an account."""
+        # Placeholder
+        return StrategyMetrics(
+            strategy_id=strategy_id,
+            account_id=account_id,
+            current_positions=0,
+            total_allocated=0.0,
+            unrealized_pnl=0.0,
+            realized_pnl_today=0.0,
+            trades_today=0,
+            risk_utilization=0.0,
+            cooldown_remaining=0,
+            last_updated=datetime.now(timezone.utc),
+        )
+
+    async def get_strategy_recommendations(self, account_id: int) -> List[Dict[str, Any]]:
+        """Get recommendations."""
+        return []
+
+    async def get_strategy_alerts(
+        self,
+        strategy_id: Optional[str] = None,
+        account_id: Optional[int] = None,
+        severity: Optional[str] = None,
+    ) -> List[StrategyAlert]:
+        """Get alerts."""
+        return self._alerts
+
+    async def acknowledge_alert(self, alert_index: int, acknowledged_by: str) -> bool:
+        """Acknowledge an alert."""
+        if 0 <= alert_index < len(self._alerts):
+            self._alerts[alert_index].acknowledged = True
+            self._alerts[alert_index].acknowledged_by = acknowledged_by
+            self._alerts[alert_index].acknowledged_at = datetime.now(timezone.utc)
+            return True
+        return False
+
+    async def clear_old_alerts(self, max_age_hours: int) -> int:
+        """Clear old alerts."""
+        now = datetime.now(timezone.utc)
+        original_len = len(self._alerts)
+        self._alerts = [
+            a
+            for a in self._alerts
+            if not a.acknowledged or (now - a.created_at).total_seconds() < max_age_hours * 3600
+        ]
+        return original_len - len(self._alerts)

@@ -66,6 +66,80 @@ class TestContextBuilderE2E:
         mock_position.current_value = 4600.0
         return [mock_position]
 
+    def _validate_btc_data(self, btc_data):
+        """Validate BTC data structure and content."""
+        assert btc_data.symbol == "BTCUSDT", "Symbol should match"
+        assert btc_data.current_price > 0, "Should have current price"
+        assert btc_data.volume_24h >= 0, "Should have volume"
+
+        # Validate price history
+        assert len(btc_data.price_history) > 0, "Should have price history"
+        for price_point in btc_data.price_history:
+            assert price_point.timestamp is not None, "Should have timestamp"
+            assert price_point.price > 0, "Should have price"
+
+    def _validate_indicator_values(self, indicators_set):
+        """Validate individual indicator values."""
+        if indicators_set.rsi is not None:
+            assert isinstance(indicators_set.rsi, list) and all(
+                isinstance(r, (int, float)) and 0 <= r <= 100 for r in indicators_set.rsi
+            ), "RSI must be a list of numbers between 0 and 100"
+
+        positive_indicators = ["ema_20", "ema_50"]
+        for field in positive_indicators:
+            val = getattr(indicators_set, field)
+            if val is not None:
+                assert isinstance(val, list) and all(
+                    isinstance(e, (int, float)) and e > 0 for e in val
+                ), f"{field.upper()} must be a list of positive numbers"
+
+        numeric_indicators = ["macd", "macd_signal", "bb_upper", "bb_lower", "bb_middle"]
+        for field in numeric_indicators:
+            val = getattr(indicators_set, field)
+            if val is not None:
+                assert isinstance(val, list) and all(isinstance(e, (int, float)) for e in val), (
+                    f"{field.upper()} must be a list of numbers"
+                )
+
+        if indicators_set.atr is not None:
+            assert isinstance(indicators_set.atr, list) and all(
+                isinstance(a, (int, float)) and a >= 0 for a in indicators_set.atr
+            ), "ATR must be a list of non-negative numbers"
+
+    def _validate_technical_indicators(self, btc_data):
+        """Validate technical indicators presence and values."""
+        if btc_data.technical_indicators is not None:
+            # At least some indicators should be present in interval or long_interval
+            indicators_interval = btc_data.technical_indicators.interval
+            indicators_long = btc_data.technical_indicators.long_interval
+
+            # Comprehensive list of indicator fields based on schema (TechnicalIndicatorsSet)
+            indicator_fields = [
+                "ema_20",
+                "ema_50",
+                "macd",
+                "macd_signal",
+                "rsi",
+                "bb_upper",
+                "bb_lower",
+                "bb_middle",
+                "atr",
+            ]
+
+            # Check if any indicators are present in either interval or long_interval
+            has_indicators_interval = any(
+                getattr(indicators_interval, field, None) is not None for field in indicator_fields
+            )
+            has_indicators_long = any(
+                getattr(indicators_long, field, None) is not None for field in indicator_fields
+            )
+            has_indicators = has_indicators_interval or has_indicators_long
+            assert has_indicators, "Should have at least some technical indicators"
+
+            # Additional value validations for robustness - check both intervals
+            for indicators_set in [indicators_interval, indicators_long]:
+                self._validate_indicator_values(indicators_set)
+
     @pytest.mark.e2e
     @pytest.mark.asyncio
     async def test_real_market_context_building(self, context_builder_service, real_market_data):
@@ -87,85 +161,11 @@ class TestContextBuilderE2E:
 
             # Validate asset market data
             btc_data = market_context.assets["BTCUSDT"]
-            assert btc_data.symbol == "BTCUSDT", "Symbol should match"
-            assert btc_data.current_price > 0, "Should have current price"
-            assert btc_data.volume_24h >= 0, "Should have volume"
-
-            # Validate price history
-            assert len(btc_data.price_history) > 0, "Should have price history"
-            for price_point in btc_data.price_history:
-                assert price_point.timestamp is not None, "Should have timestamp"
-                assert price_point.price > 0, "Should have price"
+            self._validate_btc_data(btc_data)
 
             # Validate technical indicators if present
-            if btc_data.technical_indicators is not None:
-                # At least some indicators should be present in interval or long_interval
-                indicators_interval = btc_data.technical_indicators.interval
-                indicators_long = btc_data.technical_indicators.long_interval
+            self._validate_technical_indicators(btc_data)
 
-                # Comprehensive list of indicator fields based on schema (TechnicalIndicatorsSet)
-                indicator_fields = [
-                    "ema_20",
-                    "ema_50",
-                    "macd",
-                    "macd_signal",
-                    "rsi",
-                    "bb_upper",
-                    "bb_lower",
-                    "bb_middle",
-                    "atr",
-                ]
-
-                # Check if any indicators are present in either interval or long_interval
-                has_indicators_interval = any(
-                    getattr(indicators_interval, field, None) is not None
-                    for field in indicator_fields
-                )
-                has_indicators_long = any(
-                    getattr(indicators_long, field, None) is not None for field in indicator_fields
-                )
-                has_indicators = has_indicators_interval or has_indicators_long
-                assert has_indicators, "Should have at least some technical indicators"
-
-                # Additional value validations for robustness - check both intervals
-                for indicators_set in [indicators_interval, indicators_long]:
-                    if indicators_set.rsi is not None:
-                        assert isinstance(indicators_set.rsi, list) and all(
-                            isinstance(r, (int, float)) and 0 <= r <= 100
-                            for r in indicators_set.rsi
-                        ), "RSI must be a list of numbers between 0 and 100"
-                    if indicators_set.ema_20 is not None:
-                        assert isinstance(indicators_set.ema_20, list) and all(
-                            isinstance(e, (int, float)) and e > 0 for e in indicators_set.ema_20
-                        ), "EMA_20 must be a list of positive numbers"
-                    if indicators_set.ema_50 is not None:
-                        assert isinstance(indicators_set.ema_50, list) and all(
-                            isinstance(e, (int, float)) and e > 0 for e in indicators_set.ema_50
-                        ), "EMA_50 must be a list of positive numbers"
-                    if indicators_set.macd is not None:
-                        assert isinstance(indicators_set.macd, list) and all(
-                            isinstance(m, (int, float)) for m in indicators_set.macd
-                        ), "MACD must be a list of numbers"
-                    if indicators_set.macd_signal is not None:
-                        assert isinstance(indicators_set.macd_signal, list) and all(
-                            isinstance(m, (int, float)) for m in indicators_set.macd_signal
-                        ), "MACD_SIGNAL must be a list of numbers"
-                    if indicators_set.bb_upper is not None:
-                        assert isinstance(indicators_set.bb_upper, list) and all(
-                            isinstance(b, (int, float)) for b in indicators_set.bb_upper
-                        ), "BB_UPPER must be a list of numbers"
-                    if indicators_set.bb_lower is not None:
-                        assert isinstance(indicators_set.bb_lower, list) and all(
-                            isinstance(b, (int, float)) for b in indicators_set.bb_lower
-                        ), "BB_LOWER must be a list of numbers"
-                    if indicators_set.bb_middle is not None:
-                        assert isinstance(indicators_set.bb_middle, list) and all(
-                            isinstance(b, (int, float)) for b in indicators_set.bb_middle
-                        ), "BB_MIDDLE must be a list of numbers"
-                    if indicators_set.atr is not None:
-                        assert isinstance(indicators_set.atr, list) and all(
-                            isinstance(a, (int, float)) and a >= 0 for a in indicators_set.atr
-                        ), "ATR must be a list of non-negative numbers"
         except Exception as e:
             # Skip if insufficient market data (test isolation issue when running all tests)
             if "Insufficient market data" in str(e):

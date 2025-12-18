@@ -117,7 +117,7 @@ class AccountService:
         if user_address:
             log_data["user_address"] = user_address
         if account_id is not None:
-            log_data["account_id"] = account_id
+            log_data["account_id"] = str(account_id)
         if account_name:
             log_data["account_name"] = account_name
         if error:
@@ -268,7 +268,7 @@ class AccountService:
             count_result = await db.execute(
                 select(func.count(Account.id)).where(Account.user_id == user_id)
             )
-            total = count_result.scalar()
+            total: int = count_result.scalar_one()
 
             # Get paginated accounts
             result = await db.execute(

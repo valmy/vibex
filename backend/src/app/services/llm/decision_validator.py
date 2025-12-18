@@ -8,7 +8,7 @@ risk management checks, and fallback mechanisms.
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from pydantic import ValidationError
 
@@ -38,9 +38,9 @@ class DecisionValidator:
     and provides fallback mechanisms for invalid decisions.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the decision validator."""
-        self.validation_metrics = {
+        self.validation_metrics: Dict[str, Any] = {
             "total_validations": 0,
             "successful_validations": 0,
             "failed_validations": 0,
@@ -53,7 +53,7 @@ class DecisionValidator:
         self.business_rules = self._initialize_business_rules()
         self.risk_rules = self._initialize_risk_rules()
 
-    def _initialize_business_rules(self) -> Dict[str, callable]:
+    def _initialize_business_rules(self) -> Dict[str, Callable[[Any, Any], Any]]:
         """Initialize business rule validation functions."""
         return {
             "allocation_validation": self._validate_allocation_amount,
@@ -64,7 +64,7 @@ class DecisionValidator:
             "strategy_specific_validation": self._validate_strategy_specific_rules,
         }
 
-    def _initialize_risk_rules(self) -> Dict[str, callable]:
+    def _initialize_risk_rules(self) -> Dict[str, Callable[[Any, Any], Any]]:
         """Initialize risk management validation functions."""
         return {
             "risk_exposure_validation": self._validate_risk_exposure,
@@ -212,7 +212,7 @@ class DecisionValidator:
     async def _validate_multi_asset_schema(
         self, decision: TradingDecision, context: TradingContext
     ) -> List[str]:
-        errors = []
+        errors: List[str] = []
         try:
             self._validate_portfolio_level_fields(decision, errors)
             self._validate_asset_level_fields(decision, errors)
@@ -222,7 +222,7 @@ class DecisionValidator:
             errors.append(f"schema_error: Unexpected schema validation error: {str(e)}")
         return errors
 
-    def _validate_portfolio_level_fields(self, decision, errors):
+    def _validate_portfolio_level_fields(self, decision: Any, errors: List[str]) -> None:
         if not decision.decisions:
             errors.append("schema_error: No asset decisions provided")
         if not decision.portfolio_rationale or not decision.portfolio_rationale.strip():
@@ -230,7 +230,7 @@ class DecisionValidator:
         if decision.total_allocation_usd < 0:
             errors.append("schema_error: Total allocation cannot be negative")
 
-    def _validate_asset_level_fields(self, decision, errors):
+    def _validate_asset_level_fields(self, decision: Any, errors: List[str]) -> None:
         for asset_decision in decision.decisions:
             action_errors = asset_decision.validate_action_requirements()
             errors.extend(
@@ -394,8 +394,8 @@ class DecisionValidator:
 
             # Additional price logic checks
             if asset_decision.tp_price and asset_decision.sl_price:
-                potential_reward = 0
-                potential_risk = 0
+                potential_reward: float = 0.0
+                potential_risk: float = 0.0
 
                 if asset_decision.action == "buy":
                     potential_reward = asset_decision.tp_price - current_price
@@ -405,7 +405,7 @@ class DecisionValidator:
                     potential_risk = asset_decision.sl_price - current_price
 
                 if potential_risk > 0:
-                    risk_reward_ratio = potential_reward / potential_risk
+                    risk_reward_ratio: float = potential_reward / potential_risk
                     if risk_reward_ratio < 1.0:
                         warnings.append(
                             f"business_rule ({asset_decision.asset}): Risk/reward ratio {risk_reward_ratio:.2f} is less than 1:1"
@@ -420,8 +420,8 @@ class DecisionValidator:
         self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """Validate position size constraints."""
-        errors = []
-        warnings = []
+        errors: List[str] = []
+        warnings: List[str] = []
 
         max_position_size = context.account_state.max_position_size
 
@@ -441,8 +441,8 @@ class DecisionValidator:
         self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """Validate leverage constraints."""
-        errors = []
-        warnings = []
+        errors: List[str] = []
+        warnings: List[str] = []
 
         # For now, we assume leverage is embedded in allocation calculation
         # This could be extended to include explicit leverage validation
@@ -453,8 +453,8 @@ class DecisionValidator:
         self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """Validate action-specific requirements."""
-        errors = []
-        warnings = []
+        errors: List[str] = []
+        warnings: List[str] = []
 
         # Check if trying to adjust/close non-existent position
         for asset_decision in decision.decisions:
@@ -490,8 +490,8 @@ class DecisionValidator:
         self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """Validate strategy-specific rules."""
-        errors = []
-        warnings = []
+        errors: List[str] = []
+        warnings: List[str] = []
 
         strategy = context.account_state.active_strategy
 
@@ -548,8 +548,8 @@ class DecisionValidator:
         self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """Validate position limits."""
-        errors = []
-        warnings = []
+        errors: List[str] = []
+        warnings: List[str] = []
 
         # This check is now handled by _validate_action_requirements (for count)
         # and _validate_position_size (for allocation).
@@ -562,8 +562,8 @@ class DecisionValidator:
         self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
         """Validate daily loss limits."""
-        errors = []
-        warnings = []
+        errors: List[str] = []
+        warnings: List[str] = []
 
         strategy = context.account_state.active_strategy
         max_daily_loss_pct = strategy.risk_parameters.max_daily_loss
@@ -597,12 +597,11 @@ class DecisionValidator:
         for asset_decision in decision.decisions:
             if asset_decision.action in ["buy", "sell"]:
                 # Use a simple object to represent a potential new position
-                all_positions[asset_decision.asset] = type(
-                    "Position", (), {"symbol": asset_decision.asset}
-                )
+                # Using a dictionary instead of creating a new type
+                all_positions[asset_decision.asset] = {"symbol": asset_decision.asset}  # type: ignore[assignment]
 
         # Group positions by base currency
-        positions_by_base = {}
+        positions_by_base: Dict[str, List[str]] = {}
         for symbol in all_positions.keys():
             base = self._extract_base_currency(symbol)
             if base not in positions_by_base:
@@ -786,14 +785,14 @@ class DecisionValidator:
 
         return fallback_decision
 
-    async def get_validation_metrics(self) -> Dict:
+    async def get_validation_metrics(self) -> Dict[str, Any]:
         """
         Get validation performance metrics.
 
         Returns:
             Dictionary containing validation metrics
         """
-        total_validations = self.validation_metrics["total_validations"]
+        total_validations: int = self.validation_metrics["total_validations"]
         success_rate = 0.0
 
         if total_validations > 0:
@@ -801,21 +800,24 @@ class DecisionValidator:
                 self.validation_metrics["successful_validations"] / total_validations
             ) * 100
 
+        successful_validations: int = self.validation_metrics["successful_validations"]
+        failed_validations: int = self.validation_metrics["failed_validations"]
+        avg_validation_time: float = self.validation_metrics["avg_validation_time_ms"]
+        validation_errors: Dict[str, Any] = self.validation_metrics["validation_errors"]
+        last_reset: datetime = self.validation_metrics["last_reset"]
+
         return {
             "total_validations": total_validations,
-            "successful_validations": self.validation_metrics["successful_validations"],
-            "failed_validations": self.validation_metrics["failed_validations"],
+            "successful_validations": successful_validations,
+            "failed_validations": failed_validations,
             "success_rate": success_rate,
-            "avg_validation_time_ms": self.validation_metrics["avg_validation_time_ms"],
-            "validation_errors": dict(self.validation_metrics["validation_errors"]),
-            "last_reset": self.validation_metrics["last_reset"],
-            "uptime_hours": (
-                datetime.now(timezone.utc) - self.validation_metrics["last_reset"]
-            ).total_seconds()
-            / 3600,
+            "avg_validation_time_ms": avg_validation_time,
+            "validation_errors": dict(validation_errors),
+            "last_reset": last_reset,
+            "uptime_hours": (datetime.now(timezone.utc) - last_reset).total_seconds() / 3600,
         }
 
-    async def reset_metrics(self):
+    async def reset_metrics(self) -> None:
         """Reset validation metrics."""
         self.validation_metrics = {
             "total_validations": 0,

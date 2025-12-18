@@ -521,6 +521,7 @@ class TestAccountManagementAPIE2E:
 
         # Expect either 401 (invalid credentials) or 502 (API error)
         # Both are acceptable since we're using test credentials
-        assert response.status_code in [401, 502], (
-            f"Expected 401 or 502, got {response.status_code}: {response.text}"
-        )
+        assert response.status_code in [
+            401,
+            502,
+        ], f"Expected 401 or 502, got {response.status_code}: {response.text}"

@@ -219,7 +219,7 @@ async def test_property_ownership_filtering(num_accounts, user_data):
     # Mock the execute query to return count, accounts, and user
     # First call: count query
     count_result = MagicMock()
-    count_result.scalar.return_value = num_accounts
+    count_result.scalar_one.return_value = num_accounts
 
     # Second call: accounts query
     accounts_result = MagicMock()
@@ -925,7 +925,7 @@ async def test_property_status_change_logging(
                 # Verify log contains required audit information in extra fields
                 assert log_entry.action == "status_change", "Action should be 'status_change'"
                 assert hasattr(log_entry, "user_address"), "Should have user_address field"
-                assert log_entry.account_id == account.id, "Should log account ID"
+                assert log_entry.account_id == str(account.id), "Should log account ID"
                 assert log_entry.account_name == account.name, "Should log account name"
                 assert hasattr(log_entry, "old_status"), "Should have old_status field"
                 assert log_entry.old_status == old_status, (

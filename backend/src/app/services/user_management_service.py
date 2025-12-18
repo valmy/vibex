@@ -6,9 +6,9 @@ Provides business logic for managing users and admin privileges.
 
 import logging
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.account import User
@@ -69,7 +69,7 @@ class UserManagementService:
             error: Error message (if applicable)
             error_details: Additional error details
         """
-        log_data = {
+        log_data: Dict[str, Any] = {
             "correlation_id": correlation_id,
             "action": action,
         }
@@ -79,11 +79,13 @@ class UserManagementService:
         if target_user_address:
             log_data["target_user_address"] = target_user_address
         if target_user_id is not None:
-            log_data["target_user_id"] = target_user_id
+            log_data["target_user_id"] = str(
+                target_user_id
+            )  # Convert int to str for logging consistency
         if error:
             log_data["error"] = error
         if error_details:
-            log_data["error_details"] = error_details
+            log_data["error_details"] = error_details  # Keep as dict for JSON logging
 
         if level == "INFO":
             logger.info(message, extra=log_data)
@@ -98,7 +100,7 @@ class UserManagementService:
         skip: int = 0,
         limit: int = 100,
         admin_user: Optional[User] = None,
-    ) -> List[User]:
+    ) -> Tuple[List[User], int]:
         """
         List all users with pagination support.
 
@@ -109,7 +111,7 @@ class UserManagementService:
             admin_user: The admin user performing the action (for audit logging)
 
         Returns:
-            List of User objects
+            Tuple containing list of User objects and total count
 
         Raises:
             ValueError: If skip or limit are negative
@@ -122,6 +124,11 @@ class UserManagementService:
             if limit <= 0:
                 raise ValueError("limit must be positive")
 
+            # Get total count
+            count_result = await db.execute(select(func.count(User.id)))
+            total = count_result.scalar() or 0
+
+            # Get paginated results
             result = await db.execute(select(User).offset(skip).limit(limit).order_by(User.id))
             users = result.scalars().all()
 
@@ -135,7 +142,7 @@ class UserManagementService:
                     admin_address=admin_user.address,
                 )
 
-            return list(users)
+            return list(users), total
         except ValueError as e:
             # Log failed list operation
             if admin_user:

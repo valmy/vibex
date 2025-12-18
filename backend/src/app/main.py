@@ -6,8 +6,9 @@ Initializes the FastAPI app with middleware, routes, and WebSocket handlers.
 
 import os
 from datetime import datetime, timezone
+from typing import Any, Dict
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -29,8 +30,10 @@ from .api.routes import (
 )
 from .core.config import config
 from .core.config_manager import get_config_manager
+from .core.exceptions import ConfigurationError, ValidationError
 from .core.logging import get_logger, setup_logging
 from .middleware import AdminOnlyMiddleware
+from .services.llm.decision_engine import DecisionEngineError, RateLimitExceededError
 
 # Initialize logging
 setup_logging(config)
@@ -75,7 +78,7 @@ app = FastAPI(
 
 
 # Configure OpenAPI security scheme for Bearer token authentication
-def custom_openapi():
+def custom_openapi() -> Dict[str, Any]:
     if app.openapi_schema:
         return app.openapi_schema
 
@@ -102,7 +105,7 @@ def custom_openapi():
     return app.openapi_schema
 
 
-app.openapi = custom_openapi
+app.openapi = custom_openapi  # type: ignore[method-assign]
 
 # Add CORS middleware
 app.add_middleware(AdminOnlyMiddleware)
@@ -132,7 +135,7 @@ app.include_router(users.router)
 
 # Health check endpoint
 @app.get("/health", tags=["System"])
-async def health_check():
+async def health_check() -> Dict[str, Any]:
     """
     Basic health check endpoint.
 
@@ -151,7 +154,7 @@ async def health_check():
 
 # Status endpoint
 @app.get("/status", tags=["System"])
-async def status():
+async def status() -> Dict[str, Any]:
     """
     System status endpoint.
 
@@ -178,7 +181,7 @@ async def status():
 
 # Root endpoint
 @app.get("/", tags=["System"])
-async def root():
+async def root() -> Dict[str, Any]:
     """
     Root endpoint with API overview.
 
@@ -217,14 +220,10 @@ async def root():
     }
 
 
-from .core.exceptions import ConfigurationError, ValidationError
-
-# Error handlers
-from .services.llm.decision_engine import DecisionEngineError, RateLimitExceededError
-
-
 @app.exception_handler(DecisionEngineError)
-async def decision_engine_exception_handler(request, exc):
+async def decision_engine_exception_handler(
+    request: Request, exc: DecisionEngineError
+) -> JSONResponse:
     """Handle decision engine specific exceptions."""
     logger.error(f"Decision engine error: {exc}", exc_info=True)
     return JSONResponse(
@@ -234,7 +233,9 @@ async def decision_engine_exception_handler(request, exc):
 
 
 @app.exception_handler(RateLimitExceededError)
-async def rate_limit_exception_handler(request, exc):
+async def rate_limit_exception_handler(
+    request: Request, exc: RateLimitExceededError
+) -> JSONResponse:
     """Handle rate limit exceeded exceptions."""
     logger.warning(f"Rate limit exceeded: {exc}")
     return JSONResponse(
@@ -244,7 +245,7 @@ async def rate_limit_exception_handler(request, exc):
 
 
 @app.exception_handler(ValidationError)
-async def validation_exception_handler(request, exc):
+async def validation_exception_handler(request: Request, exc: ValidationError) -> JSONResponse:
     """Handle validation errors."""
     logger.warning(f"Validation error: {exc}")
     return JSONResponse(
@@ -254,7 +255,9 @@ async def validation_exception_handler(request, exc):
 
 
 @app.exception_handler(ConfigurationError)
-async def configuration_exception_handler(request, exc):
+async def configuration_exception_handler(
+    request: Request, exc: ConfigurationError
+) -> JSONResponse:
     """Handle configuration errors."""
     logger.error(f"Configuration error: {exc}", exc_info=True)
     return JSONResponse(
@@ -264,7 +267,7 @@ async def configuration_exception_handler(request, exc):
 
 
 @app.exception_handler(Exception)
-async def general_exception_handler(request, exc):
+async def general_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle general exceptions."""
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
     return JSONResponse(
@@ -275,7 +278,7 @@ async def general_exception_handler(request, exc):
 
 # Startup event
 @app.on_event("startup")
-async def startup_event():
+async def startup_event() -> None:
     """Handle startup event."""
     logger.info(f"Starting {config.APP_NAME} v{config.APP_VERSION}")
     logger.info(f"Environment: {config.ENVIRONMENT}")
@@ -332,7 +335,7 @@ async def startup_event():
 
 # Shutdown event
 @app.on_event("shutdown")
-async def shutdown_event():
+async def shutdown_event() -> None:
     """Handle shutdown event."""
     logger.info(f"Shutting down {config.APP_NAME}")
 

@@ -7,7 +7,7 @@ Tracks API usage, costs, performance, and decision accuracy.
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from ...core.logging import get_logger
 
@@ -66,7 +66,7 @@ class LLMMetricsTracker:
             max_history: Maximum number of API calls to keep in history
         """
         self.max_history = max_history
-        self.api_calls: deque = deque(maxlen=max_history)
+        self.api_calls: deque[APICall] = deque(maxlen=max_history)
         self.model_costs = {
             "openai/gpt-4": {"input": 0.03, "output": 0.06},  # per 1K tokens
             "openai/gpt-3.5-turbo": {"input": 0.001, "output": 0.002},
@@ -147,7 +147,7 @@ class LLMMetricsTracker:
         total_cost = sum(call.cost or 0 for call in recent_calls)
         avg_response_time = sum(call.response_time_ms for call in recent_calls) / total_calls
 
-        calls_per_model = defaultdict(int)
+        calls_per_model: Dict[str, int] = defaultdict(int)
         for call in recent_calls:
             calls_per_model[call.model] += 1
 
@@ -240,7 +240,7 @@ class LLMMetricsTracker:
 
         return input_cost + output_cost
 
-    def get_model_performance(self, model: str, timeframe_hours: int = 24) -> Dict:
+    def get_model_performance(self, model: str, timeframe_hours: int = 24) -> Dict[str, Any]:
         """
         Get performance metrics for specific model.
 
@@ -271,7 +271,7 @@ class LLMMetricsTracker:
             "total_cost": sum(call.cost or 0 for call in model_calls),
         }
 
-    def clear_old_records(self, days: int = 7):
+    def clear_old_records(self, days: int = 7) -> None:
         """
         Clear records older than specified days.
 

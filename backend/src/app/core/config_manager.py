@@ -6,7 +6,7 @@ providing a unified interface for configuration management.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .config import BaseConfig, get_config
 from .config_cache import CacheStats, ConfigCache
@@ -80,7 +80,7 @@ class ConfigurationManager:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the configuration manager."""
         if hasattr(self, "_initialized"):
             return
@@ -142,7 +142,10 @@ class ConfigurationManager:
             raise
 
     async def shutdown(self) -> None:
-        """Shutdown the configuration manager."""
+        """
+        Shutdown the configuration manager.
+
+        """
         if not self._is_initialized:
             return
 
@@ -224,7 +227,9 @@ class ConfigurationManager:
             self._reload_count += 1
         return success
 
-    def subscribe_to_changes(self, callback: Callable) -> str:
+    def subscribe_to_changes(
+        self, callback: Callable[[BaseConfig, BaseConfig, Dict[str, Tuple[Any, Any]]], Any]
+    ) -> str:
         """
         Subscribe to configuration changes.
 

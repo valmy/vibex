@@ -7,7 +7,13 @@ Provides engine creation, session factory, and async session support.
 from typing import AsyncGenerator
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from ..core.config import config
 from ..core.logging import get_logger
@@ -16,7 +22,7 @@ logger = get_logger(__name__)
 
 
 # Synchronous engine (for migrations and sync operations)
-def get_sync_engine():
+def get_sync_engine() -> Engine:
     """Create synchronous SQLAlchemy engine."""
     # Convert async URL to sync URL for migrations
     database_url = config.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
@@ -38,7 +44,7 @@ async_engine = None
 AsyncSessionLocal = None
 
 
-def get_async_engine():
+def get_async_engine() -> AsyncEngine:
     """
     Get the global async engine instance.
 
@@ -53,7 +59,7 @@ def get_async_engine():
     return async_engine
 
 
-def get_session_factory():
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
     """
     Get the global session factory.
 
@@ -68,7 +74,7 @@ def get_session_factory():
     return AsyncSessionLocal
 
 
-async def _create_async_engine():
+async def _create_async_engine() -> AsyncEngine:
     """Create asynchronous SQLAlchemy engine (internal use only)."""
     # Use asyncpg for async operations
     database_url = config.DATABASE_URL
@@ -88,7 +94,7 @@ async def _create_async_engine():
     return engine
 
 
-async def init_db():
+async def init_db() -> None:
     """Initialize database engine and session factory."""
     global async_engine, AsyncSessionLocal
 
@@ -127,7 +133,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-async def close_db():
+async def close_db() -> None:
     """Close database engine."""
     global async_engine, AsyncSessionLocal
 

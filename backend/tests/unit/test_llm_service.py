@@ -448,7 +448,11 @@ class TestLLMService:
         """Test API health validation."""
         with patch.object(llm_service.metrics_tracker, "get_health_status") as mock_health:
             mock_health.return_value = Mock(
-                is_healthy=True, consecutive_failures=0, circuit_breaker_open=False
+                is_healthy=True,
+                consecutive_failures=0,
+                circuit_breaker_open=False,
+                avg_response_time_ms=100.0,
+                last_successful_call=datetime.now(timezone.utc),
             )
 
             health_status = await llm_service.validate_api_health()
@@ -465,6 +469,8 @@ class TestLLMService:
                 is_healthy=True,
                 consecutive_failures=5,  # High failure count
                 circuit_breaker_open=False,
+                avg_response_time_ms=100.0,
+                last_successful_call=datetime.now(timezone.utc),
             )
 
             # Mock failed connection test
@@ -478,10 +484,12 @@ class TestLLMService:
     def test_get_usage_metrics(self, llm_service):
         """Test usage metrics retrieval."""
         mock_metrics = Mock()
-        mock_metrics.total_requests = 100
-        mock_metrics.successful_requests = 95
-        mock_metrics.failed_requests = 5
+        mock_metrics.total_calls = 100
+        mock_metrics.successful_calls = 95
+        mock_metrics.failed_calls = 5
         mock_metrics.avg_response_time_ms = 250.0
+        mock_metrics.total_cost = 10.0
+        mock_metrics.error_rate = 5.0
 
         with patch.object(
             llm_service.metrics_tracker, "get_usage_metrics", return_value=mock_metrics

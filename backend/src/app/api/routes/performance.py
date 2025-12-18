@@ -4,7 +4,9 @@ API routes for performance metrics management.
 Provides endpoints for reading and managing performance metrics.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +16,8 @@ from ...db.session import get_db
 from ...models.performance_metric import PerformanceMetric
 from ...schemas.performance_metric import PerformanceMetricListResponse, PerformanceMetricRead
 
+from ...services import data_service
+
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/performance", tags=["Performance"])
@@ -21,26 +25,27 @@ router = APIRouter(prefix="/api/v1/performance", tags=["Performance"])
 
 @router.get("", response_model=PerformanceMetricListResponse)
 async def list_performance_metrics(
-    skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)
-):
+    db: Annotated[AsyncSession, Depends(get_db)],
+    skip: Annotated[int, Query()] = 0,
+    limit: Annotated[int, Query()] = 100,
+) -> PerformanceMetricListResponse:
     """List all performance metrics with pagination."""
     try:
-        # Get total count
-        count_result = await db.execute(select(func.count(PerformanceMetric.id)))
-        total = count_result.scalar()
+        metrics, total = await data_service.list_with_count(db, PerformanceMetric, skip, limit)
 
-        # Get paginated results
-        result = await db.execute(select(PerformanceMetric).offset(skip).limit(limit))
-        metrics = result.scalars().all()
-
-        return PerformanceMetricListResponse(items=metrics, total=total)
+        return PerformanceMetricListResponse(
+            items=[PerformanceMetricRead.model_validate(m) for m in metrics],
+            total=total,
+        )
     except Exception as e:
         logger.error(f"Error listing performance metrics: {e}")
-        raise HTTPException(status_code=500, detail="Failed to list performance metrics")
+        raise HTTPException(status_code=500, detail="Failed to list performance metrics") from e
 
 
 @router.get("/{metric_id}", response_model=PerformanceMetricRead)
-async def get_performance_metric(metric_id: int, db: AsyncSession = Depends(get_db)):
+async def get_performance_metric(
+    metric_id: int, db: Annotated[AsyncSession, Depends(get_db)]
+) -> PerformanceMetricRead:
     """Get a specific performance metric by ID."""
     try:
         result = await db.execute(
@@ -51,9 +56,9 @@ async def get_performance_metric(metric_id: int, db: AsyncSession = Depends(get_
         if not metric:
             raise ResourceNotFoundError("PerformanceMetric", metric_id)
 
-        return metric
+        return PerformanceMetricRead.model_validate(metric)
     except ResourceNotFoundError as e:
-        raise to_http_exception(e)
+        raise to_http_exception(e) from e
     except Exception as e:
         logger.error(f"Error getting performance metric: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get performance metric")
+        raise HTTPException(status_code=500, detail="Failed to get performance metric") from e

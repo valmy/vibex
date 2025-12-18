@@ -120,7 +120,7 @@ class ConfigCache:
         self._lock = asyncio.Lock()
         self._total_hits = 0
         self._total_misses = 0
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self._cleanup_task: Optional[asyncio.Task[Any]] = None
 
     async def get(self, key: str, default: Any = None) -> Any:
         """
@@ -240,7 +240,7 @@ class ConfigCache:
             logger.warning("Cleanup task is already running")
             return
 
-        async def cleanup_loop():
+        async def cleanup_loop() -> None:
             try:
                 while True:
                     await asyncio.sleep(interval)

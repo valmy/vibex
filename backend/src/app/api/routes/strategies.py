@@ -7,7 +7,7 @@ strategy retrieval, assignment, switching, and performance tracking.
 
 import logging
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -103,9 +103,9 @@ def get_strategy_manager() -> StrategyManager:
 # API Endpoints
 @router.get("/available", response_model=StrategyListResponse)
 async def get_available_strategies(
-    include_inactive: bool = Query(False, description="Include inactive strategies"),
-    strategy_manager: StrategyManager = Depends(get_strategy_manager),
-):
+    strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)],
+    include_inactive: Annotated[bool, Query(description="Include inactive strategies")] = False,
+) -> StrategyListResponse:
     """
     Get all available trading strategies.
 
@@ -132,13 +132,13 @@ async def get_available_strategies(
 
     except Exception as e:
         logger.error(f"Error getting available strategies: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/{strategy_id}", response_model=TradingStrategy)
 async def get_strategy(
-    strategy_id: str, strategy_manager: StrategyManager = Depends(get_strategy_manager)
-):
+    strategy_id: str, strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)]
+) -> TradingStrategy:
     """
     Get a specific strategy by ID.
 
@@ -156,15 +156,15 @@ async def get_strategy(
         raise
     except Exception as e:
         logger.error(f"Error getting strategy {strategy_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/account/{account_id}", response_model=TradingStrategy)
 async def get_account_strategy(
     account_id: int,
-    current_user: User = Depends(get_current_user),
-    strategy_manager: StrategyManager = Depends(get_strategy_manager),
-):
+    current_user: Annotated[User, Depends(get_current_user)],
+    strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)],
+) -> TradingStrategy:
     """
     Get the currently assigned strategy for an account.
 
@@ -185,15 +185,15 @@ async def get_account_strategy(
         raise
     except Exception as e:
         logger.error(f"Error getting strategy for account {account_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/account/{account_id}/assign", response_model=StrategyAssignment)
 async def assign_strategy_to_account(
     account_id: int,
     request: StrategyAssignmentRequest,
-    strategy_manager: StrategyManager = Depends(get_strategy_manager),
-):
+    strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)],
+) -> StrategyAssignment:
     """
     Assign a strategy to an account.
 
@@ -211,23 +211,23 @@ async def assign_strategy_to_account(
         return assignment
 
     except ResourceNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except ConfigurationError as e:
         logger.error(f"Configuration error assigning strategy to account {account_id}: {e}")
-        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from e
     except Exception as e:
         logger.error(f"Error assigning strategy to account {account_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/account/{account_id}/switch", response_model=StrategyAssignment)
 async def switch_account_strategy(
     account_id: int,
     request: StrategyAssignmentRequest,
-    strategy_manager: StrategyManager = Depends(get_strategy_manager),
-):
+    strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)],
+) -> StrategyAssignment:
     """
     Switch an account's strategy.
 
@@ -245,22 +245,22 @@ async def switch_account_strategy(
         return assignment
 
     except ResourceNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except ConfigurationError as e:
         logger.error(f"Configuration error switching strategy for account {account_id}: {e}")
-        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from e
     except Exception as e:
         logger.error(f"Error switching strategy for account {account_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/custom", response_model=TradingStrategy)
 async def create_custom_strategy(
     request: CustomStrategyRequest,
-    strategy_manager: StrategyManager = Depends(get_strategy_manager),
-):
+    strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)],
+) -> TradingStrategy:
     """
     Create a custom trading strategy.
 
@@ -285,26 +285,29 @@ async def create_custom_strategy(
             risk_parameters=request.risk_parameters,
             timeframe_preference=request.timeframe_preference,
             max_positions=request.max_positions,
-            position_sizing=request.position_sizing,
+            position_sizing=cast(
+                Optional[Literal["fixed", "percentage", "kelly", "volatility_adjusted"]],
+                request.position_sizing,
+            ),
         )
 
         return strategy
 
     except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except ConfigurationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Error creating custom strategy: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.put("/{strategy_id}", response_model=TradingStrategy)
 async def update_strategy(
     strategy_id: str,
     request: StrategyUpdateRequest,
-    strategy_manager: StrategyManager = Depends(get_strategy_manager),
-):
+    strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)],
+) -> TradingStrategy:
     """
     Update an existing strategy.
 
@@ -317,20 +320,9 @@ async def update_strategy(
             raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
 
         # Update fields if provided
-        if request.strategy_name is not None:
-            strategy.strategy_name = request.strategy_name
-        if request.prompt_template is not None:
-            strategy.prompt_template = request.prompt_template
-        if request.risk_parameters is not None:
-            strategy.risk_parameters = request.risk_parameters
-        if request.timeframe_preference is not None:
-            strategy.timeframe_preference = request.timeframe_preference
-        if request.max_positions is not None:
-            strategy.max_positions = request.max_positions
-        if request.position_sizing is not None:
-            strategy.position_sizing = request.position_sizing
-        if request.is_active is not None:
-            strategy.is_active = request.is_active
+        update_data = request.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(strategy, field, value)
 
         # Validate updated strategy
         validation_errors = await strategy_manager.validate_strategy(strategy)
@@ -350,15 +342,15 @@ async def update_strategy(
         raise
     except Exception as e:
         logger.error(f"Error updating strategy {strategy_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.delete("/{strategy_id}")
 async def delete_strategy(
     strategy_id: str,
-    force: bool = Query(False, description="Force delete even if assigned to accounts"),
-    strategy_manager: StrategyManager = Depends(get_strategy_manager),
-):
+    strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)],
+    force: Annotated[bool, Query(description="Force delete even if assigned to accounts")] = False,
+) -> Dict[str, Any]:
     """
     Delete a strategy.
 
@@ -399,13 +391,13 @@ async def delete_strategy(
         raise
     except Exception as e:
         logger.error(f"Error deleting strategy {strategy_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/{strategy_id}/activate")
 async def activate_strategy(
-    strategy_id: str, strategy_manager: StrategyManager = Depends(get_strategy_manager)
-):
+    strategy_id: str, strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)]
+) -> Dict[str, Any]:
     """
     Activate a strategy.
 
@@ -427,13 +419,13 @@ async def activate_strategy(
         raise
     except Exception as e:
         logger.error(f"Error activating strategy {strategy_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/{strategy_id}/deactivate")
 async def deactivate_strategy(
-    strategy_id: str, strategy_manager: StrategyManager = Depends(get_strategy_manager)
-):
+    strategy_id: str, strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)]
+) -> Dict[str, Any]:
     """
     Deactivate a strategy.
 
@@ -456,13 +448,13 @@ async def deactivate_strategy(
         raise
     except Exception as e:
         logger.error(f"Error deactivating strategy {strategy_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/{strategy_id}/assignments")
 async def get_strategy_assignments(
-    strategy_id: str, strategy_manager: StrategyManager = Depends(get_strategy_manager)
-):
+    strategy_id: str, strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)]
+) -> Dict[str, Any]:
     """
     Get all accounts using a specific strategy.
 
@@ -486,13 +478,13 @@ async def get_strategy_assignments(
         raise
     except Exception as e:
         logger.error(f"Error getting assignments for strategy {strategy_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/assignments/all")
 async def get_all_strategy_assignments(
-    strategy_manager: StrategyManager = Depends(get_strategy_manager),
-):
+    strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)],
+) -> Dict[str, Any]:
     """
     Get all current strategy assignments.
 
@@ -518,13 +510,14 @@ async def get_all_strategy_assignments(
 
     except Exception as e:
         logger.error(f"Error getting all strategy assignments: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/validate")
 async def validate_strategy_config(
-    strategy: TradingStrategy, strategy_manager: StrategyManager = Depends(get_strategy_manager)
-):
+    strategy: TradingStrategy,
+    strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)],
+) -> Dict[str, Any]:
     """
     Validate a strategy configuration.
 
@@ -543,15 +536,15 @@ async def validate_strategy_config(
 
     except Exception as e:
         logger.error(f"Error validating strategy: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/{strategy_id}/performance", response_model=StrategyPerformance)
 async def get_strategy_performance(
     strategy_id: str,
-    timeframe: str = Query("7d", description="Timeframe for performance (7d, 30d, 90d)"),
-    strategy_manager: StrategyManager = Depends(get_strategy_manager),
-):
+    strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)],
+    timeframe: Annotated[str, Query(description="Timeframe for performance (7d, 30d, 90d)")] = "7d",
+) -> StrategyPerformance:
     """
     Get performance metrics for a specific strategy.
 
@@ -577,15 +570,15 @@ async def get_strategy_performance(
         raise
     except Exception as e:
         logger.error(f"Error getting performance for strategy {strategy_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/{strategy_id}/performance/calculate", response_model=StrategyPerformance)
 async def calculate_strategy_performance(
     strategy_id: str,
     request: PerformanceRequest,
-    strategy_manager: StrategyManager = Depends(get_strategy_manager),
-):
+    strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)],
+) -> StrategyPerformance:
     """
     Calculate performance metrics for a strategy over a specific period.
 
@@ -599,7 +592,7 @@ async def calculate_strategy_performance(
 
         # TODO: In a real implementation, this would fetch trade data from database
         # For now, return placeholder data
-        trades_data = []  # Would fetch from database based on strategy_id and date range
+        trades_data: List[Any] = []  # Would fetch from database based on strategy_id and date range
 
         performance = await strategy_manager.calculate_strategy_performance(
             strategy_id=strategy_id,
@@ -616,21 +609,23 @@ async def calculate_strategy_performance(
         logger.error(
             f"Error calculating performance for strategy {strategy_id}: {e}", exc_info=True
         )
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/compare", response_model=StrategyComparison)
 async def compare_strategies(
     strategy_ids: List[str],
-    comparison_period_days: int = Query(
-        30, ge=1, le=365, description="Period for comparison in days"
-    ),
-    ranking_criteria: str = Query(
-        "sharpe_ratio",
-        description="Criteria for ranking (sharpe_ratio, total_pnl, win_rate, profit_factor)",
-    ),
-    strategy_manager: StrategyManager = Depends(get_strategy_manager),
-):
+    strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)],
+    comparison_period_days: Annotated[
+        int, Query(ge=1, le=365, description="Period for comparison in days")
+    ] = 30,
+    ranking_criteria: Annotated[
+        str,
+        Query(
+            description="Criteria for ranking (sharpe_ratio, total_pnl, win_rate, profit_factor)"
+        ),
+    ] = "sharpe_ratio",
+) -> StrategyComparison:
     """
     Compare performance of multiple strategies.
 
@@ -665,18 +660,18 @@ async def compare_strategies(
     except HTTPException:
         raise
     except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Error comparing strategies: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/{strategy_id}/metrics/{account_id}", response_model=StrategyMetrics)
 async def get_strategy_metrics(
     strategy_id: str,
     account_id: int,
-    strategy_manager: StrategyManager = Depends(get_strategy_manager),
-):
+    strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)],
+) -> StrategyMetrics:
     """
     Get real-time metrics for a strategy on a specific account.
 
@@ -705,13 +700,13 @@ async def get_strategy_metrics(
             f"Error getting metrics for strategy {strategy_id}, account {account_id}: {e}",
             exc_info=True,
         )
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/recommendations/{account_id}")
 async def get_strategy_recommendations(
-    account_id: int, strategy_manager: StrategyManager = Depends(get_strategy_manager)
-):
+    account_id: int, strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)]
+) -> Dict[str, Any]:
     """
     Get strategy recommendations for an account.
 
@@ -730,18 +725,18 @@ async def get_strategy_recommendations(
 
     except Exception as e:
         logger.error(f"Error getting recommendations for account {account_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/alerts", response_model=List[StrategyAlert])
 async def get_strategy_alerts(
-    strategy_id: Optional[str] = Query(None, description="Filter by strategy ID"),
-    account_id: Optional[int] = Query(None, description="Filter by account ID"),
-    severity: Optional[str] = Query(
-        None, description="Filter by severity (low, medium, high, critical)"
-    ),
-    strategy_manager: StrategyManager = Depends(get_strategy_manager),
-):
+    strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)],
+    strategy_id: Annotated[Optional[str], Query(description="Filter by strategy ID")] = None,
+    account_id: Annotated[Optional[int], Query(description="Filter by account ID")] = None,
+    severity: Annotated[
+        Optional[str], Query(description="Filter by severity (low, medium, high, critical)")
+    ] = None,
+) -> List[StrategyAlert]:
     """
     Get strategy alerts with optional filtering.
 
@@ -757,15 +752,15 @@ async def get_strategy_alerts(
 
     except Exception as e:
         logger.error(f"Error getting strategy alerts: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/alerts/{alert_index}/acknowledge")
 async def acknowledge_strategy_alert(
     alert_index: int,
-    acknowledged_by: str = Query(..., description="User acknowledging the alert"),
-    strategy_manager: StrategyManager = Depends(get_strategy_manager),
-):
+    strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)],
+    acknowledged_by: Annotated[str, Query(description="User acknowledging the alert")],
+) -> Dict[str, Any]:
     """
     Acknowledge a strategy alert.
 
@@ -788,16 +783,16 @@ async def acknowledge_strategy_alert(
         raise
     except Exception as e:
         logger.error(f"Error acknowledging alert {alert_index}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.delete("/alerts/cleanup")
 async def cleanup_old_alerts(
-    max_age_hours: int = Query(
-        24, ge=1, le=168, description="Maximum age of alerts to keep (hours)"
-    ),
-    strategy_manager: StrategyManager = Depends(get_strategy_manager),
-):
+    strategy_manager: Annotated[StrategyManager, Depends(get_strategy_manager)],
+    max_age_hours: Annotated[
+        int, Query(ge=1, le=168, description="Maximum age of alerts to keep (hours)")
+    ] = 24,
+) -> Dict[str, Any]:
     """
     Clean up old strategy alerts.
 
@@ -816,4 +811,4 @@ async def cleanup_old_alerts(
 
     except Exception as e:
         logger.error(f"Error cleaning up alerts: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e

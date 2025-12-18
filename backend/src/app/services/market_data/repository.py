@@ -1,8 +1,6 @@
-"""Database repository for market data operations."""
-
 import logging
 from datetime import datetime
-from typing import List
+from typing import Any, List, Optional, Tuple
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +18,7 @@ class MarketDataRepository:
         db: AsyncSession,
         symbol: str,
         interval: str,
-        data: List[List],  # API returns list of lists
+        data: List[List[Any]],  # API returns list of lists
     ) -> int:
         """
         Store market data in TimescaleDB with upsert to handle duplicates.
@@ -47,14 +45,14 @@ class MarketDataRepository:
                 candle_time = datetime.fromtimestamp(candle[0] / 1000)  # open_time
 
                 # Check if record already exists
-                existing = await db.execute(
+                result = await db.execute(
                     select(MarketData).where(
                         MarketData.symbol == symbol,
                         MarketData.interval == interval,
                         MarketData.time == candle_time,
                     )
                 )
-                existing = existing.scalar_one_or_none()
+                existing: Optional[MarketData] = result.scalar_one_or_none()
 
                 if existing:
                     # Update existing record
@@ -78,7 +76,7 @@ class MarketDataRepository:
                     logger.debug(f"Updated existing market data for {symbol} at {candle_time}")
                 else:
                     # Create new record
-                    market_data = MarketData(
+                    market_data = MarketData(  # type: ignore[call-arg]
                         symbol=symbol,
                         interval=interval,
                         time=candle_time,
@@ -108,6 +106,33 @@ class MarketDataRepository:
         except Exception as e:
             await db.rollback()
             logger.error(f"Error storing market data: {e}")
+            raise
+
+    async def list_with_count(
+        self, db: AsyncSession, skip: int = 0, limit: int = 100
+    ) -> Tuple[List[MarketData], int]:
+        """
+        List all market data with pagination and total count.
+
+        Args:
+            db: Database session
+            skip: Number of records to skip
+            limit: Number of records to fetch
+
+        Returns:
+            Tuple containing list of MarketData records and total count
+        """
+        try:
+            # Get total count
+            count_result = await db.execute(select(func.count(MarketData.id)))
+            total: int = count_result.scalar_one()
+
+            # Get paginated results
+            result = await db.execute(select(MarketData).offset(skip).limit(limit))
+            data = result.scalars().all()
+            return list(data), total
+        except Exception as e:
+            logger.error(f"Error listing market data: {e}")
             raise
 
     async def get_latest(
@@ -140,7 +165,7 @@ class MarketDataRepository:
 
     async def get_latest_with_count(
         self, db: AsyncSession, symbol: str, interval: str = "1h", limit: int = 100
-    ) -> tuple[List[MarketData], int]:
+    ) -> Tuple[List[MarketData], int]:
         """
         Get latest market data and total count from database.
 
@@ -160,7 +185,7 @@ class MarketDataRepository:
                     and_(MarketData.symbol == symbol, MarketData.interval == interval)
                 )
             )
-            total = count_result.scalar()
+            total: int = count_result.scalar_one()  # Ensure total is int
 
             # Get data
             result = await db.execute(
@@ -209,7 +234,7 @@ class MarketDataRepository:
                 )
                 .order_by(MarketData.time.asc())
             )
-            return result.scalars().all()
+            return list(result.scalars().all())
         except Exception as e:
             logger.error(f"Error retrieving market data range: {e}")
             raise

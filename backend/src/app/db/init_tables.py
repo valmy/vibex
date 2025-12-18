@@ -15,7 +15,7 @@ from ..models import Base
 logger = get_logger(__name__)
 
 
-async def init_tables():
+async def init_tables() -> None:
     """Create all tables in the database."""
     # Convert async URL to sync URL for table creation
     database_url = config.DATABASE_URL

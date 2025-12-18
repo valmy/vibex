@@ -24,7 +24,7 @@ class AsterClient:
         self.base_url = base_url
 
     @property
-    def _client(self):
+    def _client(self) -> Any:  # Assuming 'Client' is untyped, use Any for now
         """
         Create and return a new Aster REST API client on each access.
 
@@ -70,7 +70,7 @@ class AsterClient:
         """
         try:
             # The actual fetching is done in a separate thread to handle blocking I/O.
-            def _fetch_in_thread():
+            def _fetch_in_thread() -> List[Dict[str, Any]]:
                 try:
                     # Use the _client property to get a fresh client instance
                     client = self._client
@@ -118,17 +118,17 @@ class AsterClient:
         """
         try:
 
-            def _fetch_in_thread():
+            def _fetch_in_thread() -> List[Dict[str, Any]]:
                 try:
                     client = self._client
                     # Build kwargs dynamically to handle None values
-                    kwargs = {"limit": limit}
+                    kwargs: Dict[str, Any] = {"limit": limit}
                     if symbol is not None:
                         kwargs["symbol"] = symbol
                     if startTime is not None:
-                        kwargs["startTime"] = startTime
+                        kwargs["startTime"] = int(startTime)
                     if endTime is not None:
-                        kwargs["endTime"] = endTime
+                        kwargs["endTime"] = int(endTime)
 
                     result = client.funding_rate(**kwargs)
                     return result
@@ -157,7 +157,7 @@ class AsterClient:
         """
         try:
 
-            def _fetch_in_thread():
+            def _fetch_in_thread() -> float:
                 try:
                     client = self._client
                     # Fetch account information which includes balance
