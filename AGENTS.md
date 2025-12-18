@@ -219,6 +219,114 @@ Follow this workflow for all schema modifications:
 - Test edge cases and error conditions
 - Use async tests for async code (`@pytest.mark.asyncio`)
 
+## Code Quality & Maintenance Rules
+
+### 1. Test Fidelity & Refactoring
+
+- **Signature Sync**: When modifying function/method signatures (renaming arguments, changing order, adding async), you **MUST** grep the entire `tests/` directory to update all call sites immediately. Do not rely on CI to catch this.
+- **Mocking Pydantic**: When mocking dependencies that return data used in Pydantic models, ensure the Mock object returns correct primitive types (int, float, datetime), not other Mocks. Pydantic validation is strict and will fail on MagicMocks.
+
+### 2. SQLAlchemy Best Practices
+
+- **Boolean Expressions**: Avoid `column == True` or `column == False` in queries. Ruff and proper SQL generation prefer using the column directly (e.g., `.where(Model.is_active)`) or `.is_(True)`.
+
+### 3. Database Session Patterns (Dual Pattern Architecture)
+
+The codebase uses **two distinct patterns** for database session management. Use the correct pattern based on context:
+
+#### Pattern A: Direct Session Injection (API/CRUD Operations)
+
+Use when serving HTTP requests via FastAPI. Session is injected via `Depends(get_db)`.
+
+```python
+# In API routes
+async def create_account(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    data: AccountCreate,
+) -> Account:
+    ...
+
+# In services that receive session as parameter
+class AccountService:
+    async def create_account(self, db: AsyncSession, user_id: int, data: AccountCreate):
+        db.add(account)
+        await db.commit()
+```
+
+**When to use:**
+
+- API route handlers
+- CRUD services called from API routes
+- When multiple service calls need to share a transaction
+
+**Characteristics:**
+
+- Session scoped to HTTP request lifecycle
+- Caller controls transaction boundaries
+- Multiple operations can share one session/transaction
+
+---
+
+#### Pattern B: Session Factory Injection (Background/Scheduler Processes)
+
+Use for background jobs, schedulers, and LLM decision pipelines. Service receives factory and creates sessions internally.
+
+```python
+class DecisionRepository:
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
+        self.session_factory = session_factory
+
+    async def save_decision(self, ...) -> Decision:
+        async with self.session_factory() as session:
+            session.add(decision)
+            await session.commit()
+            return decision
+```
+
+**When to use:**
+
+- Scheduler/cron jobs
+- Background tasks
+- LLM decision engine pipeline
+- Long-running processes
+
+**Characteristics:**
+
+- Each operation creates its own session
+- Self-contained transaction per method
+- No external request context needed
+- Better retry resilience (fresh session on retry)
+
+---
+
+#### Quick Reference
+
+| Context | Pattern | Session Source |
+|---------|---------|----------------|
+| API routes | Direct injection | `Depends(get_db)` |
+| CRUD services | Direct injection | Passed from route |
+| Scheduler jobs | Factory | `get_session_factory()` |
+| LLM services | Factory | Constructor injection |
+| Background tasks | Factory | `get_session_factory()` |
+
+### 4. Regex in Python
+
+- **Raw Strings vs. F-Strings**: Be extremely careful with braces `{}`.
+  - In `r"pattern"` (raw string): `{` is a literal brace (unless part of a quantifier `{n,m}`).
+  - In `f"pattern"` (f-string): `{` starts an interpolation. You must use `{{` for a literal brace.
+  - **Rule**: Prefer raw strings `r""` for regex. Do not mix f-strings with regex unless strictly necessary for dynamic patterns. Verify regex logic in isolation if complex nesting is involved.
+
+### 5. Verification Standard
+
+Before considering a task complete, you must run the full verification chain:
+
+1. `uv run mypy src/` (Type Safety)
+2. `uv run ruff format .` (Formatting)
+3. `uv run ruff check .` (Linting)
+4. `uv run pytest tests/unit` (Logic)
+5. `uv run pytest tests/integration` (Component Interaction)
+6. `uv run pytest tests/e2e` (End-to-End)
+
 ### ast-grep vs ripgrep (quick guidance)
 
 **Use `ast-grep` when structure matters.** It parses code and matches AST nodes, so results ignore comments/strings, understand syntax, and can **safely rewrite** code.
@@ -270,26 +378,3 @@ rg -l -t ts 'useQuery\(' | xargs ast-grep run -l TypeScript -p 'useQuery($A)' -r
 
 - False positives: `ast-grep` low; `rg` depends on your regex.
 - Rewrites: `ast-grep` first-class; `rg` requires ad‑hoc sed/awk and risks collateral edits.
-
-## Code Quality & Maintenance Rules
-
-### 1. Test Fidelity & Refactoring
-- **Signature Sync**: When modifying function/method signatures (renaming arguments, changing order, adding async), you **MUST** grep the entire `tests/` directory to update all call sites immediately. Do not rely on CI to catch this.
-- **Mocking Pydantic**: When mocking dependencies that return data used in Pydantic models, ensure the Mock object returns correct primitive types (int, float, datetime), not other Mocks. Pydantic validation is strict and will fail on MagicMocks.
-
-### 2. SQLAlchemy Best Practices
-- **Boolean Expressions**: Avoid `column == True` or `column == False` in queries. Ruff and proper SQL generation prefer using the column directly (e.g., `.where(Model.is_active)`) or `.is_(True)`.
-
-### 3. Regex in Python
-- **Raw Strings vs. F-Strings**: Be extremely careful with braces `{}`.
-  - In `r"pattern"` (raw string): `{` is a literal brace (unless part of a quantifier `{n,m}`).
-  - In `f"pattern"` (f-string): `{` starts an interpolation. You must use `{{` for a literal brace.
-  - **Rule**: Prefer raw strings `r""` for regex. Do not mix f-strings with regex unless strictly necessary for dynamic patterns. Verify regex logic in isolation if complex nesting is involved.
-
-### 4. Verification Standard
-Before considering a task complete, you must run the full verification chain:
-1. `uv run mypy src/` (Type Safety)
-2. `uv run ruff check .` (Linting)
-3. `uv run pytest tests/unit` (Logic)
-4. `uv run pytest tests/integration` (Component Interaction)
-

@@ -7,7 +7,6 @@ Provides endpoints for admin users to manage other users and their admin status.
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.logging import get_logger
@@ -78,7 +77,9 @@ async def list_users(
     """
     try:
         # Get users and total count from service
-        users, total = await user_service.list_users(db, skip=skip, limit=limit, admin_user=current_user)
+        users, total = await user_service.list_users(
+            db, skip=skip, limit=limit, admin_user=current_user
+        )
 
         logger.info(
             f"Listed users by admin {current_user.address}",

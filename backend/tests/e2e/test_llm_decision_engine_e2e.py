@@ -18,6 +18,8 @@ from typing import List
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.account import Account, User
+from app.models.decision import Decision
 from app.models.market_data import MarketData
 from app.schemas.trading_decision import (
     AccountContext,
@@ -48,7 +50,42 @@ class TestLLMDecisionEngineE2E:
     @pytest.fixture
     def decision_engine(self, db_session_factory: AsyncSession):
         """Get decision engine instance with real dependencies."""
+        # Reset the global singleton to ensure we get a fresh instance with the current loop's session factory
+        from app.services.llm import decision_engine as de_module
+
+        de_module._decision_engine = None
         return get_decision_engine(session_factory=db_session_factory)
+
+    @pytest.fixture(autouse=True)
+    async def setup_db_data(self, db_session: AsyncSession):
+        """Setup test user and account in the database."""
+        from sqlalchemy import select
+
+        # Create test user if not exists
+        result = await db_session.execute(select(User).where(User.id == 999999))
+        user = result.scalar_one_or_none()
+        if not user:
+            user = User(id=999999, address="0x" + "9" * 40)
+            db_session.add(user)
+            await db_session.commit()
+        else:
+            await db_session.commit()  # Ensure transaction is closed if user exists
+
+        # Create test account if not exists
+        result = await db_session.execute(select(Account).where(Account.id == 999999))
+        account = result.scalar_one_or_none()
+        if not account:
+            account = Account(
+                id=999999,
+                user_id=999999,
+                name="Test E2E Account",
+                balance_usd=10000.0,
+                is_enabled=True,
+            )
+            db_session.add(account)
+            await db_session.commit()
+        else:
+            await db_session.commit()  # Ensure transaction is closed if account exists
 
     @pytest.fixture
     async def real_market_data(
@@ -149,7 +186,7 @@ class TestLLMDecisionEngineE2E:
 
         # Mock the account context to avoid database account lookup
         mock_account_context = AccountContext(
-            account_id=1,
+            account_id=999999,
             balance_usd=10000.0,
             available_balance=8000.0,
             total_pnl=0.0,
@@ -175,8 +212,21 @@ class TestLLMDecisionEngineE2E:
         # The context_builder is real and should use the db_session from the DI container
         # The decision_engine fixture should be correctly wired
         result = await decision_engine.make_trading_decision(
-            symbols=["BTCUSDT"], account_id=1, force_refresh=True
+            symbols=["BTCUSDT"], account_id=999999, force_refresh=True
         )
+
+        # Verify persistence in database
+        from sqlalchemy import select
+
+        db_result = await db_session.execute(
+            select(Decision).where(Decision.account_id == 999999).order_by(Decision.id.desc())
+        )
+        stored_decision = db_result.scalars().first()
+        assert stored_decision is not None, "Decision should be persisted to database"
+        assert (
+            len(stored_decision.asset_decisions) == 1
+        ), "Should have 1 asset decision in database"
+        assert stored_decision.asset_decisions[0]["asset"] == "BTCUSDT"
 
         # Validate decision structure - now multi-asset
         assert isinstance(result, DecisionResult)
@@ -195,7 +245,7 @@ class TestLLMDecisionEngineE2E:
         # Validate context was built with real data
         assert result.context is not None
         assert "BTCUSDT" in result.context.symbols
-        assert result.context.account_id == 1
+        assert result.context.account_id == 999999
         assert "BTCUSDT" in result.context.market_data.assets
         btc_data = result.context.market_data.assets["BTCUSDT"]
         assert btc_data.current_price > 0
@@ -254,7 +304,7 @@ class TestLLMDecisionEngineE2E:
 
         # Mock the account context to avoid requiring a real trading account
         mock_account_context = AccountContext(
-            account_id=1,
+            account_id=999999,
             balance_usd=10000.0,
             available_balance=8000.0,
             total_pnl=0.0,
@@ -287,7 +337,7 @@ class TestLLMDecisionEngineE2E:
         logger.info("Building trading context with real market data...")
         context = await context_builder.build_trading_context(
             symbols=symbols,
-            account_id=1,
+            account_id=999999,
             timeframes=["5m", "4h"],  # Required timeframes parameter
             force_refresh=True,  # Force refresh to bypass cache and availability checks
         )
@@ -350,6 +400,9 @@ class TestLLMDecisionEngineE2E:
                 )
 
             logger.info("✓ LLM integration test passed successfully!")
+
+            # Verify persistence in database if we are using the decision engine
+            # In this test we are using llm_service directly, but let's check if we want to add a test that uses decision engine with real LLM
 
         except Exception as e:
             logger.error(f"LLM integration test failed: {str(e)}")
@@ -499,7 +552,7 @@ class TestLLMDecisionEngineE2E:
 
             # Create account context (new schema has different PerformanceMetrics fields)
             account_context = AccountContext(
-                account_id=1,
+                account_id=999999,
                 balance_usd=10000.0,
                 available_balance=8000.0,
                 total_pnl=500.0,
@@ -557,7 +610,7 @@ class TestLLMDecisionEngineE2E:
 
             context = TradingContext(
                 symbols=symbols,
-                account_id=1,
+                account_id=999999,
                 timeframes=["5m", "4h"],
                 market_data=multi_asset_market_context,
                 account_state=account_context,
@@ -663,7 +716,7 @@ class TestLLMDecisionEngineE2E:
         decisions = []
         for _ in range(3):
             result = await decision_engine.make_trading_decision(
-                symbols=["BTCUSDT"], account_id=1, force_refresh=True
+                symbols=["BTCUSDT"], account_id=999999, force_refresh=True
             )
             decisions.append(result)
             await asyncio.sleep(0.1)  # Small delay between calls
@@ -858,7 +911,7 @@ class TestLLMDecisionEngineE2E:
 
                 # Generate decision
                 result = await decision_engine.make_trading_decision(
-                    symbols=["BTCUSDT"], account_id=1, force_refresh=True
+                    symbols=["BTCUSDT"], account_id=999999, force_refresh=True
                 )
 
                 # Validate decision quality
@@ -995,7 +1048,7 @@ class TestLLMDecisionEngineE2E:
         # Generate multiple decisions to test metrics
         for _ in range(5):
             await decision_engine.make_trading_decision(
-                symbol="BTCUSDT", account_id=1, force_refresh=True
+                symbols=["BTCUSDT"], account_id=999999, force_refresh=True
             )
 
         # Check metrics - be more lenient with error rate
