@@ -309,8 +309,8 @@ class DecisionRepository:
                     select(Decision)
                     .where(
                         Decision.account_id == account_id,
-                        Decision.executed == False,  # noqa: E712
-                        Decision.validation_passed == True,  # noqa: E712
+                        ~Decision.executed,
+                        Decision.validation_passed,
                     )
                     .order_by(Decision.timestamp.desc())
                 )
@@ -639,7 +639,7 @@ class DecisionRepository:
                 query = select(Decision).where(
                     and_(
                         Decision.account_id == account_id,
-                        Decision.validation_passed == False,  # noqa: E712
+                        ~Decision.validation_passed,
                         Decision.validation_errors.isnot(None),
                     )
                 )
