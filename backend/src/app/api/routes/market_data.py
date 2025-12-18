@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Annotated, Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.exceptions import ResourceNotFoundError, to_http_exception

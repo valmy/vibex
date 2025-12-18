@@ -7,7 +7,7 @@ Provides endpoints for creating, reading, updating, and deleting trading orders.
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.exceptions import ResourceNotFoundError, to_http_exception
@@ -17,7 +17,6 @@ from ...db.session import get_db
 from ...models import User
 from ...models.order import Order
 from ...schemas.order import OrderCreate, OrderListResponse, OrderRead, OrderUpdate
-
 from ...services import data_service
 
 logger = get_logger(__name__)

@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.future import select
 
 from ..models.decision import Decision, DecisionResult
-from .decision_repository import DecisionRepository
+from .llm.decision_repository import DecisionRepository
 
 
 @dataclass
@@ -67,6 +67,7 @@ class DecisionAnalyticsService:
             session_factory: Async session factory for creating database sessions.
         """
         self.session_factory = session_factory
+        self.decision_repo = DecisionRepository(session_factory)
 
     async def get_decision_metrics(
         self,
@@ -77,19 +78,17 @@ class DecisionAnalyticsService:
     ) -> DecisionMetrics:
         """Get comprehensive decision metrics."""
 
-        async with self.session_factory() as session:
-            decision_repo = DecisionRepository(session)
-            analytics = await decision_repo.get_decision_analytics(
-                account_id=account_id,
-                start_date=start_date,
-                end_date=end_date,
-                strategy_id=strategy_id,
-            )
+        analytics = await self.decision_repo.get_decision_analytics(
+            account_id=account_id,
+            start_date=start_date,
+            end_date=end_date,
+            strategy_id=strategy_id,
+        )
 
-            # Calculate error rate
-            error_summary = await decision_repo.get_validation_errors_summary(
-                account_id=account_id, start_date=start_date, end_date=end_date
-            )
+        # Calculate error rate
+        error_summary = await self.decision_repo.get_validation_errors_summary(
+            account_id=account_id, start_date=start_date, end_date=end_date
+        )
 
         total_errors = sum(error_summary.values())
         error_rate = (
@@ -117,11 +116,9 @@ class DecisionAnalyticsService:
     ) -> List[StrategyMetrics]:
         """Get metrics for all strategies used by an account."""
 
-        async with self.session_factory() as session:
-            decision_repo = DecisionRepository(session)
-            performance_data = await decision_repo.get_performance_by_strategy(
-                account_id=account_id, start_date=start_date, end_date=end_date
-            )
+        performance_data = await self.decision_repo.get_performance_by_strategy(
+            account_id=account_id, start_date=start_date, end_date=end_date
+        )
 
         strategy_metrics = []
 
@@ -159,12 +156,10 @@ class DecisionAnalyticsService:
         end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=lookback_days)
 
-        async with self.session_factory() as session:
-            decision_repo = DecisionRepository(session)
-            # Get recent decisions
-            decisions = await decision_repo.get_decisions_by_account(
-                account_id=account_id, start_date=start_date, end_date=end_date, limit=1000
-            )
+        # Get recent decisions
+        decisions = await self.decision_repo.get_decisions_by_account(
+            account_id=account_id, start_date=start_date, end_date=end_date, limit=1000
+        )
 
         if not decisions:
             return TradingInsights(
@@ -186,12 +181,10 @@ class DecisionAnalyticsService:
             if d.confidence is not None and d.confidence >= 80 and d.validation_passed
         ][:5]
 
-        async with self.session_factory() as session:
-            decision_repo = DecisionRepository(session)
-            # Get common validation errors
-            error_summary = await decision_repo.get_validation_errors_summary(
-                account_id=account_id, start_date=start_date, end_date=end_date
-            )
+        # Get common validation errors
+        error_summary = await self.decision_repo.get_validation_errors_summary(
+            account_id=account_id, start_date=start_date, end_date=end_date
+        )
         common_errors = sorted(error_summary.items(), key=lambda x: x[1], reverse=True)[:3]
         common_error_messages = [error[0] for error in common_errors]
 

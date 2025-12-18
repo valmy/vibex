@@ -7,7 +7,7 @@ Provides endpoints for reading and managing completed trades.
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.exceptions import ResourceNotFoundError, to_http_exception
@@ -15,7 +15,6 @@ from ...core.logging import get_logger
 from ...db.session import get_db
 from ...models.trade import Trade
 from ...schemas.trade import TradeListResponse, TradeRead
-
 from ...services import data_service
 
 logger = get_logger(__name__)
