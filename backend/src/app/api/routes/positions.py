@@ -18,6 +18,8 @@ from ...models import User
 from ...models.position import Position
 from ...schemas.position import PositionCreate, PositionListResponse, PositionRead, PositionUpdate
 
+from ...services import data_service
+
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/positions", tags=["Trading"])
@@ -51,13 +53,7 @@ async def list_positions(
 ) -> PositionListResponse:
     """List all positions with pagination."""
     try:
-        # Get total count
-        count_result = await db.execute(select(func.count(Position.id)))
-        total = count_result.scalar() or 0
-
-        # Get paginated results
-        result = await db.execute(select(Position).offset(skip).limit(limit))
-        positions = result.scalars().all()
+        positions, total = await data_service.list_with_count(db, Position, skip, limit)
 
         return PositionListResponse(
             items=[PositionRead.model_validate(p) for p in positions],

@@ -16,6 +16,8 @@ from ...db.session import get_db
 from ...models.trade import Trade
 from ...schemas.trade import TradeListResponse, TradeRead
 
+from ...services import data_service
+
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/trades", tags=["Trading"])
@@ -29,13 +31,7 @@ async def list_trades(
 ) -> TradeListResponse:
     """List all trades with pagination."""
     try:
-        # Get total count
-        count_result = await db.execute(select(func.count(Trade.id)))
-        total = count_result.scalar() or 0
-
-        # Get paginated results
-        result = await db.execute(select(Trade).offset(skip).limit(limit))
-        trades = result.scalars().all()
+        trades, total = await data_service.list_with_count(db, Trade, skip, limit)
 
         return TradeListResponse(
             items=[TradeRead.model_validate(t) for t in trades],

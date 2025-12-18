@@ -21,6 +21,8 @@ from ...schemas.diary_entry import (
     DiaryEntryUpdate,
 )
 
+from ...services import data_service
+
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/diary", tags=["diary"])
@@ -52,13 +54,7 @@ async def list_diary_entries(
 ) -> DiaryEntryListResponse:
     """List all diary entries with pagination."""
     try:
-        # Get total count
-        count_result = await db.execute(select(func.count(DiaryEntry.id)))
-        total = count_result.scalar() or 0
-
-        # Get paginated results
-        result = await db.execute(select(DiaryEntry).offset(skip).limit(limit))
-        entries = result.scalars().all()
+        entries, total = await data_service.list_with_count(db, DiaryEntry, skip, limit)
 
         return DiaryEntryListResponse(
             items=[DiaryEntryRead.model_validate(e) for e in entries],

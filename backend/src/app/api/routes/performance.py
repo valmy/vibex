@@ -16,6 +16,8 @@ from ...db.session import get_db
 from ...models.performance_metric import PerformanceMetric
 from ...schemas.performance_metric import PerformanceMetricListResponse, PerformanceMetricRead
 
+from ...services import data_service
+
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/performance", tags=["Performance"])
@@ -29,13 +31,7 @@ async def list_performance_metrics(
 ) -> PerformanceMetricListResponse:
     """List all performance metrics with pagination."""
     try:
-        # Get total count
-        count_result = await db.execute(select(func.count(PerformanceMetric.id)))
-        total = count_result.scalar() or 0
-
-        # Get paginated results
-        result = await db.execute(select(PerformanceMetric).offset(skip).limit(limit))
-        metrics = result.scalars().all()
+        metrics, total = await data_service.list_with_count(db, PerformanceMetric, skip, limit)
 
         return PerformanceMetricListResponse(
             items=[PerformanceMetricRead.model_validate(m) for m in metrics],

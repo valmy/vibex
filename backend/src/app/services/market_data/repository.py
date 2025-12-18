@@ -108,6 +108,33 @@ class MarketDataRepository:
             logger.error(f"Error storing market data: {e}")
             raise
 
+    async def list_with_count(
+        self, db: AsyncSession, skip: int = 0, limit: int = 100
+    ) -> Tuple[List[MarketData], int]:
+        """
+        List all market data with pagination and total count.
+
+        Args:
+            db: Database session
+            skip: Number of records to skip
+            limit: Number of records to fetch
+
+        Returns:
+            Tuple containing list of MarketData records and total count
+        """
+        try:
+            # Get total count
+            count_result = await db.execute(select(func.count(MarketData.id)))
+            total: int = count_result.scalar_one()
+
+            # Get paginated results
+            result = await db.execute(select(MarketData).offset(skip).limit(limit))
+            data = result.scalars().all()
+            return list(data), total
+        except Exception as e:
+            logger.error(f"Error listing market data: {e}")
+            raise
+
     async def get_latest(
         self, db: AsyncSession, symbol: str, interval: str = "1h", limit: int = 100
     ) -> List[MarketData]:

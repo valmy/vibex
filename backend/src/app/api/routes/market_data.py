@@ -44,16 +44,11 @@ async def list_market_data(
         MarketDataListResponse: A list of market data entries and the total count.
     """
     try:
-        # Get total count
-        count_result = await db.execute(select(func.count(MarketData.id)))
-        total: int = count_result.scalar_one()
-
-        # Get paginated results
-        result = await db.execute(select(MarketData).offset(skip).limit(limit))
-        data = result.scalars().all()
+        service = get_market_data_service()
+        items, total = await service.list_market_data(db, skip, limit)
 
         return MarketDataListResponse(
-            items=[MarketDataRead.model_validate(d) for d in data], total=total
+            items=[MarketDataRead.model_validate(d) for d in items], total=total
         )
     except Exception as e:
         logger.error(f"Error listing market data: {e}")

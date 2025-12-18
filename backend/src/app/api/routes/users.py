@@ -77,12 +77,8 @@ async def list_users(
         }
     """
     try:
-        # Get total count
-        count_result = await db.execute(select(func.count(User.id)))
-        total = count_result.scalar() or 0
-
-        # Get users
-        users = await user_service.list_users(db, skip=skip, limit=limit, admin_user=current_user)
+        # Get users and total count from service
+        users, total = await user_service.list_users(db, skip=skip, limit=limit, admin_user=current_user)
 
         logger.info(
             f"Listed users by admin {current_user.address}",

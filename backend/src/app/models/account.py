@@ -6,7 +6,8 @@ Represents a trading account with configuration and status.
 
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import DOUBLE_PRECISION
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import BaseModel
@@ -59,18 +60,20 @@ class Account(BaseModel):
     api_passphrase: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # Trading parameters
-    leverage: Mapped[float] = mapped_column(Float, default=2.0, nullable=False)
-    max_position_size_usd: Mapped[float] = mapped_column(Float, default=10000.0, nullable=False)
+    leverage: Mapped[float] = mapped_column(DOUBLE_PRECISION, default=2.0, nullable=False)
+    max_position_size_usd: Mapped[float] = mapped_column(
+        DOUBLE_PRECISION, default=10000.0, nullable=False
+    )
     risk_per_trade: Mapped[float] = mapped_column(
-        Float, default=0.02, nullable=False
+        DOUBLE_PRECISION, default=0.02, nullable=False
     )  # 2% risk per trade
     maker_fee_bps: Mapped[float] = mapped_column(
-        Float, default=5.0, nullable=False
+        DOUBLE_PRECISION, default=5.0, nullable=False
     )  # 5 bps (0.05%)
     taker_fee_bps: Mapped[float] = mapped_column(
-        Float, default=20.0, nullable=False
+        DOUBLE_PRECISION, default=20.0, nullable=False
     )  # 20 bps (0.20%)
-    balance_usd: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    balance_usd: Mapped[float] = mapped_column(DOUBLE_PRECISION, default=0.0, nullable=False)
 
     # Account settings
     is_paper_trading: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

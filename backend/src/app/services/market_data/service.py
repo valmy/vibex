@@ -383,6 +383,22 @@ class MarketDataService:
         """
         return await self.repository.store_candles(db, symbol, interval, data)
 
+    async def list_market_data(
+        self, db: AsyncSession, skip: int = 0, limit: int = 100
+    ) -> Tuple[List[MarketData], int]:
+        """
+        List all market data with pagination.
+
+        Args:
+            db: Database session
+            skip: Number of records to skip
+            limit: Number of records to fetch
+
+        Returns:
+            Tuple containing list of MarketData records and total count
+        """
+        return await self.repository.list_with_count(db, skip, limit)
+
     async def get_latest_market_data(
         self, db: AsyncSession, symbol: str, interval: str = "1h", limit: int = 100
     ) -> List[MarketData]:

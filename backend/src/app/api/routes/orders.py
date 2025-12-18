@@ -18,6 +18,8 @@ from ...models import User
 from ...models.order import Order
 from ...schemas.order import OrderCreate, OrderListResponse, OrderRead, OrderUpdate
 
+from ...services import data_service
+
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/orders", tags=["Trading"])
@@ -51,13 +53,7 @@ async def list_orders(
 ) -> OrderListResponse:
     """List all orders with pagination."""
     try:
-        # Get total count
-        count_result = await db.execute(select(func.count(Order.id)))
-        total = count_result.scalar() or 0
-
-        # Get paginated results
-        result = await db.execute(select(Order).offset(skip).limit(limit))
-        orders = result.scalars().all()
+        orders, total = await data_service.list_with_count(db, Order, skip, limit)
 
         return OrderListResponse(
             items=[OrderRead.model_validate(o) for o in orders],
