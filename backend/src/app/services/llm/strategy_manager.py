@@ -280,7 +280,7 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
 
         if not strategy_id:
             strategy_id = strategy_name.lower().replace(" ", "_")
-        
+
         if timeframe_preference is None:
             timeframe_preference = ["1h", "4h"]
 
@@ -342,7 +342,7 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
             return []
         async with self.session_factory() as session:
             try:
-                stmt = select(StrategyModel).where(StrategyModel.is_active == True)
+                stmt = select(StrategyModel).where(StrategyModel.is_active)
                 result = await session.execute(stmt)
                 db_strategies = result.scalars().all()
                 return [self._map_db_to_pydantic(s) for s in db_strategies]
@@ -385,7 +385,9 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 if not account:
                     raise AccountNotFoundError(account_id)
 
-                strategy_stmt = select(StrategyModel).where(StrategyModel.strategy_id == strategy_id)
+                strategy_stmt = select(StrategyModel).where(
+                    StrategyModel.strategy_id == strategy_id
+                )
                 result = await session.execute(strategy_stmt)
                 strategy = result.scalar_one_or_none()
                 if not strategy:
@@ -396,7 +398,7 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 assignment_stmt = select(StrategyAssignmentModel).where(
                     and_(
                         StrategyAssignmentModel.account_id == account_id,
-                        StrategyAssignmentModel.is_active == True,
+                        StrategyAssignmentModel.is_active,
                     )
                 )
                 result = await session.execute(assignment_stmt)
@@ -461,7 +463,7 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                     .where(
                         and_(
                             StrategyAssignmentModel.account_id == account_id,
-                            StrategyAssignmentModel.is_active == True,
+                            StrategyAssignmentModel.is_active,
                         )
                     )
                 )
@@ -556,7 +558,7 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                 stmt = (
                     select(StrategyAssignmentModel, StrategyModel.strategy_id)
                     .join(StrategyModel, StrategyAssignmentModel.strategy_id == StrategyModel.id)
-                    .where(StrategyAssignmentModel.is_active == True)
+                    .where(StrategyAssignmentModel.is_active)
                 )
                 result = await session.execute(stmt)
                 assignments = result.all()
@@ -578,7 +580,7 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
                     .where(
                         and_(
                             StrategyModel.strategy_id == strategy_id,
-                            StrategyAssignmentModel.is_active == True,
+                            StrategyAssignmentModel.is_active,
                         )
                     )
                 )
@@ -748,18 +750,17 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
             period_days=period_days,
         )
 
-    async def get_strategy_performance(self, strategy_id: str, timeframe: str = "7d") -> Optional[StrategyPerformance]:
+    async def get_strategy_performance(
+        self, strategy_id: str, timeframe: str = "7d"
+    ) -> Optional[StrategyPerformance]:
         """Get strategy performance for a specific timeframe."""
         days = int(timeframe.replace("d", ""))
         end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=days)
-        
+
         # In a real impl, fetch trades here. For now return placeholder
         return await self.calculate_strategy_performance(
-            strategy_id=strategy_id,
-            trades_data=[],
-            start_date=start_date,
-            end_date=end_date
+            strategy_id=strategy_id, trades_data=[], start_date=start_date, end_date=end_date
         )
 
     async def delete_strategy(self, strategy_id: str) -> bool:
@@ -767,7 +768,9 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
             return False
         async with self.session_factory() as session:
             try:
-                strategy_stmt = select(StrategyModel).where(StrategyModel.strategy_id == strategy_id)
+                strategy_stmt = select(StrategyModel).where(
+                    StrategyModel.strategy_id == strategy_id
+                )
                 result = await session.execute(strategy_stmt)
                 strategy = result.scalar_one_or_none()
                 if strategy:
@@ -802,39 +805,38 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
             funding_rate_threshold=db_strategy.funding_rate_threshold,
             is_active=db_strategy.is_active,
         )
-    
+
     async def compare_strategies(
         self,
         strategy_ids: List[str],
         comparison_period_days: int = 30,
-        ranking_criteria: str = "sharpe_ratio"
+        ranking_criteria: str = "sharpe_ratio",
     ) -> StrategyComparison:
         """Compare multiple strategies performance."""
         perfs = []
         end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=comparison_period_days)
-        
+
         for sid in strategy_ids:
             # Mock empty trades for now
             perf = await self.calculate_strategy_performance(
-                strategy_id=sid,
-                trades_data=[],
-                start_date=start_date,
-                end_date=end_date
+                strategy_id=sid, trades_data=[], start_date=start_date, end_date=end_date
             )
             perfs.append(perf)
-            
+
         best_strategy = strategy_ids[0] if strategy_ids else ""
-        
+
         return StrategyComparison(
             strategies=perfs,
             comparison_period_days=comparison_period_days,
             best_performing_strategy=best_strategy,
             ranking_criteria=ranking_criteria,  # type: ignore[arg-type]
-            timestamp=datetime.now(timezone.utc)
+            timestamp=datetime.now(timezone.utc),
         )
 
-    async def get_strategy_metrics(self, strategy_id: str, account_id: int) -> Optional[StrategyMetrics]:
+    async def get_strategy_metrics(
+        self, strategy_id: str, account_id: int
+    ) -> Optional[StrategyMetrics]:
         """Get metrics for a strategy on an account."""
         # Placeholder
         return StrategyMetrics(
@@ -847,7 +849,7 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
             trades_today=0,
             risk_utilization=0.0,
             cooldown_remaining=0,
-            last_updated=datetime.now(timezone.utc)
+            last_updated=datetime.now(timezone.utc),
         )
 
     async def get_strategy_recommendations(self, account_id: int) -> List[Dict[str, Any]]:
@@ -858,7 +860,7 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
         self,
         strategy_id: Optional[str] = None,
         account_id: Optional[int] = None,
-        severity: Optional[str] = None
+        severity: Optional[str] = None,
     ) -> List[StrategyAlert]:
         """Get alerts."""
         return self._alerts
@@ -877,7 +879,8 @@ Execute DCA for {symbol} perps: place limit orders every 15m at 0.5% increments.
         now = datetime.now(timezone.utc)
         original_len = len(self._alerts)
         self._alerts = [
-            a for a in self._alerts 
+            a
+            for a in self._alerts
             if not a.acknowledged or (now - a.created_at).total_seconds() < max_age_hours * 3600
         ]
         return original_len - len(self._alerts)

@@ -133,6 +133,6 @@ class TestTechnicalAnalysisE2E:
                 assert result.candle_count == 20, "Should reflect actual candle count"
             except Exception as e:
                 # May raise InsufficientDataError which is acceptable
-                assert "InsufficientDataError" in str(
-                    type(e)
-                ), f"Should handle insufficient data gracefully: {e}"
+                assert "InsufficientDataError" in str(type(e)), (
+                    f"Should handle insufficient data gracefully: {e}"
+                )

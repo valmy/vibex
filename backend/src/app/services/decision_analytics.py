@@ -80,7 +80,10 @@ class DecisionAnalyticsService:
         async with self.session_factory() as session:
             decision_repo = DecisionRepository(session)
             analytics = await decision_repo.get_decision_analytics(
-                account_id=account_id, start_date=start_date, end_date=end_date, strategy_id=strategy_id
+                account_id=account_id,
+                start_date=start_date,
+                end_date=end_date,
+                strategy_id=strategy_id,
             )
 
             # Calculate error rate

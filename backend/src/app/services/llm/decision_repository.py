@@ -190,7 +190,9 @@ class DecisionRepository:
                         if decision.is_multi_asset:
                             # Check if symbol is in any asset decision
                             if decision.asset_decisions:  # Check if asset_decisions is not None
-                                if any(ad.get("asset") == symbol for ad in decision.asset_decisions):
+                                if any(
+                                    ad.get("asset") == symbol for ad in decision.asset_decisions
+                                ):
                                     filtered_decisions.append(decision)
                         elif decision.symbol == symbol:
                             # Legacy single-asset decision

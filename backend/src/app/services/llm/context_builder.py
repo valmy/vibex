@@ -30,11 +30,10 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from statistics import stdev
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from sqlalchemy import desc, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ...models.account import Account
 from ...models.market_data import MarketData
@@ -320,7 +319,9 @@ class ContextBuilderService:
         )
         return context
 
-    def _process_context_results(self, results: List[Any], symbols: List[str], all_errors: List[str]) -> Tuple[MarketContext, AccountContext, Dict[str, List[TradeHistory]]]:
+    def _process_context_results(
+        self, results: List[Any], symbols: List[str], all_errors: List[str]
+    ) -> Tuple[MarketContext, AccountContext, Dict[str, List[TradeHistory]]]:
         market_context_result, account_context, *recent_trades_results = results
 
         if isinstance(market_context_result, Exception):
@@ -343,7 +344,9 @@ class ContextBuilderService:
 
         return market_context, account_context, recent_trades_by_symbol
 
-    def _validate_full_context(self, market_context: MarketContext, account_context: AccountContext) -> None:
+    def _validate_full_context(
+        self, market_context: MarketContext, account_context: AccountContext
+    ) -> None:
         """Validate that we have sufficient context data."""
         if not market_context.assets:
             raise InsufficientMarketDataError("No market data available for any assets")
@@ -433,12 +436,16 @@ class ContextBuilderService:
                 return cached_data
         return None
 
-    async def _fetch_indicators(self, symbol: str, primary_timeframe: str, long_timeframe: str, db: AsyncSession) -> Tuple[TechnicalIndicatorsSet, TechnicalIndicatorsSet]:
+    async def _fetch_indicators(
+        self, symbol: str, primary_timeframe: str, long_timeframe: str, db: AsyncSession
+    ) -> Tuple[TechnicalIndicatorsSet, TechnicalIndicatorsSet]:
         interval_indicators = await self._get_indicator_set(symbol, primary_timeframe, db)
         long_interval_indicators = await self._get_indicator_set(symbol, long_timeframe, db)
         return interval_indicators, long_interval_indicators
 
-    async def _get_indicator_set(self, symbol: str, timeframe: str, db: AsyncSession) -> TechnicalIndicatorsSet:
+    async def _get_indicator_set(
+        self, symbol: str, timeframe: str, db: AsyncSession
+    ) -> TechnicalIndicatorsSet:
         market_data = await self.market_data_service.get_latest_market_data(
             db, symbol, timeframe, self.DEFAULT_PRICE_HISTORY_LIMIT
         )
@@ -467,7 +474,9 @@ class ContextBuilderService:
         """Create a partial indicators set when full indicators can't be calculated."""
         return TechnicalIndicatorsSet()
 
-    async def _fetch_primary_market_data(self, symbol: str, timeframe: str, db: AsyncSession) -> List[MarketData]:
+    async def _fetch_primary_market_data(
+        self, symbol: str, timeframe: str, db: AsyncSession
+    ) -> List[MarketData]:
         primary_market_data = await self.market_data_service.get_latest_market_data(
             db, symbol, timeframe, self.DEFAULT_PRICE_HISTORY_LIMIT
         )
@@ -476,7 +485,12 @@ class ContextBuilderService:
         primary_market_data.sort(key=lambda x: x.time)
         return primary_market_data
 
-    def _build_asset_market_data(self, symbol: str, primary_market_data: List[MarketData], technical_indicators: TechnicalIndicators) -> AssetMarketData:
+    def _build_asset_market_data(
+        self,
+        symbol: str,
+        primary_market_data: List[MarketData],
+        technical_indicators: TechnicalIndicators,
+    ) -> AssetMarketData:
         latest_candle = primary_market_data[-1]
         current_price = latest_candle.close
         price_24h_ago = (
@@ -524,7 +538,9 @@ class ContextBuilderService:
         ]
         return stdev(returns) * 100 if len(returns) > 1 else 0.0
 
-    def _process_asset_data_results(self, asset_data_results: List[Any], symbols: List[str]) -> Tuple[Dict[str, AssetMarketData], List[str]]:
+    def _process_asset_data_results(
+        self, asset_data_results: List[Any], symbols: List[str]
+    ) -> Tuple[Dict[str, AssetMarketData], List[str]]:
         assets, errors = {}, []
         for i, symbol in enumerate(symbols):
             result = asset_data_results[i]
@@ -768,12 +784,15 @@ class ContextBuilderService:
 
         win_rate = len(winning_trades) / len(trades) * 100 if trades else 0
         avg_win = (
-            sum(trade.pnl for trade in winning_trades if trade.pnl is not None) / len(winning_trades)
+            sum(trade.pnl for trade in winning_trades if trade.pnl is not None)
+            / len(winning_trades)
             if winning_trades
             else 0
         )
         avg_loss = (
-            sum(trade.pnl for trade in losing_trades if trade.pnl is not None) / len(losing_trades) if losing_trades else 0
+            sum(trade.pnl for trade in losing_trades if trade.pnl is not None) / len(losing_trades)
+            if losing_trades
+            else 0
         )
 
         # Calculate max drawdown (simplified)

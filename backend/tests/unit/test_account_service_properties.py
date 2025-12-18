@@ -142,23 +142,23 @@ async def test_property_account_creation_persistence(account_data, user_data):
         assert account.name == account_data.name, "Name should match"
         assert account.user_id == user.id, "Should be associated with user"
         assert abs(account.leverage - account_data.leverage) < 0.001, "Leverage should match"
-        assert (
-            abs(account.max_position_size_usd - account_data.max_position_size_usd) < 0.1
-        ), "Max position size should match"
-        assert (
-            abs(account.risk_per_trade - account_data.risk_per_trade) < 0.001
-        ), "Risk per trade should match"
-        assert (
-            account.is_paper_trading == account_data.is_paper_trading
-        ), "Trading mode should match"
+        assert abs(account.max_position_size_usd - account_data.max_position_size_usd) < 0.1, (
+            "Max position size should match"
+        )
+        assert abs(account.risk_per_trade - account_data.risk_per_trade) < 0.001, (
+            "Risk per trade should match"
+        )
+        assert account.is_paper_trading == account_data.is_paper_trading, (
+            "Trading mode should match"
+        )
         assert account.status == "active", "Status should be active"
         assert account.is_enabled is True, "Should be enabled"
 
         # Verify balance for paper trading
         if account_data.is_paper_trading and account_data.balance_usd:
-            assert (
-                abs(account.balance_usd - account_data.balance_usd) < 0.1
-            ), "Balance should match for paper trading"
+            assert abs(account.balance_usd - account_data.balance_usd) < 0.1, (
+                "Balance should match for paper trading"
+            )
 
         # Verify database operations were called
         assert mock_db.add.called, "Should add account to session"
@@ -395,9 +395,9 @@ async def test_property_admin_access_granted(owner_data, admin_data):
 
     update_data = AccountUpdate(description="Admin updated description")
     updated_account = await service.update_account(mock_db, account.id, admin, update_data)
-    assert (
-        updated_account.description == "Admin updated description"
-    ), "Admin should be able to update account"
+    assert updated_account.description == "Admin updated description", (
+        "Admin should be able to update account"
+    )
 
     # Test delete_account - admin should be able to delete (no exception raised)
     await service.delete_account(mock_db, account.id, admin, force=True)
@@ -537,17 +537,17 @@ async def test_property_credential_masking(has_credentials, user_data):
     assert not hasattr(account_read, "api_secret"), "api_secret should not be in response"
 
     # Verify has_api_credentials flag is correct
-    assert (
-        account_read.has_api_credentials == has_credentials
-    ), f"has_api_credentials should be {has_credentials}"
+    assert account_read.has_api_credentials == has_credentials, (
+        f"has_api_credentials should be {has_credentials}"
+    )
 
     # Verify the schema can be serialized (no sensitive data exposed)
     serialized = account_read.model_dump()
     assert "api_key" not in serialized, "api_key should not be in serialized data"
     assert "api_secret" not in serialized, "api_secret should not be in serialized data"
-    assert (
-        serialized["has_api_credentials"] == has_credentials
-    ), "has_api_credentials should indicate credential presence"
+    assert serialized["has_api_credentials"] == has_credentials, (
+        "has_api_credentials should indicate credential presence"
+    )
 
 
 # Property 6: Cascade deletion
@@ -816,9 +816,9 @@ async def test_property_balance_sync_updates_balance(user_data, new_balance):
         updated_account = await service.sync_balance(mock_db, account.id, user)
 
         # Verify balance was updated
-        assert (
-            abs(updated_account.balance_usd - new_balance) < 0.01
-        ), f"Balance should be updated to {new_balance}"
+        assert abs(updated_account.balance_usd - new_balance) < 0.01, (
+            f"Balance should be updated to {new_balance}"
+        )
 
         # Verify database operations were called
         assert mock_db.add.called, "Should add updated account to session"
@@ -915,12 +915,12 @@ async def test_property_status_change_logging(
                 log_entry = status_change_logs[-1]
 
                 # Verify log message contains status information
-                assert (
-                    old_status in log_entry.message.lower()
-                ), f"Log message should contain old status '{old_status}', got: {log_entry.message}"
-                assert (
-                    new_status in log_entry.message.lower()
-                ), f"Log message should contain new status '{new_status}', got: {log_entry.message}"
+                assert old_status in log_entry.message.lower(), (
+                    f"Log message should contain old status '{old_status}', got: {log_entry.message}"
+                )
+                assert new_status in log_entry.message.lower(), (
+                    f"Log message should contain new status '{new_status}', got: {log_entry.message}"
+                )
 
                 # Verify log contains required audit information in extra fields
                 assert log_entry.action == "status_change", "Action should be 'status_change'"
@@ -928,29 +928,29 @@ async def test_property_status_change_logging(
                 assert log_entry.account_id == str(account.id), "Should log account ID"
                 assert log_entry.account_name == account.name, "Should log account name"
                 assert hasattr(log_entry, "old_status"), "Should have old_status field"
-                assert (
-                    log_entry.old_status == old_status
-                ), f"Old status should be '{old_status}', got: {log_entry.old_status}"
+                assert log_entry.old_status == old_status, (
+                    f"Old status should be '{old_status}', got: {log_entry.old_status}"
+                )
                 assert hasattr(log_entry, "new_status"), "Should have new_status field"
-                assert (
-                    log_entry.new_status == new_status
-                ), f"New status should be '{new_status}', got: {log_entry.new_status}"
+                assert log_entry.new_status == new_status, (
+                    f"New status should be '{new_status}', got: {log_entry.new_status}"
+                )
                 assert hasattr(log_entry, "correlation_id"), "Should have correlation_id"
 
                 # Verify the account status was actually updated
-                assert (
-                    updated_account.status == new_status
-                ), f"Account status should be updated to '{new_status}'"
+                assert updated_account.status == new_status, (
+                    f"Account status should be updated to '{new_status}'"
+                )
 
                 # Verify is_enabled is set correctly based on new status
                 if new_status == "stopped":
-                    assert (
-                        updated_account.is_enabled is False
-                    ), "Stopped accounts should be disabled"
+                    assert updated_account.is_enabled is False, (
+                        "Stopped accounts should be disabled"
+                    )
                 else:
-                    assert (
-                        updated_account.is_enabled is True
-                    ), "Active and paused accounts should be enabled"
+                    assert updated_account.is_enabled is True, (
+                        "Active and paused accounts should be enabled"
+                    )
 
         except AccountValidationError:
             # This is expected for invalid transitions (e.g., stopped -> active without credentials)
@@ -1071,19 +1071,19 @@ async def test_property_account_isolation_positions(
     positions_from_account1 = result1.scalars().all()
 
     # Verify all positions belong to account1
-    assert (
-        len(positions_from_account1) == num_positions
-    ), f"Expected {num_positions} positions for account1, got {len(positions_from_account1)}"
-    assert all(
-        pos.account_id == account1.id for pos in positions_from_account1
-    ), "All positions should belong to account1"
+    assert len(positions_from_account1) == num_positions, (
+        f"Expected {num_positions} positions for account1, got {len(positions_from_account1)}"
+    )
+    assert all(pos.account_id == account1.id for pos in positions_from_account1), (
+        "All positions should belong to account1"
+    )
 
     # Verify none of account2's positions appear in account1's results
     account1_symbols = {pos.symbol for pos in positions_from_account1}
     account2_symbols = {pos.symbol for pos in positions_account2}
-    assert account1_symbols.isdisjoint(
-        account2_symbols
-    ), "Account1 positions should not contain any symbols from account2"
+    assert account1_symbols.isdisjoint(account2_symbols), (
+        "Account1 positions should not contain any symbols from account2"
+    )
 
     # Verify account isolation: positions are completely separate
     for pos in positions_from_account1:
@@ -1210,19 +1210,19 @@ async def test_property_account_isolation_metrics(
     metrics_from_account1 = result1.scalars().all()
 
     # Verify all metrics belong to account1
-    assert (
-        len(metrics_from_account1) == num_metrics
-    ), f"Expected {num_metrics} metrics for account1, got {len(metrics_from_account1)}"
-    assert all(
-        metric.account_id == account1.id for metric in metrics_from_account1
-    ), "All metrics should belong to account1"
+    assert len(metrics_from_account1) == num_metrics, (
+        f"Expected {num_metrics} metrics for account1, got {len(metrics_from_account1)}"
+    )
+    assert all(metric.account_id == account1.id for metric in metrics_from_account1), (
+        "All metrics should belong to account1"
+    )
 
     # Verify metrics are independent: account1's metrics should not match account2's
     for metric1 in metrics_from_account1:
         # Verify this metric doesn't have account2's characteristics
-        assert (
-            metric1.account_id != account2.id
-        ), f"Metric {metric1.id} should not belong to account2"
+        assert metric1.account_id != account2.id, (
+            f"Metric {metric1.id} should not belong to account2"
+        )
 
         # Verify the metric values are from account1's data, not account2's
         # Account1 has positive P&L, account2 has negative P&L
@@ -1232,9 +1232,9 @@ async def test_property_account_isolation_metrics(
     # Verify account2's metrics are also independent
     for metric2 in metrics_account2:
         assert metric2.account_id == account2.id, f"Metric {metric2.id} should belong to account2"
-        assert (
-            metric2.account_id != account1.id
-        ), f"Metric {metric2.id} should not belong to account1"
+        assert metric2.account_id != account1.id, (
+            f"Metric {metric2.id} should not belong to account1"
+        )
 
         # Verify the metric values are from account2's data, not account1's
         # Account2 has negative P&L, account1 has positive P&L
@@ -1253,6 +1253,6 @@ async def test_property_account_isolation_metrics(
 
     assert account1_avg_pnl > 0, "Account1 should have positive average P&L"
     assert account2_avg_pnl < 0, "Account2 should have negative average P&L"
-    assert (
-        account1_avg_pnl != account2_avg_pnl
-    ), "Performance metrics should be independent between accounts"
+    assert account1_avg_pnl != account2_avg_pnl, (
+        "Performance metrics should be independent between accounts"
+    )

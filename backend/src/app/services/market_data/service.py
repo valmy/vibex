@@ -8,10 +8,10 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.config import config
+from ...models.market_data import MarketData
 from .client import AsterClient
 from .events import CandleCloseEvent, EventManager, EventType
 from .repository import MarketDataRepository
-from ...models.market_data import MarketData
 from .scheduler import CandleScheduler
 from .utils import (
     calculate_previous_candle_close,
@@ -69,7 +69,8 @@ class MarketDataService:
 
         # Register default handler
         self.event_manager.register_handler(
-            EventType.CANDLE_CLOSE, self._default_candle_close_handler  # type: ignore[arg-type]
+            EventType.CANDLE_CLOSE,
+            self._default_candle_close_handler,  # type: ignore[arg-type]
         )
 
     # Scheduler delegation methods
@@ -86,7 +87,9 @@ class MarketDataService:
         return await self.scheduler.get_status()
 
     # Event system delegation
-    def register_event_handler(self, event_type: EventType, handler: Any, interval: Optional[str] = None) -> None:
+    def register_event_handler(
+        self, event_type: EventType, handler: Any, interval: Optional[str] = None
+    ) -> None:
         """Register an event handler."""
         self.event_manager.register_handler(event_type, handler, interval)
 
@@ -232,10 +235,18 @@ class MarketDataService:
                             "close": latest_candle[4],
                             "volume": latest_candle[5],
                             "close_time": latest_candle[6],
-                            "quote_asset_volume": latest_candle[7] if len(latest_candle) > 7 else None,
-                            "number_of_trades": latest_candle[8] if len(latest_candle) > 8 else None,
-                            "taker_buy_base_asset_volume": latest_candle[9] if len(latest_candle) > 9 else None,
-                            "taker_buy_quote_asset_volume": latest_candle[10] if len(latest_candle) > 10 else None,
+                            "quote_asset_volume": latest_candle[7]
+                            if len(latest_candle) > 7
+                            else None,
+                            "number_of_trades": latest_candle[8]
+                            if len(latest_candle) > 8
+                            else None,
+                            "taker_buy_base_asset_volume": latest_candle[9]
+                            if len(latest_candle) > 9
+                            else None,
+                            "taker_buy_quote_asset_volume": latest_candle[10]
+                            if len(latest_candle) > 10
+                            else None,
                         }
 
                         # Trigger event handlers

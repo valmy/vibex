@@ -119,9 +119,7 @@ async def update_diary_entry(
 
 
 @router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_diary_entry(
-    entry_id: int, db: Annotated[AsyncSession, Depends(get_db)]
-) -> None:
+async def delete_diary_entry(entry_id: int, db: Annotated[AsyncSession, Depends(get_db)]) -> None:
     """Delete a diary entry."""
     try:
         result = await db.execute(select(DiaryEntry).where(DiaryEntry.id == entry_id))

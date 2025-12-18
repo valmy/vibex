@@ -13,8 +13,8 @@ from pathlib import Path
 # Add the project root to the Python path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from app.core.config import settings
-from app.services.market_data_service import CandleCloseEvent, EventType, MarketDataService
+from app.core.config import config as settings
+from app.services.market_data import CandleCloseEvent, EventType, MarketDataService
 
 # Configure logging
 logging.basicConfig(
@@ -34,7 +34,7 @@ async def candle_close_handler(event: CandleCloseEvent) -> None:
         f"Candle closed - Symbol: {event.symbol}, "
         f"Interval: {event.interval}, "
         f"Close Time: {event.close_time}, "
-        f"Close Price: {event.candle[4]}"
+        f"Close Price: {event.candle['close']}"
     )
 
 
@@ -46,13 +46,8 @@ async def main() -> None:
 
     try:
         # Initialize the MarketDataService with test configuration
-        market_data_service = MarketDataService(
-            interval=settings.INTERVAL,
-            long_interval=settings.LONG_INTERVAL,
-            symbols=settings.SYMBOLS,
-            max_retries=3,
-            retry_delay=1,
-        )
+        # MarketDataService uses global config, so we don't pass args
+        market_data_service = MarketDataService()
 
         # Register event handlers for both intervals
         market_data_service.register_event_handler(

@@ -6,15 +6,26 @@ Tracks and analyzes strategy performance metrics, comparisons, and alerts.
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from ..models.decision import Decision, DecisionResult
-from ..models.strategy import Strategy, StrategyAssignment, StrategyPerformance as StrategyPerformanceModel
-from ..schemas.trading_decision import StrategyComparison, StrategyPerformance as StrategyPerformanceSchema
+from ..models.strategy import (
+    Strategy,
+    StrategyAssignment,
+)
+from ..models.strategy import (
+    StrategyPerformance as StrategyPerformanceModel,
+)
+from ..schemas.trading_decision import (
+    StrategyComparison,
+)
+from ..schemas.trading_decision import (
+    StrategyPerformance as StrategyPerformanceSchema,
+)
 
 
 @dataclass
@@ -94,7 +105,9 @@ class StrategyPerformanceModelTracker:
 
         if existing_perf:
             # Update existing record
-            await self._update_performance_record(existing_perf, metrics, [tuple(row) for row in decision_results])
+            await self._update_performance_record(
+                existing_perf, metrics, [tuple(row) for row in decision_results]
+            )
             performance = existing_perf
         else:
             # Create new record
@@ -251,7 +264,9 @@ class StrategyPerformanceModelTracker:
         end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=lookback_days)
 
-        query = select(StrategyPerformanceModel).where(StrategyPerformanceModel.period_end >= start_date)
+        query = select(StrategyPerformanceModel).where(
+            StrategyPerformanceModel.period_end >= start_date
+        )
 
         if account_id:
             query = query.where(StrategyPerformanceModel.account_id == account_id)
@@ -336,7 +351,9 @@ class StrategyPerformanceModelTracker:
 
                 # Update per-account performance
                 for account_id in account_ids:
-                    await self.update_strategy_performance(int(strategy.id), account_id, period_days)
+                    await self.update_strategy_performance(
+                        int(strategy.id), account_id, period_days
+                    )
                     updated_count += 1
 
             except Exception as e:
@@ -498,7 +515,10 @@ class StrategyPerformanceModelTracker:
         return performance
 
     async def _update_performance_record(
-        self, performance: StrategyPerformanceModel, metrics: Dict[str, Any], decision_results: List[Any]
+        self,
+        performance: StrategyPerformanceModel,
+        metrics: Dict[str, Any],
+        decision_results: List[Any],
     ) -> None:
         """Update existing performance record."""
 
@@ -572,7 +592,9 @@ class StrategyPerformanceModelTracker:
 
         return rankings
 
-    def _calculate_ranking_score(self, performance: StrategyPerformanceModel, criteria: str) -> float:
+    def _calculate_ranking_score(
+        self, performance: StrategyPerformanceModel, criteria: str
+    ) -> float:
         """Calculate ranking score based on criteria."""
 
         if criteria == "total_pnl":

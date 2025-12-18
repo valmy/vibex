@@ -312,9 +312,9 @@ class TestLLMDecisionEngineE2E:
 
             first_decision = result.decision.decisions[0]
             assert hasattr(first_decision, "action"), "Asset decision missing 'action' attribute"
-            assert hasattr(
-                first_decision, "allocation_usd"
-            ), "Asset decision missing 'allocation_usd' attribute"
+            assert hasattr(first_decision, "allocation_usd"), (
+                "Asset decision missing 'allocation_usd' attribute"
+            )
 
             logger.info(
                 f"✓ Received decision from LLM: {len(result.decision.decisions)} asset decisions, "
@@ -578,9 +578,9 @@ class TestLLMDecisionEngineE2E:
 
             first_decision = result.decision.decisions[0]
             assert hasattr(first_decision, "action"), "Asset decision missing 'action' attribute"
-            assert hasattr(
-                first_decision, "allocation_usd"
-            ), "Asset decision missing 'allocation_usd' attribute"
+            assert hasattr(first_decision, "allocation_usd"), (
+                "Asset decision missing 'allocation_usd' attribute"
+            )
 
             logger.info(
                 f"Received decision from LLM: {len(result.decision.decisions)} asset decisions, "
@@ -604,9 +604,9 @@ class TestLLMDecisionEngineE2E:
                     "adjust_orders",
                 ], f"Invalid action: {asset_decision.action}"
                 if asset_decision.action in ["buy", "sell"]:
-                    assert (
-                        asset_decision.allocation_usd > 0
-                    ), "Allocation should be positive for buy/sell actions"
+                    assert asset_decision.allocation_usd > 0, (
+                        "Allocation should be positive for buy/sell actions"
+                    )
 
         except Exception as e:
             logger.error(f"LLM integration test failed: {str(e)}")
@@ -689,9 +689,9 @@ class TestLLMDecisionEngineE2E:
         else:
             # If actions differ, confidence should be relatively low (indicating uncertainty)
             avg_confidence = sum(confidences) / len(confidences)
-            assert (
-                avg_confidence < 80
-            ), f"High confidence ({avg_confidence}%) with inconsistent actions: {actions}"
+            assert avg_confidence < 80, (
+                f"High confidence ({avg_confidence}%) with inconsistent actions: {actions}"
+            )
             logger.info(f"Acceptable inconsistency with low confidence: {avg_confidence}%")
 
     @pytest.mark.asyncio
@@ -738,25 +738,25 @@ class TestLLMDecisionEngineE2E:
             indicators_calculated = sum(
                 [has_ema_20, has_ema_50, has_rsi, has_macd, has_bb, has_atr]
             )
-            assert (
-                indicators_calculated >= 2
-            ), f"At least 2 indicators should be calculated, got {indicators_calculated}"
+            assert indicators_calculated >= 2, (
+                f"At least 2 indicators should be calculated, got {indicators_calculated}"
+            )
 
             # Validate indicator values are reasonable
             if has_ema_20:
-                assert (
-                    indicators_result.ema_20[-1] > 0
-                ), f"EMA20 should be positive, got {indicators_result.ema_20[-1]}"
+                assert indicators_result.ema_20[-1] > 0, (
+                    f"EMA20 should be positive, got {indicators_result.ema_20[-1]}"
+                )
 
             if has_rsi:
-                assert (
-                    0 <= indicators_result.rsi[-1] <= 100
-                ), f"RSI should be 0-100, got {indicators_result.rsi[-1]}"
+                assert 0 <= indicators_result.rsi[-1] <= 100, (
+                    f"RSI should be 0-100, got {indicators_result.rsi[-1]}"
+                )
 
             if has_atr:
-                assert (
-                    indicators_result.atr[-1] >= 0
-                ), f"ATR should be non-negative, got {indicators_result.atr[-1]}"
+                assert indicators_result.atr[-1] >= 0, (
+                    f"ATR should be non-negative, got {indicators_result.atr[-1]}"
+                )
 
             # Log the complete technical analysis data
             logger.info(

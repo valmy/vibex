@@ -97,9 +97,9 @@ class TestContextBuilderE2E:
         for field in numeric_indicators:
             val = getattr(indicators_set, field)
             if val is not None:
-                assert isinstance(val, list) and all(
-                    isinstance(e, (int, float)) for e in val
-                ), f"{field.upper()} must be a list of numbers"
+                assert isinstance(val, list) and all(isinstance(e, (int, float)) for e in val), (
+                    f"{field.upper()} must be a list of numbers"
+                )
 
         if indicators_set.atr is not None:
             assert isinstance(indicators_set.atr, list) and all(
@@ -334,9 +334,9 @@ class TestContextBuilderE2E:
                         or getattr(indicators_long, field, None) is not None
                         for field in indicator_fields
                     )
-                    assert (
-                        has_indicators
-                    ), f"Should have at least some technical indicators for {symbol}"
+                    assert has_indicators, (
+                        f"Should have at least some technical indicators for {symbol}"
+                    )
 
             logger.info(
                 f"Successfully built multi-asset context for {len(available_assets)} assets"

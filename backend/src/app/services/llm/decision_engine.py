@@ -334,7 +334,12 @@ class DecisionEngine:
         return timeframes
 
     async def _build_context(
-        self, symbols: Optional[List[str]], account_id: int, timeframes: List[str], force_refresh: bool, strategy_override: Optional[str]
+        self,
+        symbols: Optional[List[str]],
+        account_id: int,
+        timeframes: List[str],
+        force_refresh: bool,
+        strategy_override: Optional[str],
     ) -> TradingContext:
         context = await self._build_multi_asset_context_with_recovery(
             symbols or [], account_id, timeframes, force_refresh
@@ -348,7 +353,13 @@ class DecisionEngine:
             context.account_state.active_strategy = strategy
         return context
 
-    async def _generate_decision(self, symbols: List[str], context: TradingContext, strategy_override: Optional[str], ab_test_name: Optional[str]) -> Any:
+    async def _generate_decision(
+        self,
+        symbols: List[str],
+        context: TradingContext,
+        strategy_override: Optional[str],
+        ab_test_name: Optional[str],
+    ) -> Any:
         return await self.llm_service.generate_trading_decision(
             symbols=symbols,
             context=context,
@@ -356,7 +367,9 @@ class DecisionEngine:
             ab_test_name=ab_test_name,
         )
 
-    async def _validate_and_handle_fallback(self, decision_result: Any, context: TradingContext, symbols: List[str], account_id: int) -> Any:
+    async def _validate_and_handle_fallback(
+        self, decision_result: Any, context: TradingContext, symbols: List[str], account_id: int
+    ) -> Any:
         if decision_result.validation_passed:
             validation_result = await self.decision_validator.validate_decision(
                 decision_result.decision, context
@@ -662,7 +675,11 @@ class DecisionEngine:
                     # Multi-asset decision
                     from ...schemas.trading_decision import AssetDecision, TradingDecision
 
-                    asset_decisions = [AssetDecision(**ad) for ad in decision.asset_decisions] if decision.asset_decisions else []
+                    asset_decisions = (
+                        [AssetDecision(**ad) for ad in decision.asset_decisions]
+                        if decision.asset_decisions
+                        else []
+                    )
 
                     # If symbol filter is provided, filter asset decisions
                     if symbol:
@@ -716,7 +733,7 @@ class DecisionEngine:
                     recent_trades={},
                     risk_metrics=None,  # type: ignore[arg-type]
                     timestamp=decision.timestamp,
-                    errors=[]
+                    errors=[],
                 )
 
                 decision_result = DecisionResult(

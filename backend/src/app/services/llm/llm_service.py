@@ -512,7 +512,7 @@ Provide:
             UsageMetrics summary
         """
         tracker_metrics = self.metrics_tracker.get_usage_metrics(timeframe_hours)
-        
+
         requests_per_hour = (
             tracker_metrics.total_calls / timeframe_hours if timeframe_hours > 0 else 0
         )
@@ -572,7 +572,9 @@ Provide:
         """
         return self.ab_test_manager.get_model_for_decision(test_name, account_id)
 
-    def end_ab_test(self, test_name: str) -> Any:  # Return type should match what ab_test_manager.end_ab_test returns
+    def end_ab_test(
+        self, test_name: str
+    ) -> Any:  # Return type should match what ab_test_manager.end_ab_test returns
         """End an A/B test and get results.
 
         Args:
@@ -981,7 +983,7 @@ Rules:
         # Try to find JSON in the text
         import re
 
-        json_pattern = r"\{{[^{{}}]* (?:\{{[^{{}}]*\}}[^{{}}]*)*\}}"
+        json_pattern = r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}"
         matches = re.findall(json_pattern, text, re.DOTALL)
 
         for match in matches:

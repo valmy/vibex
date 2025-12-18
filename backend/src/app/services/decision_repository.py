@@ -41,17 +41,23 @@ class DecisionRepository:
         """Save a trading decision to the database."""
 
         # Handle multi-asset decisions by storing the list of asset decisions
-        asset_decisions_list = [ad.dict() for ad in decision.decisions] if hasattr(decision, 'decisions') and decision.decisions else None
+        asset_decisions_list = (
+            [ad.dict() for ad in decision.decisions]
+            if hasattr(decision, "decisions") and decision.decisions
+            else None
+        )
 
         # For backward compatibility, extract first asset decision for single-asset fields
-        first_asset_decision = decision.decisions[0] if hasattr(decision, 'decisions') and decision.decisions else None
+        first_asset_decision = (
+            decision.decisions[0] if hasattr(decision, "decisions") and decision.decisions else None
+        )
 
         # For multi-asset decisions, we'll use the first asset's adjustments as the primary ones
         # or use the first non-None adjustment we find
         position_adjustment_dict = None
         order_adjustment_dict = None
 
-        if hasattr(decision, 'decisions') and decision.decisions:
+        if hasattr(decision, "decisions") and decision.decisions:
             # Find first asset with position adjustment
             for asset_dec in decision.decisions:
                 if asset_dec.position_adjustment:
@@ -67,9 +73,15 @@ class DecisionRepository:
             account_id=account_id,
             strategy_id=strategy_id,
             asset_decisions=asset_decisions_list,
-            portfolio_rationale=decision.portfolio_rationale if hasattr(decision, 'portfolio_rationale') else None,
-            total_allocation_usd=decision.total_allocation_usd if hasattr(decision, 'total_allocation_usd') else 0.0,
-            portfolio_risk_level=decision.portfolio_risk_level if hasattr(decision, 'portfolio_risk_level') else None,
+            portfolio_rationale=decision.portfolio_rationale
+            if hasattr(decision, "portfolio_rationale")
+            else None,
+            total_allocation_usd=decision.total_allocation_usd
+            if hasattr(decision, "total_allocation_usd")
+            else 0.0,
+            portfolio_risk_level=decision.portfolio_risk_level
+            if hasattr(decision, "portfolio_risk_level")
+            else None,
             # Legacy single-asset fields (from first decision if available)
             symbol=first_asset_decision.asset if first_asset_decision else None,
             action=first_asset_decision.action if first_asset_decision else None,
@@ -80,7 +92,7 @@ class DecisionRepository:
             rationale=first_asset_decision.rationale if first_asset_decision else None,
             confidence=first_asset_decision.confidence if first_asset_decision else None,
             risk_level=first_asset_decision.risk_level if first_asset_decision else None,
-            timestamp=decision.timestamp if hasattr(decision, 'timestamp') else datetime.utcnow(),
+            timestamp=decision.timestamp if hasattr(decision, "timestamp") else datetime.utcnow(),
             position_adjustment=position_adjustment_dict,
             order_adjustment=order_adjustment_dict,
             model_used=model_used,
@@ -300,8 +312,17 @@ class DecisionRepository:
                 action_counts[action] = action_counts.get(action, 0) + 1
 
         # Averages
-        avg_confidence = sum(d.confidence for d in decisions if d.confidence is not None) / total_decisions if total_decisions > 0 else 0.0
-        avg_processing_time = sum(d.processing_time_ms for d in decisions if d.processing_time_ms is not None) / total_decisions if total_decisions > 0 else 0.0
+        avg_confidence = (
+            sum(d.confidence for d in decisions if d.confidence is not None) / total_decisions
+            if total_decisions > 0
+            else 0.0
+        )
+        avg_processing_time = (
+            sum(d.processing_time_ms for d in decisions if d.processing_time_ms is not None)
+            / total_decisions
+            if total_decisions > 0
+            else 0.0
+        )
         total_api_cost = sum(d.api_cost or 0 for d in decisions)
 
         return {
@@ -327,7 +348,9 @@ class DecisionRepository:
         self._calculate_strategy_averages(strategy_performance)
         return strategy_performance
 
-    async def _fetch_decision_results(self, account_id: int, start_date: Optional[datetime], end_date: Optional[datetime]) -> List[Any]:
+    async def _fetch_decision_results(
+        self, account_id: int, start_date: Optional[datetime], end_date: Optional[datetime]
+    ) -> List[Any]:
         query = (
             select(Decision, DecisionResult)
             .outerjoin(DecisionResult, Decision.id == DecisionResult.decision_id)
@@ -400,7 +423,9 @@ class DecisionRepository:
             await self.db.delete(result)
 
         # Then delete old decisions
-        query_result = await self.db.execute(select(Decision).where(Decision.timestamp < cutoff_date))
+        query_result = await self.db.execute(
+            select(Decision).where(Decision.timestamp < cutoff_date)
+        )
         old_decisions = query_result.scalars().all()
 
         deleted_count = len(old_decisions)

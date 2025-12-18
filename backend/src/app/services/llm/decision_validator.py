@@ -814,10 +814,7 @@ class DecisionValidator:
             "avg_validation_time_ms": avg_validation_time,
             "validation_errors": dict(validation_errors),
             "last_reset": last_reset,
-            "uptime_hours": (
-                datetime.now(timezone.utc) - last_reset
-            ).total_seconds()
-            / 3600,
+            "uptime_hours": (datetime.now(timezone.utc) - last_reset).total_seconds() / 3600,
         }
 
     async def reset_metrics(self) -> None:
