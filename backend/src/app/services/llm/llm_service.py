@@ -25,7 +25,13 @@ from ...schemas.trading_decision import (
 )
 from .ab_testing import get_ab_test_manager
 from .circuit_breaker import CircuitBreaker
-from .llm_exceptions import InsufficientDataError, LLMAPIError, ModelSwitchError, ValidationError
+from .llm_exceptions import (
+    AuthenticationError,
+    InsufficientDataError,
+    LLMAPIError,
+    ModelSwitchError,
+    ValidationError,
+)
 from .llm_metrics import get_metrics_tracker
 
 logger = get_logger(__name__)
@@ -1121,6 +1127,60 @@ Generate an aggressive trading decision.
         except Exception as e:
             logger.error(f"Model connection test failed: {e}")
             return False
+
+    async def validate_authentication(self) -> bool:
+        """Validate authentication with LLM server.
+
+        Returns:
+            True if authentication successful
+
+        Raises:
+            AuthenticationError: When authentication fails with detailed error information
+        """
+        import openai
+
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+        if not self.api_key or self.api_key.strip() == "":
+            error_msg = (
+                f"Authentication failed: No API key configured. "
+                f"Expected OPENROUTER_API_KEY in environment, got empty string. "
+                f"Timestamp: {timestamp}"
+            )
+            logger.error(error_msg)
+            raise AuthenticationError(error_msg)
+
+        try:
+            # Use a lightweight API call to check authentication.
+            # A successful call to `models.list()` confirms the API key is valid.
+            await self.client.models.list()
+            logger.info("LLM server authentication successful")
+            return True
+        except openai.AuthenticationError as e:
+            error_msg = (
+                f"Authentication failed: LLM server rejected credentials. "
+                f"Error: {str(e)}. Server: {self.base_url}. "
+                f"Timestamp: {timestamp}"
+            )
+            logger.error(error_msg)
+            raise AuthenticationError(error_msg) from e
+        except openai.APIConnectionError as e:
+            error_msg = (
+                f"Authentication failed: Could not connect to LLM server. "
+                f"Error: {str(e)}. Server: {self.base_url}. "
+                f"Timestamp: {timestamp}"
+            )
+            logger.error(error_msg)
+            raise AuthenticationError(error_msg) from e
+        except Exception as e:
+            # Catch other unexpected exceptions during authentication validation.
+            error_msg = (
+                f"Authentication validation failed with an unexpected error: {str(e)}. "
+                f"Server: {self.base_url}, Model: {self.model}. "
+                f"Timestamp: {timestamp}"
+            )
+            logger.error(error_msg)
+            raise AuthenticationError(error_msg) from e
 
 
 # Global service instance

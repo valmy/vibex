@@ -45,3 +45,9 @@ class CircuitBreakerError(DecisionEngineError):
     """Circuit breaker activation errors."""
 
     pass
+
+
+class AuthenticationError(DecisionEngineError):
+    """Authentication failures with LLM server."""
+
+    pass
