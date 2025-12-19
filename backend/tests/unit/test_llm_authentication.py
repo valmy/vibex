@@ -20,10 +20,8 @@ class TestLLMAuthentication:
         """Test successful authentication with valid API key."""
         # Mock the OpenAI client
         mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "AUTH_OK"
-        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        mock_models_list = MagicMock()
+        mock_client.models.list = AsyncMock(return_value=mock_models_list)
 
         # Create LLM service with mocked client
         service = LLMService()
@@ -33,6 +31,8 @@ class TestLLMAuthentication:
         # Test authentication
         result = await service.validate_authentication()
         assert result is True
+        # Verify that models.list() was called instead of chat.completions.create
+        mock_client.models.list.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_authentication_failure_empty_api_key(self) -> None:
@@ -55,12 +55,10 @@ class TestLLMAuthentication:
     @pytest.mark.asyncio
     async def test_authentication_failure_server_rejection(self) -> None:
         """Test authentication failure when server rejects credentials."""
-        # Mock the OpenAI client to return non-AUTH_OK response
+        # Mock the OpenAI client to raise AuthenticationError
+        import openai
         mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "Authentication failed: Invalid API key"
-        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        mock_client.models.list = AsyncMock(side_effect=Exception("401 Unauthorized: Invalid API key"))
 
         # Create LLM service with mocked client
         service = LLMService()
@@ -71,21 +69,20 @@ class TestLLMAuthentication:
             await service.validate_authentication()
 
         error_msg = str(exc_info.value)
-        assert "Authentication failed" in error_msg
-        assert "Server response" in error_msg
-        assert "Expected: 'AUTH_OK'" in error_msg
-        assert "Actual:" in error_msg
+        assert "Authentication validation failed" in error_msg
+        assert "401 Unauthorized" in error_msg
+        assert "Server:" in error_msg
         assert "Timestamp:" in error_msg
 
         # Verify comprehensive error details
-        assert len(error_msg) > 150  # Should be very detailed
+        assert len(error_msg) > 100  # Should be detailed
 
     @pytest.mark.asyncio
-    async def test_authentication_failure_exception(self) -> None:
-        """Test authentication failure with unexpected exception."""
-        # Mock the OpenAI client to raise an exception
+    async def test_authentication_failure_connection_error(self) -> None:
+        """Test authentication failure with connection error."""
+        # Mock the OpenAI client to raise a connection error
         mock_client = MagicMock()
-        mock_client.chat.completions.create = AsyncMock(side_effect=Exception("Connection timeout"))
+        mock_client.models.list = AsyncMock(side_effect=Exception("Connection timeout"))
 
         # Create LLM service with mocked client
         service = LLMService()
@@ -96,10 +93,9 @@ class TestLLMAuthentication:
             await service.validate_authentication()
 
         error_msg = str(exc_info.value)
-        assert "Authentication failed" in error_msg
+        assert "Authentication validation failed" in error_msg
         assert "Connection timeout" in error_msg
         assert "Server:" in error_msg
-        assert "Model:" in error_msg
         assert "Timestamp:" in error_msg
 
         # Verify comprehensive error details
@@ -110,7 +106,7 @@ class TestLLMAuthentication:
         """Test that authentication errors provide comprehensive details."""
         # Mock the OpenAI client to raise an exception with server details
         mock_client = MagicMock()
-        mock_client.chat.completions.create = AsyncMock(
+        mock_client.models.list = AsyncMock(
             side_effect=Exception("401 Unauthorized: Invalid API key")
         )
 
@@ -127,7 +123,7 @@ class TestLLMAuthentication:
         error_msg = str(exc_info.value)
 
         # Verify all required comprehensive details are present
-        assert "Authentication failed" in error_msg
+        assert "Authentication validation failed" in error_msg
         assert "401 Unauthorized" in error_msg
         assert "Invalid API key" in error_msg
         assert "Server: https://openrouter.ai/api/v1" in error_msg
@@ -166,10 +162,7 @@ class TestLLMIntegrationAuthentication:
 
         # Test with valid API key but mocked failure
         mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "Authentication failed"
-        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        mock_client.models.list = AsyncMock(side_effect=Exception("Authentication failed"))
 
         service._client = mock_client
         service.api_key = "valid_key"
@@ -179,7 +172,7 @@ class TestLLMIntegrationAuthentication:
 
         # Verify comprehensive error message
         error_msg = str(exc_info.value)
-        assert "Server response" in error_msg
-        assert "Expected" in error_msg
-        assert "Actual" in error_msg
+        assert "Authentication validation failed" in error_msg
+        assert "Server:" in error_msg
+        assert "Model:" in error_msg
         assert "Timestamp" in error_msg

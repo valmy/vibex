@@ -1137,50 +1137,47 @@ Generate an aggressive trading decision.
         Raises:
             AuthenticationError: When authentication fails with detailed error information
         """
-        try:
-            # Check if API key is configured
-            if not self.api_key or self.api_key.strip() == "":
-                error_msg = (
-                    f"Authentication failed: No API key configured. "
-                    f"Expected OPENROUTER_API_KEY in environment, got empty string. "
-                    f"Timestamp: {datetime.now(timezone.utc).isoformat()}"
-                )
-                logger.error(error_msg)
-                raise AuthenticationError(error_msg)
+        import openai
 
-            # Test authentication with a simple API call
-            test_prompt = "Authentication test - respond with 'AUTH_OK' if authenticated."
+        timestamp = datetime.now(timezone.utc).isoformat()
 
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": test_prompt}],
-                max_tokens=10,
-                temperature=0,
-            )
-
-            # Check if authentication was successful
-            response_content = response.choices[0].message.content.strip()
-            if "AUTH_OK" in response_content.upper():
-                logger.info("LLM server authentication successful")
-                return True
-            else:
-                # Authentication failed - provide comprehensive error details
-                error_msg = (
-                    f"Authentication failed: LLM server rejected credentials. "
-                    f"Server response: '{response_content}'. "
-                    f"Expected: 'AUTH_OK', Actual: '{response_content}'. "
-                    f"Timestamp: {datetime.now(timezone.utc).isoformat()}"
-                )
-                logger.error(error_msg)
-                raise AuthenticationError(error_msg)
-
-        except Exception as e:
-            # Provide comprehensive authentication failure details
+        if not self.api_key or self.api_key.strip() == "":
             error_msg = (
-                f"Authentication failed: {str(e)}. "
-                f"Server: {self.base_url}, "
-                f"Model: {self.model}. "
-                f"Timestamp: {datetime.now(timezone.utc).isoformat()}"
+                f"Authentication failed: No API key configured. "
+                f"Expected OPENROUTER_API_KEY in environment, got empty string. "
+                f"Timestamp: {timestamp}"
+            )
+            logger.error(error_msg)
+            raise AuthenticationError(error_msg)
+
+        try:
+            # Use a lightweight API call to check authentication.
+            # A successful call to `models.list()` confirms the API key is valid.
+            await self.client.models.list()
+            logger.info("LLM server authentication successful")
+            return True
+        except openai.AuthenticationError as e:
+            error_msg = (
+                f"Authentication failed: LLM server rejected credentials. "
+                f"Error: {str(e)}. Server: {self.base_url}. "
+                f"Timestamp: {timestamp}"
+            )
+            logger.error(error_msg)
+            raise AuthenticationError(error_msg) from e
+        except openai.APIConnectionError as e:
+            error_msg = (
+                f"Authentication failed: Could not connect to LLM server. "
+                f"Error: {str(e)}. Server: {self.base_url}. "
+                f"Timestamp: {timestamp}"
+            )
+            logger.error(error_msg)
+            raise AuthenticationError(error_msg) from e
+        except Exception as e:
+            # Catch other unexpected exceptions during authentication validation.
+            error_msg = (
+                f"Authentication validation failed with an unexpected error: {str(e)}. "
+                f"Server: {self.base_url}, Model: {self.model}. "
+                f"Timestamp: {timestamp}"
             )
             logger.error(error_msg)
             raise AuthenticationError(error_msg) from e

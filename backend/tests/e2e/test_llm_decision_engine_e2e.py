@@ -356,8 +356,6 @@ class TestLLMDecisionEngineE2E:
             pytest.fail("Strategy 'aggressive_perps' not found in database")
 
         # Use multiple assets as defined by the configuration
-        from app.core.config import config
-
         assets_str = getattr(config, "ASSETS", "BTC,ETH,SOL")  # Use the config value
         symbols = [f"{asset.strip()}USDT" for asset in assets_str.split(",")]
 
@@ -446,15 +444,19 @@ class TestLLMDecisionEngineE2E:
             assert stored_decision.asset_decisions is not None, "Asset decisions should be stored"
             assert len(stored_decision.asset_decisions) == len(result.decision.decisions), "All asset decisions should be stored"
 
-            # Validate each stored asset decision matches the result
-            for i, stored_asset_decision in enumerate(stored_decision.asset_decisions):
-                expected_asset_decision = result.decision.decisions[i]
-                assert stored_asset_decision["asset"] == expected_asset_decision.asset, f"Asset decision {i} should have correct asset"
-                assert stored_asset_decision["action"] == expected_asset_decision.action, f"Asset decision {i} should have correct action"
-                assert stored_asset_decision["allocation_usd"] == expected_asset_decision.allocation_usd, f"Asset decision {i} should have correct allocation"
-                assert stored_asset_decision["confidence"] == expected_asset_decision.confidence, f"Asset decision {i} should have correct confidence"
-                assert stored_asset_decision["risk_level"] == expected_asset_decision.risk_level, f"Asset decision {i} should have correct risk_level"
-                assert stored_asset_decision["rationale"] == expected_asset_decision.rationale, f"Asset decision {i} should have correct rationale"
+            # Validate each stored asset decision matches the result without relying on order
+            stored_asset_decisions_map = {d["asset"]: d for d in stored_decision.asset_decisions}
+            expected_asset_decisions_map = {d.asset: d for d in result.decision.decisions}
+
+            assert stored_asset_decisions_map.keys() == expected_asset_decisions_map.keys()
+
+            for asset, expected_asset_decision in expected_asset_decisions_map.items():
+                stored_asset_decision = stored_asset_decisions_map[asset]
+                assert stored_asset_decision["action"] == expected_asset_decision.action, f"Asset decision for {asset} should have correct action"
+                assert stored_asset_decision["allocation_usd"] == expected_asset_decision.allocation_usd, f"Asset decision for {asset} should have correct allocation"
+                assert stored_asset_decision["confidence"] == expected_asset_decision.confidence, f"Asset decision for {asset} should have correct confidence"
+                assert stored_asset_decision["risk_level"] == expected_asset_decision.risk_level, f"Asset decision for {asset} should have correct risk_level"
+                assert stored_asset_decision["rationale"] == expected_asset_decision.rationale, f"Asset decision for {asset} should have correct rationale"
 
             # Validate portfolio-level fields are stored
             assert stored_decision.portfolio_rationale == result.decision.portfolio_rationale, "Portfolio rationale should be stored"
