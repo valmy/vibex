@@ -31,7 +31,6 @@ from app.schemas.trading_decision import (
     TradingDecision,
 )
 from app.services import get_technical_analysis_service
-from app.services.llm.context_builder import ContextBuilderService
 from app.services.llm.decision_engine import get_decision_engine
 from app.services.llm.llm_service import LLMService
 from app.services.market_data.service import MarketDataService, get_market_data_service
@@ -271,59 +270,90 @@ class TestLLMDecisionEngineE2E:
         reason="Requires RUN_REAL_LLM_TESTS=1 environment variable to run real LLM API tests",
     )
     async def test_llm_integration_with_real_data(
-        self, db_session_factory, real_market_data, mocker
+        self, db_session_factory, real_market_data, setup_db_data, db_session: AsyncSession
     ):
-        """Test LLM integration with real market data and database.
+        """Test LLM integration with real market data and database persistence.
 
         This test verifies that we can connect to the LLM API and get a response
-        using real market data and database context. Account context is mocked
-        to avoid requiring a real trading account.
+        using real market data and real database context including account data.
+        It also explicitly tests that decisions are properly persisted to the database.
 
         Requires RUN_REAL_LLM_TESTS=1 environment variable to run.
         """
-        from app.schemas.trading_decision import (
-            AccountContext,
-            PerformanceMetrics,
-        )
-        from app.services.llm.llm_service import LLMService
+        from app.services.llm.decision_engine import get_decision_engine
+        from app.services.llm.strategy_manager import StrategyManager
+        from app.services.llm.llm_exceptions import AuthenticationError
+        from app.core.config import config
 
-        logger.info("Starting LLM integration test with real market data...")
+        logger.info("Starting LLM integration test with real market data and database persistence...")
 
-        # Initialize services - they get their dependencies from the DI container
-        context_builder = ContextBuilderService(session_factory=db_session_factory)
-        llm_service = LLMService()
+        # Check if .env.testing file contains a distinct API key configuration
+        logger.info("Checking API key configuration...")
+        api_key = config.OPENROUTER_API_KEY
+
+        if not api_key or api_key.strip() == "":
+            error_msg = (
+                f"Authentication failure: No API key configured in .env.testing file. "
+                f"Expected OPENROUTER_API_KEY, got empty string. "
+                f"Timestamp: {datetime.now(timezone.utc).isoformat()}"
+            )
+            logger.error(error_msg)
+            pytest.fail(error_msg)
+
+        logger.info(f"API key configuration found: {len(api_key) > 0} characters")
+
+        # Initialize decision engine with real dependencies
+        decision_engine = get_decision_engine(session_factory=db_session_factory)
+
+        # Attempt authentication with the LLM server using the configured credentials
+        try:
+            logger.info("Attempting LLM server authentication...")
+            auth_successful = await decision_engine.llm_service.validate_authentication()
+
+            if not auth_successful:
+                error_msg = (
+                    f"Authentication failed: LLM server rejected credentials. "
+                    f"Timestamp: {datetime.now(timezone.utc).isoformat()}"
+                )
+                logger.error(error_msg)
+                pytest.fail(error_msg)
+
+            logger.info("LLM server authentication successful")
+
+        except AuthenticationError as e:
+            # Provide comprehensive error message including server response details
+            error_msg = (
+                f"Authentication failed with comprehensive details:\n"
+                f"  - Error: {str(e)}\n"
+                f"  - Expected: Valid API key authentication\n"
+                f"  - Actual: Authentication rejected by LLM server\n"
+                f"  - Timestamp: {datetime.now(timezone.utc).isoformat()}\n"
+                f"  - Clear indication: AUTHENTICATION FAILURE - Test terminated"
+            )
+            logger.error(error_msg)
+
+            # Immediately terminate the test on authentication failure without proceeding
+            pytest.fail(error_msg)
+        except Exception as e:
+            # Handle other unexpected authentication errors
+            error_msg = (
+                f"Unexpected authentication error:\n"
+                f"  - Error: {str(e)}\n"
+                f"  - Type: {type(e).__name__}\n"
+                f"  - Timestamp: {datetime.now(timezone.utc).isoformat()}\n"
+                f"  - Clear indication: AUTHENTICATION FAILURE - Test terminated"
+            )
+            logger.error(error_msg)
+
+            # Immediately terminate the test on authentication failure without proceeding
+            pytest.fail(error_msg)
 
         # Get the actual trading strategy from the database
-        from app.services.llm.strategy_manager import StrategyManager
-
         strategy_manager = StrategyManager(session_factory=db_session_factory)
-        mock_strategy = await strategy_manager.get_strategy("aggressive_perps")
+        strategy = await strategy_manager.get_strategy("aggressive_perps")
 
-        if mock_strategy is None:
+        if strategy is None:
             pytest.fail("Strategy 'aggressive_perps' not found in database")
-
-        # Mock the account context to avoid requiring a real trading account
-        mock_account_context = AccountContext(
-            account_id=999999,
-            balance_usd=10000.0,
-            available_balance=8000.0,
-            total_pnl=0.0,
-            open_positions=[],
-            recent_performance=PerformanceMetrics(
-                total_pnl=0.0,
-                win_rate=0.0,
-                avg_win=0.0,
-                avg_loss=0.0,
-                max_drawdown=0.0,
-                sharpe_ratio=0.0,
-            ),
-            risk_exposure=0.0,
-            max_position_size=2000.0,
-            active_strategy=mock_strategy,
-        )
-
-        # Mock the get_account_context method
-        context_builder.get_account_context = mocker.AsyncMock(return_value=mock_account_context)
 
         # Use multiple assets as defined by the configuration
         from app.core.config import config
@@ -331,31 +361,19 @@ class TestLLMDecisionEngineE2E:
         assets_str = getattr(config, "ASSETS", "BTC,ETH,SOL")  # Use the config value
         symbols = [f"{asset.strip()}USDT" for asset in assets_str.split(",")]
 
-        logger.info(f"Building trading context for multi-assets: {symbols}")
-
-        # Build the complete trading context with real market data for all assets
-        logger.info("Building trading context with real market data...")
-        context = await context_builder.build_trading_context(
-            symbols=symbols,
-            account_id=999999,
-            timeframes=["5m", "4h"],  # Required timeframes parameter
-            force_refresh=True,  # Force refresh to bypass cache and availability checks
-        )
-
-        # Validate context was built
-        assert context is not None, "Failed to build trading context"
-        assert symbols[0] in context.symbols
-        assert context.market_data is not None
-        assert context.account_state is not None
-
-        # Test LLM service with the context
-        logger.info("Sending request to real LLM API...")
+        logger.info(f"Testing decision engine with real LLM and multi-assets: {symbols}")
 
         try:
-            result = await llm_service.generate_trading_decision(symbols=symbols, context=context)
+            # Use decision_engine.make_trading_decision instead of calling LLM service directly
+            result = await decision_engine.make_trading_decision(
+                account_id=999999,
+                symbols=symbols,
+                strategy_override="aggressive_perps",
+                force_refresh=True
+            )
 
             # Basic validation of the response - now multi-asset
-            assert result is not None, "No result returned from LLM service"
+            assert result is not None, "No result returned from decision engine"
             assert hasattr(result, "decision"), "Response missing 'decision' attribute"
             assert hasattr(result.decision, "decisions"), "Decision missing 'decisions' attribute"
             assert len(result.decision.decisions) > 0, "Should have at least one asset decision"
@@ -401,11 +419,67 @@ class TestLLMDecisionEngineE2E:
 
             logger.info("✓ LLM integration test passed successfully!")
 
-            # Verify persistence in database if we are using the decision engine
-            # In this test we are using llm_service directly, but let's check if we want to add a test that uses decision engine with real LLM
+            # ========================================================================
+            # COMPREHENSIVE DATABASE PERSISTENCE TESTING
+            # ========================================================================
+            logger.info("Testing database persistence of decision...")
+
+            # Verify decision is persisted to the database
+            from sqlalchemy import select
+
+            from app.models.decision import Decision
+
+            db_result = await db_session.execute(
+                select(Decision).where(Decision.account_id == 999999).order_by(Decision.id.desc())
+            )
+            stored_decision = db_result.scalars().first()
+            assert stored_decision is not None, "Decision should be persisted to database"
+
+            # Validate stored decision attributes
+            assert stored_decision.account_id == 999999, "Stored decision should have correct account_id"
+            assert stored_decision.strategy_id == "aggressive_perps", "Stored decision should have correct strategy_id"
+            assert stored_decision.model_used == result.model_used, "Stored decision should have correct model_used"
+            assert stored_decision.processing_time_ms == result.processing_time_ms, "Stored decision should have correct processing_time_ms"
+            assert stored_decision.validation_passed == result.validation_passed, "Stored decision should have correct validation_passed"
+
+            # Validate asset decisions are properly stored
+            assert stored_decision.asset_decisions is not None, "Asset decisions should be stored"
+            assert len(stored_decision.asset_decisions) == len(result.decision.decisions), "All asset decisions should be stored"
+
+            # Validate each stored asset decision matches the result
+            for i, stored_asset_decision in enumerate(stored_decision.asset_decisions):
+                expected_asset_decision = result.decision.decisions[i]
+                assert stored_asset_decision["asset"] == expected_asset_decision.asset, f"Asset decision {i} should have correct asset"
+                assert stored_asset_decision["action"] == expected_asset_decision.action, f"Asset decision {i} should have correct action"
+                assert stored_asset_decision["allocation_usd"] == expected_asset_decision.allocation_usd, f"Asset decision {i} should have correct allocation"
+                assert stored_asset_decision["confidence"] == expected_asset_decision.confidence, f"Asset decision {i} should have correct confidence"
+                assert stored_asset_decision["risk_level"] == expected_asset_decision.risk_level, f"Asset decision {i} should have correct risk_level"
+                assert stored_asset_decision["rationale"] == expected_asset_decision.rationale, f"Asset decision {i} should have correct rationale"
+
+            # Validate portfolio-level fields are stored
+            assert stored_decision.portfolio_rationale == result.decision.portfolio_rationale, "Portfolio rationale should be stored"
+            assert stored_decision.total_allocation_usd == result.decision.total_allocation_usd, "Total allocation should be stored"
+            assert stored_decision.portfolio_risk_level == result.decision.portfolio_risk_level, "Portfolio risk level should be stored"
+
+            # Validate validation fields are stored
+            assert stored_decision.validation_passed == result.validation_passed, "Validation passed flag should be stored"
+            assert stored_decision.validation_errors == (result.validation_errors or []), "Validation errors should be stored"
+
+            # Validate context data is stored
+            assert stored_decision.market_context is not None, "Market context should be stored"
+            assert stored_decision.account_context is not None, "Account context should be stored"
+            assert stored_decision.risk_metrics is not None, "Risk metrics should be stored"
+
+            # Validate database state consistency
+            assert not stored_decision.executed, "New decision should not be marked as executed"
+            assert stored_decision.executed_at is None, "New decision should not have execution time"
+            assert stored_decision.execution_price is None, "New decision should not have execution price"
+
+            logger.info("✓ Database persistence test passed successfully!")
+            logger.info(f"✓ Decision ID {stored_decision.id} persisted with {len(stored_decision.asset_decisions)} asset decisions")
 
         except Exception as e:
-            logger.error(f"LLM integration test failed: {str(e)}")
+            logger.error(f"LLM integration and persistence test failed: {str(e)}")
             if hasattr(e, "response") and hasattr(e.response, "text"):
                 logger.error(f"Response content: {e.response.text}")
             raise

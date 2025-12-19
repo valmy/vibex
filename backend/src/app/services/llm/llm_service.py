@@ -25,7 +25,13 @@ from ...schemas.trading_decision import (
 )
 from .ab_testing import get_ab_test_manager
 from .circuit_breaker import CircuitBreaker
-from .llm_exceptions import InsufficientDataError, LLMAPIError, ModelSwitchError, ValidationError
+from .llm_exceptions import (
+    AuthenticationError,
+    InsufficientDataError,
+    LLMAPIError,
+    ModelSwitchError,
+    ValidationError,
+)
 from .llm_metrics import get_metrics_tracker
 
 logger = get_logger(__name__)
@@ -1121,6 +1127,63 @@ Generate an aggressive trading decision.
         except Exception as e:
             logger.error(f"Model connection test failed: {e}")
             return False
+
+    async def validate_authentication(self) -> bool:
+        """Validate authentication with LLM server.
+
+        Returns:
+            True if authentication successful
+
+        Raises:
+            AuthenticationError: When authentication fails with detailed error information
+        """
+        try:
+            # Check if API key is configured
+            if not self.api_key or self.api_key.strip() == "":
+                error_msg = (
+                    f"Authentication failed: No API key configured. "
+                    f"Expected OPENROUTER_API_KEY in environment, got empty string. "
+                    f"Timestamp: {datetime.now(timezone.utc).isoformat()}"
+                )
+                logger.error(error_msg)
+                raise AuthenticationError(error_msg)
+
+            # Test authentication with a simple API call
+            test_prompt = "Authentication test - respond with 'AUTH_OK' if authenticated."
+
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": test_prompt}],
+                max_tokens=10,
+                temperature=0,
+            )
+
+            # Check if authentication was successful
+            response_content = response.choices[0].message.content.strip()
+            if "AUTH_OK" in response_content.upper():
+                logger.info("LLM server authentication successful")
+                return True
+            else:
+                # Authentication failed - provide comprehensive error details
+                error_msg = (
+                    f"Authentication failed: LLM server rejected credentials. "
+                    f"Server response: '{response_content}'. "
+                    f"Expected: 'AUTH_OK', Actual: '{response_content}'. "
+                    f"Timestamp: {datetime.now(timezone.utc).isoformat()}"
+                )
+                logger.error(error_msg)
+                raise AuthenticationError(error_msg)
+
+        except Exception as e:
+            # Provide comprehensive authentication failure details
+            error_msg = (
+                f"Authentication failed: {str(e)}. "
+                f"Server: {self.base_url}, "
+                f"Model: {self.model}. "
+                f"Timestamp: {datetime.now(timezone.utc).isoformat()}"
+            )
+            logger.error(error_msg)
+            raise AuthenticationError(error_msg) from e
 
 
 # Global service instance
