@@ -108,9 +108,7 @@ class DecisionValidator:
             return symbol  # Return as-is if too short
 
     def _calculate_stop_loss_percentage(
-        self,
-        asset_decision: AssetDecision,
-        current_price: float
+        self, asset_decision: AssetDecision, current_price: float
     ) -> Optional[float]:
         """
         Calculate stop loss percentage from sl_price.

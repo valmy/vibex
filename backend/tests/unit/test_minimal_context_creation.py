@@ -5,10 +5,10 @@ Validates that all helper methods in DecisionEngine create valid Pydantic models
 that satisfy all schema constraints.
 """
 
-import pytest
 from datetime import datetime
 
-from src.app.services.llm.decision_engine import DecisionEngine
+import pytest
+
 from src.app.schemas.trading_decision import (
     AccountContext,
     MarketContext,
@@ -18,6 +18,7 @@ from src.app.schemas.trading_decision import (
     TradingContext,
     TradingStrategy,
 )
+from src.app.services.llm.decision_engine import DecisionEngine
 
 
 class TestMinimalContextCreation:
