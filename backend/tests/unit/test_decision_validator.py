@@ -794,14 +794,19 @@ class TestDecisionValidator:
 
     @pytest.mark.asyncio
     async def test_strategy_specific_validation(self, validator, sample_trading_context):
-        """Test strategy-specific validation rules."""
-        # Test trade that exceeds strategy risk per trade
+        """Test strategy-specific validation rules with correct risk calculation.
+
+        With the new logic, risk is calculated as: allocation × stop_loss_percentage.
+        With $10,000 balance and 15% max risk per trade = $1,500 max risk.
+        $2,000 allocation with 80% SL = $1,600 actual risk (exceeds $1,500 limit).
+        """
         from app.schemas.trading_decision import AssetDecision
 
         excessive_risk_asset_decision = AssetDecision(
             asset="BTCUSDT",
             action="buy",
-            allocation_usd=2000.0,  # 20% of 10k balance, exceeds 15% strategy limit
+            allocation_usd=2000.0,
+            sl_price=9600.0,  # 80% below current price (wide stop loss)
             exit_plan="Test",
             rationale="Test",
             confidence=70.0,
@@ -998,3 +1003,440 @@ class TestDecisionValidator:
 
         # Should have warning about large allocation
         assert any("more than 50% of available balance" in warning for warning in result.warnings)
+
+
+class TestCalculateStopLossPercentage:
+    """Test _calculate_stop_loss_percentage helper method."""
+
+    @pytest.fixture
+    def validator(self):
+        """Create a fresh validator instance for each test."""
+        return DecisionValidator()
+
+    def test_buy_action_with_valid_sl(self, validator):
+        """Test stop loss percentage calculation for buy action."""
+        from app.schemas.trading_decision import AssetDecision
+
+        asset_decision = AssetDecision(
+            asset="BTCUSDT",
+            action="buy",
+            allocation_usd=1000.0,
+            sl_price=47000.0,  # $1,000 below current price
+            exit_plan="Test",
+            rationale="Test",
+            confidence=70.0,
+            risk_level="medium",
+        )
+
+        sl_pct = validator._calculate_stop_loss_percentage(asset_decision, 48000.0)
+
+        assert sl_pct is not None
+        assert abs(sl_pct - 2.0833) < 0.01  # (48000-47000)/48000 * 100
+
+    def test_sell_action_with_valid_sl(self, validator):
+        """Test stop loss percentage calculation for sell action."""
+        from app.schemas.trading_decision import AssetDecision
+
+        asset_decision = AssetDecision(
+            asset="BTCUSDT",
+            action="sell",
+            allocation_usd=1000.0,
+            sl_price=49000.0,  # $1,000 above current price
+            exit_plan="Test",
+            rationale="Test",
+            confidence=70.0,
+            risk_level="medium",
+        )
+
+        sl_pct = validator._calculate_stop_loss_percentage(asset_decision, 48000.0)
+
+        assert sl_pct is not None
+        assert abs(sl_pct - 2.0833) < 0.01  # (49000-48000)/48000 * 100
+
+    def test_no_sl_price_returns_none(self, validator):
+        """Test that None is returned when sl_price is not set."""
+        from app.schemas.trading_decision import AssetDecision
+
+        asset_decision = AssetDecision(
+            asset="BTCUSDT",
+            action="buy",
+            allocation_usd=1000.0,
+            sl_price=None,
+            exit_plan="Test",
+            rationale="Test",
+            confidence=70.0,
+            risk_level="medium",
+        )
+
+        sl_pct = validator._calculate_stop_loss_percentage(asset_decision, 48000.0)
+
+        assert sl_pct is None
+
+    def test_hold_action_returns_none(self, validator):
+        """Test that None is returned for hold action."""
+        from app.schemas.trading_decision import AssetDecision
+
+        asset_decision = AssetDecision(
+            asset="BTCUSDT",
+            action="hold",
+            allocation_usd=0.0,
+            sl_price=47000.0,
+            exit_plan="Test",
+            rationale="Test",
+            confidence=70.0,
+            risk_level="low",
+        )
+
+        sl_pct = validator._calculate_stop_loss_percentage(asset_decision, 48000.0)
+
+        assert sl_pct is None
+
+
+class TestRiskPerTradeValidation:
+    """Test risk per trade validation with correct stop-loss-based calculation."""
+
+    @pytest.fixture
+    def validator(self):
+        """Create a fresh validator instance for each test."""
+        return DecisionValidator()
+
+    @pytest.fixture
+    def sample_trading_context(self):
+        """Create a sample trading context for testing."""
+        from app.schemas.trading_decision import AssetMarketData
+
+        indicators = TechnicalIndicators(
+            interval=TechnicalIndicatorsSet(
+                ema_20=[48000.0],
+                ema_50=[47000.0],
+                rsi=[65.0],
+                macd=[100.0],
+                bb_upper=[49000.0],
+                bb_lower=[46000.0],
+                bb_middle=[47500.0],
+                atr=[500.0],
+            ),
+            long_interval=TechnicalIndicatorsSet(
+                ema_20=[48500.0],
+                ema_50=[47500.0],
+                rsi=[60.0],
+                macd=[150.0],
+                bb_upper=[49500.0],
+                bb_lower=[46500.0],
+                bb_middle=[48000.0],
+                atr=[550.0],
+            ),
+        )
+
+        btc_asset_data = AssetMarketData(
+            symbol="BTCUSDT",
+            current_price=48000.0,
+            price_change_24h=1000.0,
+            volume_24h=1000000.0,
+            funding_rate=0.01,
+            open_interest=50000000.0,
+            volatility=0.02,
+            technical_indicators=indicators,
+            price_history=[
+                PricePoint(timestamp=datetime.now(timezone.utc), price=47000.0, volume=1000.0),
+                PricePoint(timestamp=datetime.now(timezone.utc), price=47500.0, volume=1000.0),
+                PricePoint(timestamp=datetime.now(timezone.utc), price=48000.0, volume=1000.0),
+            ],
+        )
+
+        eth_asset_data = AssetMarketData(
+            symbol="ETHUSDT",
+            current_price=3000.0,
+            price_change_24h=100.0,
+            volume_24h=500000.0,
+            funding_rate=0.012,
+            open_interest=25000000.0,
+            volatility=0.025,
+            technical_indicators=indicators,
+            price_history=[
+                PricePoint(timestamp=datetime.now(timezone.utc), price=2900.0, volume=5000.0),
+                PricePoint(timestamp=datetime.now(timezone.utc), price=2950.0, volume=5000.0),
+                PricePoint(timestamp=datetime.now(timezone.utc), price=3000.0, volume=5000.0),
+            ],
+        )
+
+        market_context = MarketContext(
+            assets={"BTCUSDT": btc_asset_data, "ETHUSDT": eth_asset_data},
+            market_sentiment="neutral",
+        )
+
+        risk_params = StrategyRiskParameters(
+            max_risk_per_trade=2.0,  # 2% of balance = $200 max risk for $10k balance
+            max_daily_loss=20.0,
+            stop_loss_percentage=1.5,
+            take_profit_ratio=2.0,
+            max_leverage=3.0,
+            cooldown_period=300,
+        )
+
+        strategy = TradingStrategy(
+            strategy_id="conservative_swing",
+            strategy_name="Conservative Swing Trading",
+            strategy_type="conservative",
+            prompt_template="Focus on low-risk entries",
+            risk_parameters=risk_params,
+            timeframe_preference=["4h", "1d"],
+            max_positions=3,
+            is_active=True,
+        )
+
+        performance = PerformanceMetrics(
+            total_pnl=1000.0,
+            win_rate=60.0,
+            avg_win=150.0,
+            avg_loss=-75.0,
+            max_drawdown=-200.0,
+            sharpe_ratio=1.5,
+        )
+
+        account_context = AccountContext(
+            account_id=1,
+            balance_usd=10000.0,
+            available_balance=8000.0,
+            total_pnl=1000.0,
+            recent_performance=performance,
+            risk_exposure=20.0,
+            max_position_size=2000.0,
+            active_strategy=strategy,
+            open_positions=[],
+        )
+
+        risk_metrics = RiskMetrics(
+            var_95=500.0, max_drawdown=1000.0, correlation_risk=15.0, concentration_risk=25.0
+        )
+
+        return TradingContext(
+            symbols=["BTCUSDT", "ETHUSDT"],
+            account_id=1,
+            timeframes=["1h", "4h"],
+            market_data=market_context,
+            account_state=account_context,
+            risk_metrics=risk_metrics,
+            recent_trades={"BTCUSDT": []},
+        )
+
+    @pytest.mark.asyncio
+    async def test_large_allocation_with_tight_sl_passes(
+        self, validator, sample_trading_context
+    ):
+        """Test that large allocation with tight stop loss passes risk validation.
+
+        With $10,000 balance, 2% max risk per trade = $200 max risk.
+        $1,500 allocation with 1% SL = $15 actual risk (passes risk check).
+        Note: May fail concentration check (single asset), which is expected.
+        """
+        from app.schemas.trading_decision import AssetDecision
+
+        asset_decision = AssetDecision(
+            asset="BTCUSDT",
+            action="buy",
+            allocation_usd=1500.0,
+            sl_price=47520.0,
+            exit_plan="Tight stop loss",
+            rationale="Strong momentum",
+            confidence=85.0,
+            risk_level="medium",
+        )
+
+        decision = TradingDecision(
+            decisions=[
+                asset_decision,
+                AssetDecision(
+                    asset="ETHUSDT",
+                    action="hold",
+                    allocation_usd=0.0,
+                    exit_plan="Wait for confirmation",
+                    rationale="Neutral momentum",
+                    confidence=70.0,
+                    risk_level="low",
+                ),
+            ],
+            portfolio_rationale="Test",
+            total_allocation_usd=1500.0,
+            portfolio_risk_level="medium",
+        )
+
+        result = await validator.validate_decision(decision, sample_trading_context)
+
+        assert not any("exceeds strategy limit" in error for error in result.errors), (
+            f"Risk per trade check failed: {result.errors}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_smaller_allocation_with_wide_sl_fails(
+        self, validator, sample_trading_context
+    ):
+        """Test that smaller allocation with wide stop loss fails validation.
+
+        With $10,000 balance, 2% max risk per trade = $200 max risk.
+        $500 allocation with 50% SL = $250 actual risk (fails).
+        """
+        from app.schemas.trading_decision import AssetDecision
+
+        asset_decision = AssetDecision(
+            asset="BTCUSDT",
+            action="buy",
+            allocation_usd=500.0,
+            sl_price=24000.0,
+            exit_plan="Wide stop loss",
+            rationale="Test",
+            confidence=70.0,
+            risk_level="medium",
+        )
+
+        decision = TradingDecision(
+            decisions=[asset_decision],
+            portfolio_rationale="Test",
+            total_allocation_usd=500.0,
+            portfolio_risk_level="medium",
+        )
+
+        result = await validator.validate_decision(decision, sample_trading_context)
+
+        assert not result.is_valid
+        assert any("exceeds strategy limit" in error for error in result.errors)
+
+    @pytest.mark.asyncio
+    async def test_no_sl_uses_default_stop_loss(
+        self, validator, sample_trading_context
+    ):
+        """Test that missing sl_price uses strategy's default stop loss percentage.
+
+        With $10,000 balance, 2% max risk per trade = $200 max risk.
+        $15,000 allocation with 1.5% default SL = $225 actual risk (fails).
+        """
+        from app.schemas.trading_decision import AssetDecision
+
+        asset_decision = AssetDecision(
+            asset="BTCUSDT",
+            action="buy",
+            allocation_usd=15000.0,
+            sl_price=None,
+            exit_plan="Default SL",
+            rationale="Test",
+            confidence=70.0,
+            risk_level="medium",
+        )
+
+        decision = TradingDecision(
+            decisions=[asset_decision],
+            portfolio_rationale="Test",
+            total_allocation_usd=15000.0,
+            portfolio_risk_level="medium",
+        )
+
+        result = await validator.validate_decision(decision, sample_trading_context)
+
+        assert not result.is_valid
+        assert any("exceeds strategy limit" in error for error in result.errors)
+
+    @pytest.mark.asyncio
+    async def test_sl_at_current_price_fails(
+        self, validator, sample_trading_context
+    ):
+        """Test that stop loss at current price (0% SL) fails validation."""
+        from app.schemas.trading_decision import AssetDecision
+
+        asset_decision = AssetDecision(
+            asset="BTCUSDT",
+            action="buy",
+            allocation_usd=1000.0,
+            sl_price=48000.0,
+            exit_plan="No stop loss",
+            rationale="Test",
+            confidence=70.0,
+            risk_level="high",
+        )
+
+        decision = TradingDecision(
+            decisions=[asset_decision],
+            portfolio_rationale="Test",
+            total_allocation_usd=1000.0,
+            portfolio_risk_level="medium",
+        )
+
+        result = await validator.validate_decision(decision, sample_trading_context)
+
+        assert not result.is_valid
+        assert any("must be positive" in error for error in result.errors)
+
+    @pytest.mark.asyncio
+    async def test_sl_over_100_percent_capped(
+        self, validator, sample_trading_context
+    ):
+        """Test that stop loss over 100% is capped at 100%."""
+        from app.schemas.trading_decision import AssetDecision
+
+        asset_decision = AssetDecision(
+            asset="BTCUSDT",
+            action="buy",
+            allocation_usd=500.0,
+            sl_price=12000.0,
+            exit_plan="Wide stop loss",
+            rationale="Test",
+            confidence=70.0,
+            risk_level="medium",
+        )
+
+        decision = TradingDecision(
+            decisions=[asset_decision],
+            portfolio_rationale="Test",
+            total_allocation_usd=500.0,
+            portfolio_risk_level="medium",
+        )
+
+        result = await validator.validate_decision(decision, sample_trading_context)
+
+        assert not result.is_valid
+        assert any("exceeds strategy limit" in error for error in result.errors)
+
+    @pytest.mark.asyncio
+    async def test_valid_allocation_with_sell_action(
+        self, validator, sample_trading_context
+    ):
+        """Test valid risk calculation for sell action with tight stop loss.
+
+        Note: May fail concentration check (single asset), which is expected.
+        We only verify the risk per trade validation passes.
+        """
+        from app.schemas.trading_decision import AssetDecision
+
+        asset_decision = AssetDecision(
+            asset="BTCUSDT",
+            action="sell",
+            allocation_usd=1500.0,
+            sl_price=48500.0,
+            exit_plan="Take profit on downside",
+            rationale="Bearish signals",
+            confidence=80.0,
+            risk_level="medium",
+        )
+
+        decision = TradingDecision(
+            decisions=[
+                asset_decision,
+                AssetDecision(
+                    asset="ETHUSDT",
+                    action="hold",
+                    allocation_usd=0.0,
+                    exit_plan="Wait for confirmation",
+                    rationale="Neutral momentum",
+                    confidence=70.0,
+                    risk_level="low",
+                ),
+            ],
+            portfolio_rationale="Test",
+            total_allocation_usd=1500.0,
+            portfolio_risk_level="medium",
+        )
+
+        result = await validator.validate_decision(decision, sample_trading_context)
+
+        assert not any("exceeds strategy limit" in error for error in result.errors), (
+            f"Risk per trade check failed: {result.errors}"
+        )

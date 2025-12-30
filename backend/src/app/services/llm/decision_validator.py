@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from ...core.exceptions import ValidationError as CustomValidationError
 from ...schemas.trading_decision import (
     AccountContext,
+    AssetDecision,
     RiskValidationResult,
     TradingContext,
     TradingDecision,
@@ -105,6 +106,30 @@ class DecisionValidator:
             return symbol[:3]  # Most common case
         else:
             return symbol  # Return as-is if too short
+
+    def _calculate_stop_loss_percentage(
+        self,
+        asset_decision: AssetDecision,
+        current_price: float
+    ) -> Optional[float]:
+        """
+        Calculate stop loss percentage from sl_price.
+
+        Args:
+            asset_decision: The asset decision containing sl_price
+            current_price: Current market price of the asset
+
+        Returns:
+            Stop loss percentage (e.g., 2.0 for 2%), or None if sl_price not available
+        """
+        if not asset_decision.sl_price:
+            return None
+
+        if asset_decision.action == "buy":
+            return (current_price - asset_decision.sl_price) / current_price * 100
+        elif asset_decision.action == "sell":
+            return (asset_decision.sl_price - current_price) / current_price * 100
+        return None
 
     async def validate_decision(
         self, decision: TradingDecision, context: TradingContext
@@ -494,19 +519,42 @@ class DecisionValidator:
         warnings: List[str] = []
 
         strategy = context.account_state.active_strategy
+        default_sl_pct = strategy.risk_parameters.stop_loss_percentage
+        max_risk_per_trade = strategy.risk_parameters.max_risk_per_trade
+        balance = context.account_state.balance_usd
+        max_risk_amount = balance * (max_risk_per_trade / 100)
 
-        # Validate against strategy risk parameters
         for asset_decision in decision.decisions:
-            if asset_decision.action in ["buy", "sell"]:
-                max_risk_per_trade = strategy.risk_parameters.max_risk_per_trade
-                balance = context.account_state.balance_usd
-                max_risk_amount = balance * (max_risk_per_trade / 100)
+            if asset_decision.action not in ["buy", "sell"]:
+                continue
 
-                if asset_decision.allocation_usd > max_risk_amount:
-                    errors.append(
-                        f"business_rule ({asset_decision.asset}): Trade risk ${asset_decision.allocation_usd:.2f} "
-                        f"exceeds strategy limit ${max_risk_amount:.2f}"
-                    )
+            asset_data = context.market_data.get_asset_data(asset_decision.asset)
+            if not asset_data:
+                continue
+            current_price = asset_data.current_price
+
+            sl_pct = self._calculate_stop_loss_percentage(asset_decision, current_price)
+
+            if sl_pct is None:
+                sl_pct = default_sl_pct
+            else:
+                sl_pct = min(sl_pct, 100.0)
+
+            if sl_pct <= 0:
+                errors.append(
+                    f"business_rule ({asset_decision.asset}): Stop loss percentage must be positive, "
+                    f"got {sl_pct:.2f}%"
+                )
+                continue
+
+            actual_risk = asset_decision.allocation_usd * (sl_pct / 100)
+
+            if actual_risk > max_risk_amount:
+                errors.append(
+                    f"business_rule ({asset_decision.asset}): Actual risk ${actual_risk:.2f} "
+                    f"(allocation ${asset_decision.allocation_usd:.2f} × {sl_pct:.2f}% SL) "
+                    f"exceeds strategy limit ${max_risk_amount:.2f}"
+                )
 
         return errors, warnings
 
