@@ -281,9 +281,10 @@ class TestUserManagementAPIE2E:
         admin_user = test_users[0]
         headers = get_auth_headers(admin_user)
 
-        # Try to get user with very high ID
+        # Use a high ID that's unlikely to exist in test database (but within int32 range)
+        nonexistent_user_id = 500000
         response = await client.get(
-            "/api/v1/users/999999",
+            f"/api/v1/users/{nonexistent_user_id}",
             headers=headers,
         )
         assert response.status_code == 404, (
