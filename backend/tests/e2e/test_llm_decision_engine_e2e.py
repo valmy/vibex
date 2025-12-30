@@ -222,9 +222,7 @@ class TestLLMDecisionEngineE2E:
         )
         stored_decision = db_result.scalars().first()
         assert stored_decision is not None, "Decision should be persisted to database"
-        assert (
-            len(stored_decision.asset_decisions) == 1
-        ), "Should have 1 asset decision in database"
+        assert len(stored_decision.asset_decisions) == 1, "Should have 1 asset decision in database"
         assert stored_decision.asset_decisions[0]["asset"] == "BTCUSDT"
 
         # Validate decision structure - now multi-asset
@@ -280,12 +278,14 @@ class TestLLMDecisionEngineE2E:
 
         Requires RUN_REAL_LLM_TESTS=1 environment variable to run.
         """
-        from app.services.llm.decision_engine import get_decision_engine
-        from app.services.llm.strategy_manager import StrategyManager
-        from app.services.llm.llm_exceptions import AuthenticationError
         from app.core.config import config
+        from app.services.llm.decision_engine import get_decision_engine
+        from app.services.llm.llm_exceptions import AuthenticationError
+        from app.services.llm.strategy_manager import StrategyManager
 
-        logger.info("Starting LLM integration test with real market data and database persistence...")
+        logger.info(
+            "Starting LLM integration test with real market data and database persistence..."
+        )
 
         # Check if .env.testing file contains a distinct API key configuration
         logger.info("Checking API key configuration...")
@@ -367,7 +367,7 @@ class TestLLMDecisionEngineE2E:
                 account_id=999999,
                 symbols=symbols,
                 strategy_override="aggressive_perps",
-                force_refresh=True
+                force_refresh=True,
             )
 
             # Basic validation of the response - now multi-asset
@@ -434,15 +434,27 @@ class TestLLMDecisionEngineE2E:
             assert stored_decision is not None, "Decision should be persisted to database"
 
             # Validate stored decision attributes
-            assert stored_decision.account_id == 999999, "Stored decision should have correct account_id"
-            assert stored_decision.strategy_id == "aggressive_perps", "Stored decision should have correct strategy_id"
-            assert stored_decision.model_used == result.model_used, "Stored decision should have correct model_used"
-            assert stored_decision.processing_time_ms == result.processing_time_ms, "Stored decision should have correct processing_time_ms"
-            assert stored_decision.validation_passed == result.validation_passed, "Stored decision should have correct validation_passed"
+            assert stored_decision.account_id == 999999, (
+                "Stored decision should have correct account_id"
+            )
+            assert stored_decision.strategy_id == "aggressive_perps", (
+                "Stored decision should have correct strategy_id"
+            )
+            assert stored_decision.model_used == result.model_used, (
+                "Stored decision should have correct model_used"
+            )
+            assert stored_decision.processing_time_ms == result.processing_time_ms, (
+                "Stored decision should have correct processing_time_ms"
+            )
+            assert stored_decision.validation_passed == result.validation_passed, (
+                "Stored decision should have correct validation_passed"
+            )
 
             # Validate asset decisions are properly stored
             assert stored_decision.asset_decisions is not None, "Asset decisions should be stored"
-            assert len(stored_decision.asset_decisions) == len(result.decision.decisions), "All asset decisions should be stored"
+            assert len(stored_decision.asset_decisions) == len(result.decision.decisions), (
+                "All asset decisions should be stored"
+            )
 
             # Validate each stored asset decision matches the result without relying on order
             stored_asset_decisions_map = {d["asset"]: d for d in stored_decision.asset_decisions}
@@ -452,20 +464,41 @@ class TestLLMDecisionEngineE2E:
 
             for asset, expected_asset_decision in expected_asset_decisions_map.items():
                 stored_asset_decision = stored_asset_decisions_map[asset]
-                assert stored_asset_decision["action"] == expected_asset_decision.action, f"Asset decision for {asset} should have correct action"
-                assert stored_asset_decision["allocation_usd"] == expected_asset_decision.allocation_usd, f"Asset decision for {asset} should have correct allocation"
-                assert stored_asset_decision["confidence"] == expected_asset_decision.confidence, f"Asset decision for {asset} should have correct confidence"
-                assert stored_asset_decision["risk_level"] == expected_asset_decision.risk_level, f"Asset decision for {asset} should have correct risk_level"
-                assert stored_asset_decision["rationale"] == expected_asset_decision.rationale, f"Asset decision for {asset} should have correct rationale"
+                assert stored_asset_decision["action"] == expected_asset_decision.action, (
+                    f"Asset decision for {asset} should have correct action"
+                )
+                assert (
+                    stored_asset_decision["allocation_usd"]
+                    == expected_asset_decision.allocation_usd
+                ), f"Asset decision for {asset} should have correct allocation"
+                assert stored_asset_decision["confidence"] == expected_asset_decision.confidence, (
+                    f"Asset decision for {asset} should have correct confidence"
+                )
+                assert stored_asset_decision["risk_level"] == expected_asset_decision.risk_level, (
+                    f"Asset decision for {asset} should have correct risk_level"
+                )
+                assert stored_asset_decision["rationale"] == expected_asset_decision.rationale, (
+                    f"Asset decision for {asset} should have correct rationale"
+                )
 
             # Validate portfolio-level fields are stored
-            assert stored_decision.portfolio_rationale == result.decision.portfolio_rationale, "Portfolio rationale should be stored"
-            assert stored_decision.total_allocation_usd == result.decision.total_allocation_usd, "Total allocation should be stored"
-            assert stored_decision.portfolio_risk_level == result.decision.portfolio_risk_level, "Portfolio risk level should be stored"
+            assert stored_decision.portfolio_rationale == result.decision.portfolio_rationale, (
+                "Portfolio rationale should be stored"
+            )
+            assert stored_decision.total_allocation_usd == result.decision.total_allocation_usd, (
+                "Total allocation should be stored"
+            )
+            assert stored_decision.portfolio_risk_level == result.decision.portfolio_risk_level, (
+                "Portfolio risk level should be stored"
+            )
 
             # Validate validation fields are stored
-            assert stored_decision.validation_passed == result.validation_passed, "Validation passed flag should be stored"
-            assert stored_decision.validation_errors == (result.validation_errors or []), "Validation errors should be stored"
+            assert stored_decision.validation_passed == result.validation_passed, (
+                "Validation passed flag should be stored"
+            )
+            assert stored_decision.validation_errors == (result.validation_errors or []), (
+                "Validation errors should be stored"
+            )
 
             # Validate context data is stored
             assert stored_decision.market_context is not None, "Market context should be stored"
@@ -474,11 +507,17 @@ class TestLLMDecisionEngineE2E:
 
             # Validate database state consistency
             assert not stored_decision.executed, "New decision should not be marked as executed"
-            assert stored_decision.executed_at is None, "New decision should not have execution time"
-            assert stored_decision.execution_price is None, "New decision should not have execution price"
+            assert stored_decision.executed_at is None, (
+                "New decision should not have execution time"
+            )
+            assert stored_decision.execution_price is None, (
+                "New decision should not have execution price"
+            )
 
             logger.info("✓ Database persistence test passed successfully!")
-            logger.info(f"✓ Decision ID {stored_decision.id} persisted with {len(stored_decision.asset_decisions)} asset decisions")
+            logger.info(
+                f"✓ Decision ID {stored_decision.id} persisted with {len(stored_decision.asset_decisions)} asset decisions"
+            )
 
         except Exception as e:
             logger.error(f"LLM integration and persistence test failed: {str(e)}")

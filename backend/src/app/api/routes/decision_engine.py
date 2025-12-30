@@ -31,7 +31,7 @@ class DecisionRequest(BaseModel):
     symbols: Optional[List[str]] = Field(
         None,
         description="List of trading pair symbols (e.g., ['BTCUSDT', 'ETHUSDT']). "
-        "If not provided, defaults to ASSETS environment variable.",
+        "If not provided or empty, defaults to ASSETS environment variable.",
     )
     account_id: int = Field(..., description="Account identifier")
     strategy_override: Optional[str] = Field(None, description="Optional strategy override")

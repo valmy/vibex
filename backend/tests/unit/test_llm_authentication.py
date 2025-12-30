@@ -56,9 +56,11 @@ class TestLLMAuthentication:
     async def test_authentication_failure_server_rejection(self) -> None:
         """Test authentication failure when server rejects credentials."""
         # Mock the OpenAI client to raise AuthenticationError
-        import openai
+
         mock_client = MagicMock()
-        mock_client.models.list = AsyncMock(side_effect=Exception("401 Unauthorized: Invalid API key"))
+        mock_client.models.list = AsyncMock(
+            side_effect=Exception("401 Unauthorized: Invalid API key")
+        )
 
         # Create LLM service with mocked client
         service = LLMService()

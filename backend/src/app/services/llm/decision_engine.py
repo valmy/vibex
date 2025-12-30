@@ -195,13 +195,19 @@ class DecisionEngine:
             RateLimitExceededError: If rate limit is exceeded
             DecisionEngineError: If decision generation fails
         """
-        # Default to ASSETS environment variable if symbols not provided
-        if symbols is None:
+        # Default to ASSETS environment variable if symbols not provided or empty
+        if not symbols:  # Handles both None and empty list
             from ...core.config import config
 
-            assets_str = getattr(config, "ASSETS", "BTC,ETH,SOL")
-            symbols = [f"{asset.strip()}USDT" for asset in assets_str.split(",")]
-            logger.info(f"Using default symbols from ASSETS env variable: {symbols}")
+            # Get default assets from config, fallback to hardcoded list if empty or None
+            assets_str = getattr(config, "ASSETS", None) or "BTC,ETH,SOL"
+            symbols = [f"{asset.strip()}USDT" for asset in assets_str.split(",") if asset.strip()]
+
+            # If still empty after parsing, use emergency defaults
+            if not symbols:
+                symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+
+            logger.info(f"Using default symbols: {symbols}")
 
         start_time = time.time()
         decision_key = f"{'_'.join(sorted(symbols))}_{account_id}_{strategy_override or 'default'}"
