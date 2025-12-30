@@ -613,6 +613,7 @@ Provide:
         """
         last_exception = None
 
+        start_time = time.time()
         for attempt in range(self.max_retries):
             try:
                 start_time = time.time()
@@ -626,8 +627,8 @@ Provide:
                         },
                         {"role": "user", "content": prompt},
                     ],
-                    temperature=0.3,  # Lower temperature for more consistent decisions
-                    max_tokens=2000,  # Increased for multi-asset decisions with more detailed analysis
+                    temperature=0.3,
+                    max_tokens=10000,  # Increased for reasoning models (~2000 for thinking + ~1000+ for JSON)
                 )
 
                 response_time_ms = (time.time() - start_time) * 1000
@@ -643,9 +644,31 @@ Provide:
 
                 # log debug response
                 logger.debug(f"LLM response: {response.choices[0].message.content}")
+                logger.debug(f"Response choices count: {len(response.choices)}")
+                logger.debug(f"First choice message type: {type(response.choices[0].message)}")
+                logger.debug(f"First choice message attributes: {[attr for attr in dir(response.choices[0].message) if not attr.startswith('_')]}")
+
+                # Detailed token usage logging
+                logger.debug(f"Token usage - prompt_tokens: {response.usage.prompt_tokens}")
+                logger.debug(f"Token usage - completion_tokens: {response.usage.completion_tokens}")
+                logger.debug(f"Token usage - total_tokens: {response.usage.total_tokens}")
+                logger.debug(f"Finish reason: {response.choices[0].finish_reason}")
+
+                # For reasoning models, check if content is empty and reasoning exists
+                message = response.choices[0].message
+                content = getattr(message, 'content', None) or ""
+                reasoning_content = getattr(message, 'reasoning_content', None) or getattr(message, 'reasoning', None) or ""
+
+                if not content and reasoning_content:
+                    logger.debug(f"Reasoning content found (length: {len(reasoning_content)}), using reasoning as content")
+                    content = reasoning_content
+                    logger.debug(f"Reasoning content preview (first 500 chars): {reasoning_content[:500]}")
+                    logger.debug(f"Reasoning content preview (last 500 chars): {reasoning_content[-500:]}")
+
+                logger.debug(f"Final content length: {len(content)} chars")
 
                 return {
-                    "content": response.choices[0].message.content,
+                    "content": content,
                     "usage": response.usage,
                     "cost": self.metrics_tracker._calculate_cost(
                         self.model,
@@ -656,9 +679,7 @@ Provide:
 
             except Exception as e:
                 last_exception = e
-                response_time_ms = (
-                    (time.time() - start_time) * 1000 if "start_time" in locals() else 0
-                )
+                response_time_ms = (time.time() - start_time) * 1000 if "start_time" in locals() else 0
 
                 # Record failed API call
                 self.metrics_tracker.record_api_call(
@@ -866,7 +887,9 @@ Provide a portfolio-level rationale explaining your overall trading strategy acr
 
     def _get_decision_system_prompt(self) -> str:
         """Get system prompt for multi-asset decision generation."""
-        return """You are an expert cryptocurrency trading advisor specializing in multi-asset portfolio management for perpetual futures. Generate structured trading decisions in JSON format.
+        return """You are an expert cryptocurrency trading advisor specializing in multi-asset portfolio management for perpetual futures. 
+
+CRITICAL: You must respond with ONLY valid JSON. No explanations, no thinking, no text before or after the JSON.
 
 Your response must be valid JSON with the following structure for MULTI-ASSET decisions:
 {
@@ -900,6 +923,7 @@ Your response must be valid JSON with the following structure for MULTI-ASSET de
 }
 
 Rules:
+- Respond with ONLY JSON - no text before, no text after
 - Provide decisions for ALL assets in the analysis
 - allocation_usd must be positive number for buy/sell actions, 0 for hold
 - total_allocation_usd must equal the sum of individual allocations
@@ -931,12 +955,17 @@ Rules:
         try:
             content = response_data["content"]
 
-            # Try to parse JSON response
+            # Log raw response for debugging reasoning model outputs
+            logger.debug(f"Raw LLM response (first 500 chars): {content[:500]}")
+            logger.debug(f"Raw LLM response length: {len(content)} chars")
+
+            # Try to parse JSON directly first (works if response is pure JSON or JSON in code blocks)
             try:
                 decision_dict = json.loads(content)
-            except json.JSONDecodeError as e:
-                logger.warning(f"Failed to parse JSON response: {e}")
-                # Try to extract JSON from text
+                logger.debug("Successfully parsed JSON directly from response")
+            except json.JSONDecodeError:
+                # Try to extract JSON from text (handles code blocks, thinking content, etc.)
+                logger.debug("Direct JSON parse failed, trying extraction methods...")
                 decision_dict = self._extract_json_from_text(content)
 
             # Validate multi-asset structure
@@ -974,6 +1003,78 @@ Rules:
             logger.error(f"Multi-asset decision validation failed: {e}")
             raise ValidationError(f"Invalid multi-asset decision format: {e}") from e
 
+    def _remove_thinking_content(self, text: str) -> str:
+        """Remove thinking/reasoning content from LLM responses.
+
+        Reasoning models like deepseek-r1 often include thinking content before
+        the actual JSON response. This method strips that content.
+
+        Args:
+            text: Raw LLM response text
+
+        Returns:
+            Text with thinking content removed
+        """
+        import re
+
+        original_length = len(text)
+        logger.debug(f"Processing response for thinking removal (original length: {original_length})")
+
+        # Pattern 1: <thinking>...</thinking> tags
+        text = re.sub(r"<thinking>.*?</thinking>", "", text, flags=re.DOTALL | re.IGNORECASE)
+
+        # Pattern 2: \boxed{...} expressions (common in reasoning models)
+        text = re.sub(r"\\boxed\{[^}]*\}", "", text)
+
+        # Pattern 3: Content after "Reasoning:" or "Thinking:" headers before JSON
+        reasoning_pattern = r"(?:Reasoning|Thinking)[:\s]+.*?(?=\{|```json|$)"
+        text = re.sub(reasoning_pattern, "", text, flags=re.IGNORECASE | re.DOTALL)
+
+        # Pattern 4: DeepSeek R1 specific - content between <|reserved_20097|> and <|reserved_20098|> or similar
+        # DeepSeek often uses special tokens for thinking
+        text = re.sub(r"<\|reserved_\d+\|>.*?<\|reserved_\d+\|>", "", text, flags=re.DOTALL | re.IGNORECASE)
+
+        # Pattern 5: Remove assistant thinking sections (common in OpenAI responses)
+        text = re.sub(
+            r"<\|im_start\|>thinking.*?<\|im_end\|>",
+            "",
+            text,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+
+        # Pattern 6: Remove content between "Answer:" and JSON (for Qwen models)
+        answer_pattern = r"Answer[:\s]+.*?(?=\{|```json|$)"
+        text = re.sub(answer_pattern, "", text, flags=re.IGNORECASE | re.DOTALL)
+
+        # Pattern 7: Remove text that looks like analysis/thinking BEFORE JSON
+        # Only remove if followed by a code block marker or the JSON is on a new line
+        # This pattern removes analysis text that appears BEFORE ```json or {
+        # but NOT the actual JSON content
+        text = re.sub(
+            r"^(?:We are|Let me|Based on|Considering|After|I will|I can|First|Seeing that|For this|In this|As we|The |To )[^\n{]*(?=\n(?:```json|\{))",
+            "",
+            text,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+
+        # Pattern 8: Remove text between special reasoning delimiters that some models use
+        text = re.sub(r"### Thinking.*?###", "", text, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r"\*\*Thinking:.*?\*\*", "", text, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r"Thinking Process:.*?(?=\{|```)", "", text, flags=re.DOTALL | re.IGNORECASE)
+
+        # Pattern 9: Remove content starting with newlines followed by thinking text
+        # This handles multi-line thinking blocks before code blocks
+        text = re.sub(r"\n\s*(?:Let me|Here's|Now|Based on|After|First|Seeing that|In summary)[^.]*\n(?=```)", "\n", text, flags=re.IGNORECASE)
+
+        # Clean up extra whitespace and newlines
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        text = text.strip()
+
+        removed_length = original_length - len(text)
+        logger.debug(f"Removed {removed_length} characters of thinking content")
+
+        return text
+
     def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
         """Extract JSON from text response.
 
@@ -986,15 +1087,107 @@ Rules:
         Raises:
             ValidationError: When JSON cannot be extracted
         """
-        # Try to find JSON in the text
         import re
 
+        logger.debug(f"Extracting JSON from text (length: {len(text)} chars)")
+
+        # First, try to extract JSON from code blocks (most reliable)
+        # Pattern: ```json { ... } ``` or ```{ ... } ```
+        code_block_patterns = [
+            r"```(?:json)?\s*(\{[\s\S]*?\})\s*```",  # Code block with JSON
+            r"```(?:json)?\s*(\[.*?\]\n)\s*```",  # Code block with JSON array
+        ]
+
+        for pattern in code_block_patterns:
+            matches = re.findall(pattern, text, re.DOTALL | re.IGNORECASE)
+            logger.debug(f"Code block pattern matched {len(matches)} potential JSON blocks")
+            for match in matches:
+                try:
+                    parsed = json.loads(match)
+                    logger.debug("Successfully parsed JSON from code block")
+                    return parsed
+                except json.JSONDecodeError as e:
+                    logger.debug(f"Failed to parse JSON from code block: {e}")
+                    continue
+
+        # Look for "decisions": [ pattern which is specific to our trading decision format
+        # This helps avoid matching thinking text that contains other JSON-like content
+        decisions_pattern = r'"decisions"\s*:\s*\['
+        decisions_match = re.search(decisions_pattern, text, re.IGNORECASE)
+        if decisions_match:
+            logger.debug(f"Found 'decisions': [ pattern at position {decisions_match.start()}")
+            # Start from a bit before the decisions key to capture the opening brace
+            start_pos = text.rfind("{", 0, decisions_match.end())
+            if start_pos == -1:
+                start_pos = decisions_match.start()
+            
+            # Try to find the closing brace by counting braces
+            brace_count = 0
+            end_pos = start_pos
+            for i, char in enumerate(text[start_pos:], start_pos):
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end_pos = i + 1
+                        break
+            
+            if brace_count == 0:
+                potential_json = text[start_pos:end_pos].strip()
+                try:
+                    parsed = json.loads(potential_json)
+                    logger.debug(f"Found trading decision JSON at position {start_pos}, length {end_pos - start_pos}")
+                    if "decisions" in parsed:
+                        logger.debug("Found JSON with 'decisions' key")
+                        return parsed
+                except json.JSONDecodeError:
+                    pass
+
+        # Fall back to finding the first JSON object by looking for the first '{'
+        # and finding a balanced closing '}'
+        logger.debug("Looking for first JSON object in text")
+        first_brace = text.find("{")
+        if first_brace != -1:
+            # Try to find a balanced JSON object by looking for '}' followed by newlines
+            # or end of content
+            for end_pos in range(len(text), first_brace, -1):
+                potential_json = text[first_brace:end_pos].strip()
+                try:
+                    parsed = json.loads(potential_json)
+                    logger.debug(f"Found JSON starting at position {first_brace}, length {end_pos - first_brace}")
+                    # Check if this looks like a trading decision (has 'decisions' key)
+                    if "decisions" in parsed:
+                        logger.debug("Found JSON with 'decisions' key")
+                        return parsed
+                    # Even if no 'decisions', return it if it parsed successfully
+                    logger.debug(f"Found JSON with keys: {list(parsed.keys())}")
+                    return parsed
+                except json.JSONDecodeError:
+                    continue
+
+        # Fall back to finding JSON objects using regex for nested structures
         json_pattern = r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}"
         matches = re.findall(json_pattern, text, re.DOTALL)
 
+        logger.debug(f"Found {len(matches)} potential JSON objects in text")
+
         for match in matches:
             try:
-                return json.loads(match)
+                parsed = json.loads(match)
+                # Check if this looks like a trading decision (has 'decisions' key)
+                if "decisions" in parsed:
+                    logger.debug("Found JSON with 'decisions' key")
+                    return parsed
+            except json.JSONDecodeError:
+                continue
+
+        # If still no match, try to find any JSON and validate it
+        for match in matches:
+            try:
+                parsed = json.loads(match)
+                logger.debug(f"Found JSON with keys: {list(parsed.keys())}")
+                return parsed
             except json.JSONDecodeError:
                 continue
 
