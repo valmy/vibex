@@ -8,6 +8,7 @@ and comprehensive error handling.
 
 import asyncio
 import json
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -626,6 +627,7 @@ Provide:
         max_tool_loops = 20
 
         for attempt in range(self.max_retries):
+            attempt_start_time = time.time()
             try:
                 # Reset conversation state for each retry attempt
                 current_messages = list(messages)
@@ -648,8 +650,7 @@ Provide:
 
             except Exception as e:
                 last_exception = e
-                # We need to calculate response_time_ms if possible, or 0
-                response_time_ms = 0 # Simplified for error case in refactor
+                response_time_ms = (time.time() - attempt_start_time) * 1000
 
                 # Record failed API call
                 self.metrics_tracker.record_api_call(
@@ -1112,7 +1113,6 @@ Rules:
         Returns:
             Text with thinking content removed
         """
-        import re
 
         original_length = len(text)
         logger.debug(
@@ -1155,6 +1155,9 @@ Rules:
         """Extract JSON from text response."""
         logger.debug(f"Extracting JSON from text (length: {len(text)} chars)")
 
+        # 0. Clean thinking content first to avoid false positives
+        text = self._remove_thinking_content(text)
+
         # 1. Try to extract JSON from code blocks (most reliable)
         code_block_json = self._extract_json_from_code_blocks(text)
         if code_block_json:
@@ -1174,7 +1177,6 @@ Rules:
 
     def _extract_json_from_code_blocks(self, text: str) -> Optional[Dict[str, Any]]:
         """Try to extract JSON from markdown code blocks."""
-        import re
 
         code_block_patterns = [
             r"```(?:json)?\s*(\{[\s\S]*?\})\s*```",  # Code block with JSON
@@ -1195,7 +1197,6 @@ Rules:
 
     def _extract_json_via_regex(self, text: str) -> Optional[Dict[str, Any]]:
         """Extract JSON using regex as a last resort."""
-        import re
 
         logger.debug("Falling back to regex extraction")
         json_pattern = r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}"
@@ -1222,7 +1223,6 @@ Rules:
 
     def _scan_for_json_objects(self, text: str) -> Optional[Dict[str, Any]]:
         """Scan text for valid JSON objects by finding braces."""
-        import re
 
         valid_objects = []
         start_indices = [m.start() for m in re.finditer(r"\{", text)]
