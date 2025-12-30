@@ -2,11 +2,14 @@
 Account schemas for request/response validation.
 """
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from pydantic import Field
 
 from .base import BaseCreateSchema, BaseSchema, BaseUpdateSchema
+
+if TYPE_CHECKING:
+    from ..models.account import Account
 
 # ============================================================================
 # USER SCHEMAS
@@ -95,10 +98,8 @@ class AccountRead(BaseSchema):
     is_enabled: bool
 
     @classmethod
-    def from_account(cls, account: object) -> "AccountRead":
+    def from_account(cls, account: "Account") -> "AccountRead":
         """Create AccountRead from Account model with credential masking."""
-        # Using getattr to safely access attributes since account is typed as object
-        # but is expected to be an Account SQLAlchemy model
         return cls(
             id=account.id,
             name=account.name,
