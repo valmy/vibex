@@ -352,6 +352,7 @@ async def validate_decision(decision: TradingDecision) -> Dict[str, Any]:
                 ),
                 risk_exposure=20.0,
                 max_position_size=2000.0,
+                leverage=2.0,
                 active_strategy=strategy,
             ),
             recent_trades={symbol: [] for symbol in symbols},

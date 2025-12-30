@@ -634,9 +634,11 @@ Provide:
                 tool_loop_count = 0
 
                 while tool_loop_count < max_tool_loops:
-                    result, updated_messages, should_continue = await self._execute_decision_loop_step(
-                        current_messages
-                    )
+                    (
+                        result,
+                        updated_messages,
+                        should_continue,
+                    ) = await self._execute_decision_loop_step(current_messages)
 
                     if not should_continue:
                         return result
@@ -755,7 +757,9 @@ Provide:
     ) -> tuple[Dict[str, Any], List[Dict[str, Any]], bool]:
         """Process content response from the LLM."""
         content = getattr(message, "content", None) or ""
-        reasoning_content = getattr(message, "reasoning_content", None) or getattr(message, "reasoning", None) or ""
+        reasoning_content = (
+            getattr(message, "reasoning_content", None) or getattr(message, "reasoning", None) or ""
+        )
 
         if reasoning_content:
             logger.debug(f"DeepSeek R1 Native Reasoning found (length: {len(reasoning_content)})")
@@ -767,15 +771,19 @@ Provide:
             # Validate if it looks like the final JSON response
             if '"decisions"' in content or "'decisions'" in content:
                 logger.debug("Content contains 'decisions' key, accepting as final response")
-                return {
-                    "content": content,
-                    "usage": response.usage,
-                    "cost": self.metrics_tracker._calculate_cost(
-                        self.model,
-                        response.usage.prompt_tokens,
-                        response.usage.completion_tokens,
-                    ),
-                }, current_messages, False
+                return (
+                    {
+                        "content": content,
+                        "usage": response.usage,
+                        "cost": self.metrics_tracker._calculate_cost(
+                            self.model,
+                            response.usage.prompt_tokens,
+                            response.usage.completion_tokens,
+                        ),
+                    },
+                    current_messages,
+                    False,
+                )
             else:
                 # Content present but missing 'decisions'. It's likely intermediate reasoning text.
                 logger.debug("Content missing 'decisions' key. Treating as intermediate reasoning.")

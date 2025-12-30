@@ -766,6 +766,7 @@ class TestLLMService:
     @pytest.mark.asyncio
     async def test_call_llm_for_decision_success(self, llm_service, mock_openai_client):
         """Test successful LLM API call for decision."""
+
         # Initialize helper inside the test or use the fixture one
         def create_mock_response(content="Test response"):
             mock_message = Mock()
