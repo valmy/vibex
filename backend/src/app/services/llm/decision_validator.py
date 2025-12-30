@@ -817,6 +817,8 @@ class DecisionValidator:
                     asset=asset_decision.asset,
                     action="hold",  # Conservative default
                     allocation_usd=0.0,  # No allocation for hold
+                    position_adjustment=None,
+                    order_adjustment=None,
                     tp_price=None,
                     sl_price=None,
                     exit_plan="Conservative hold due to validation failures. Monitor market conditions.",
