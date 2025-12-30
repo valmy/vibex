@@ -644,6 +644,7 @@ class ContextBuilderService:
                     max_position_size=account.max_position_size_usd,
                     maker_fee_bps=account.maker_fee_bps,
                     taker_fee_bps=account.taker_fee_bps,
+                    leverage=float(account.leverage),
                     active_strategy=active_strategy,
                 )
 

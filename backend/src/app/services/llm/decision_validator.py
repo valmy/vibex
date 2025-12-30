@@ -671,31 +671,68 @@ class DecisionValidator:
     async def _validate_concentration_risk(
         self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
-        """Validate concentration risk."""
-        errors = []
-        warnings = []
+        """Validate concentration risk for leveraged perpetual futures.
 
-        if decision.total_allocation_usd > 0:
-            # Calculate concentration per asset
-            asset_concentrations = {}
-            for asset_decision in decision.decisions:
-                if asset_decision.allocation_usd > 0:
-                    concentration = (
-                        asset_decision.allocation_usd / decision.total_allocation_usd
-                    ) * 100
-                    asset_concentrations[asset_decision.asset] = concentration
+        For perps trading, concentration is measured as MARGIN USAGE % of portfolio,
+        not position size % of decision. This accounts for leverage properly.
 
-            # Check for over-concentration in single asset
-            if asset_concentrations:
-                max_concentration = max(asset_concentrations.values())
-                if max_concentration > 60:
-                    errors.append(
-                        f"risk_rule: Single asset concentration ({max_concentration:.1f}%) exceeds safe limit (60%)"
-                    )
-                elif max_concentration > 50:
-                    warnings.append(
-                        f"risk_rule: High single asset concentration ({max_concentration:.1f}%)"
-                    )
+        Example:
+            - Portfolio: $10,000
+            - BTC position: $4,000 position size (notional value)
+            - Leverage: 2x
+            - Margin required: $4,000 / 2 = $2,000
+            - Concentration: $2,000 / $10,000 = 20%
+        """
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        if decision.total_allocation_usd <= 0:
+            return errors, warnings
+
+        account_balance = context.account_state.balance_usd
+        if account_balance <= 0:
+            errors.append(
+                "risk_rule: Cannot calculate concentration - account balance is zero or negative"
+            )
+            return errors, warnings
+
+        leverage = context.account_state.leverage
+
+        # Calculate concentration per asset based on MARGIN usage
+        # margin_required = position_size / leverage
+        # concentration = margin_required / account_balance
+        asset_concentrations = {}
+        for asset_decision in decision.decisions:
+            if asset_decision.allocation_usd > 0:
+                # allocation_usd is the position size (notional value)
+                position_size = asset_decision.allocation_usd
+                margin_required = position_size / leverage
+                concentration = (margin_required / account_balance) * 100
+                asset_concentrations[asset_decision.asset] = {
+                    "position_size": position_size,
+                    "margin_required": margin_required,
+                    "concentration_pct": concentration,
+                }
+
+        # Check for over-concentration in single asset
+        if asset_concentrations:
+            max_asset = max(asset_concentrations.items(), key=lambda x: x[1]["concentration_pct"])
+            max_asset_name = max_asset[0]
+            max_concentration = max_asset[1]["concentration_pct"]
+            margin_used = max_asset[1]["margin_required"]
+
+            # Thresholds: 80% error, 60% warning (higher than before since we now measure margin)
+            if max_concentration > 80:
+                errors.append(
+                    f"risk_rule: Single asset margin concentration ({max_concentration:.1f}%) "
+                    f"exceeds safe limit (80%). {max_asset_name} uses ${margin_used:.0f} margin "
+                    f"out of ${account_balance:.0f} balance."
+                )
+            elif max_concentration > 60:
+                warnings.append(
+                    f"risk_rule: High single asset margin concentration ({max_concentration:.1f}%). "
+                    f"{max_asset_name} uses ${margin_used:.0f} margin out of ${account_balance:.0f} balance."
+                )
 
         return errors, warnings
 

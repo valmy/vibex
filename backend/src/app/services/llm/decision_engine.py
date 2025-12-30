@@ -896,6 +896,7 @@ class DecisionEngine:
             max_position_size=_MINIMAL_VALID_MAX_POSITION_SIZE,
             maker_fee_bps=5.0,
             taker_fee_bps=20.0,
+            leverage=2.0,
             active_strategy=self._create_minimal_trading_strategy(),
         )
 
