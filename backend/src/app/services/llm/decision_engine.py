@@ -195,8 +195,8 @@ class DecisionEngine:
             RateLimitExceededError: If rate limit is exceeded
             DecisionEngineError: If decision generation fails
         """
-        # Default to ASSETS environment variable if symbols not provided
-        if symbols is None:
+        # Default to ASSETS environment variable if symbols not provided or empty
+        if not symbols:  # Handles both None and empty list
             from ...core.config import config
 
             assets_str = getattr(config, "ASSETS", "BTC,ETH,SOL")
