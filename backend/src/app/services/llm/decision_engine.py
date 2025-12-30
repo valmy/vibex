@@ -53,6 +53,11 @@ from .strategy_manager import StrategyManager
 
 logger = logging.getLogger(__name__)
 
+# Constants for minimal context creation
+# These values satisfy Pydantic schema constraints for historical decision contexts
+# where full context data is not available
+_MINIMAL_VALID_MAX_POSITION_SIZE = 1.0  # Must be > 0 per AccountContext constraint
+
 
 class DecisionEngineError(Exception):
     """Base exception for decision engine errors."""
@@ -888,7 +893,7 @@ class DecisionEngine:
             open_positions=[],
             recent_performance=self._create_minimal_performance_metrics(),
             risk_exposure=0.0,
-            max_position_size=1.0,  # Must be > 0 per schema constraint
+            max_position_size=_MINIMAL_VALID_MAX_POSITION_SIZE,
             maker_fee_bps=5.0,
             taker_fee_bps=20.0,
             active_strategy=self._create_minimal_trading_strategy(),
