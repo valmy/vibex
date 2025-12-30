@@ -888,7 +888,7 @@ class DecisionEngine:
             open_positions=[],
             recent_performance=self._create_minimal_performance_metrics(),
             risk_exposure=0.0,
-            max_position_size=0.0,
+            max_position_size=1.0,  # Must be > 0 per schema constraint
             maker_fee_bps=5.0,
             taker_fee_bps=20.0,
             active_strategy=self._create_minimal_trading_strategy(),
