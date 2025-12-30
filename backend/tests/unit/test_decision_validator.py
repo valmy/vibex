@@ -1091,6 +1091,44 @@ class TestCalculateStopLossPercentage:
 
         assert sl_pct is None
 
+    def test_zero_price_returns_none(self, validator):
+        """Test that None is returned when current price is zero (defensive programming)."""
+        from app.schemas.trading_decision import AssetDecision
+
+        asset_decision = AssetDecision(
+            asset="BTCUSDT",
+            action="buy",
+            allocation_usd=1000.0,
+            sl_price=47000.0,
+            exit_plan="Test",
+            rationale="Test",
+            confidence=70.0,
+            risk_level="medium",
+        )
+
+        sl_pct = validator._calculate_stop_loss_percentage(asset_decision, 0.0)
+
+        assert sl_pct is None
+
+    def test_negative_price_returns_none(self, validator):
+        """Test that None is returned when current price is negative (defensive programming)."""
+        from app.schemas.trading_decision import AssetDecision
+
+        asset_decision = AssetDecision(
+            asset="BTCUSDT",
+            action="buy",
+            allocation_usd=1000.0,
+            sl_price=47000.0,
+            exit_plan="Test",
+            rationale="Test",
+            confidence=70.0,
+            risk_level="medium",
+        )
+
+        sl_pct = validator._calculate_stop_loss_percentage(asset_decision, -100.0)
+
+        assert sl_pct is None
+
 
 class TestRiskPerTradeValidation:
     """Test risk per trade validation with correct stop-loss-based calculation."""

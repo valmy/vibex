@@ -125,10 +125,15 @@ class DecisionValidator:
         if not asset_decision.sl_price:
             return None
 
+        if current_price <= 0:
+            return None
+
         if asset_decision.action == "buy":
-            return (current_price - asset_decision.sl_price) / current_price * 100
+            sl_pct = (current_price - asset_decision.sl_price) / current_price * 100
+            return max(0, sl_pct)
         elif asset_decision.action == "sell":
-            return (asset_decision.sl_price - current_price) / current_price * 100
+            sl_pct = (asset_decision.sl_price - current_price) / current_price * 100
+            return max(0, sl_pct)
         return None
 
     async def validate_decision(
