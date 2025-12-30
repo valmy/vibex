@@ -573,86 +573,111 @@ class TestDecisionValidator:
         # Should have correlation risk warning
         assert any("High correlation risk" in warning for warning in result.warnings)
 
+    @pytest.fixture
+    def custom_trading_context_factory(self):
+        """Factory to create a trading context with customizable leverage and balance.
+
+        This factory encapsulates the complex setup required for creating a TradingContext
+        with custom account parameters. It improves test maintainability by allowing tests
+        to specify only the parameters that matter for the specific test scenario.
+        """
+
+        def _factory(
+            leverage: float = 2.0, balance: float = 10000.0, symbols: list[str] | None = None
+        ) -> TradingContext:
+            from app.schemas.trading_decision import AssetMarketData, MarketContext, PricePoint
+
+            if symbols is None:
+                symbols = ["BTCUSDT"]
+
+            # Create strategy with specified max leverage
+            strategy = TradingStrategy(
+                strategy_id="test_strategy",
+                strategy_name="Test Strategy",
+                strategy_type="aggressive",
+                prompt_template="Test",
+                risk_parameters=StrategyRiskParameters(
+                    max_risk_per_trade=15.0,
+                    max_daily_loss=20.0,
+                    stop_loss_percentage=1.5,
+                    take_profit_ratio=2.0,
+                    max_leverage=leverage,
+                ),
+                is_active=True,
+            )
+
+            # Create account context with specified leverage and balance
+            account_context = AccountContext(
+                account_id=1,
+                balance_usd=balance,
+                available_balance=balance,
+                total_pnl=0.0,
+                recent_performance=PerformanceMetrics(
+                    total_pnl=0.0,
+                    win_rate=50.0,
+                    avg_win=100.0,
+                    avg_loss=-80.0,
+                    max_drawdown=0.0,
+                ),
+                risk_exposure=0.0,
+                max_position_size=balance * 10,  # Generous max position size
+                leverage=leverage,
+                active_strategy=strategy,
+                open_positions=[],
+            )
+
+            # Create minimal technical indicators
+            indicators = TechnicalIndicators(
+                interval=TechnicalIndicatorsSet(ema_20=[48000.0]),
+                long_interval=TechnicalIndicatorsSet(ema_50=[47000.0]),
+            )
+
+            # Create asset market data for each symbol
+            assets = {}
+            for symbol in symbols:
+                assets[symbol] = AssetMarketData(
+                    symbol=symbol,
+                    current_price=48000.0,
+                    price_change_24h=1000.0,
+                    volume_24h=1000000.0,
+                    funding_rate=0.01,
+                    open_interest=50000000.0,
+                    volatility=0.02,
+                    technical_indicators=indicators,
+                    price_history=[
+                        PricePoint(
+                            timestamp=datetime.now(timezone.utc), price=48000.0, volume=1000.0
+                        ),
+                    ],
+                )
+
+            market_context = MarketContext(
+                assets=assets,
+                market_sentiment="neutral",
+            )
+
+            return TradingContext(
+                symbols=symbols,
+                account_id=1,
+                timeframes=["1h"],
+                market_data=market_context,
+                account_state=account_context,
+                risk_metrics=RiskMetrics(
+                    var_95=0.0, max_drawdown=0.0, correlation_risk=0.0, concentration_risk=0.0
+                ),
+                recent_trades={},
+            )
+
+        return _factory
+
     @pytest.mark.asyncio
-    async def test_concentration_risk_validation(self, validator):
+    async def test_concentration_risk_validation(self, validator, custom_trading_context_factory):
         """Test concentration risk validation with margin-based calculation."""
         from app.schemas.trading_decision import AssetDecision
 
-        # Create a custom context with high leverage to test concentration
-        # With 5x leverage and $2000 position: margin = 2000/5 = 400
-        # With $500 balance: concentration = 400/500 = 80% (> 80% error threshold)
-        high_leverage_strategy = TradingStrategy(
-            strategy_id="test_leverage",
-            strategy_name="High Leverage Test",
-            strategy_type="aggressive",
-            prompt_template="Test",
-            risk_parameters=StrategyRiskParameters(
-                max_risk_per_trade=15.0,
-                max_daily_loss=20.0,
-                stop_loss_percentage=1.5,
-                take_profit_ratio=2.0,
-                max_leverage=5.0,
-            ),
-            is_active=True,
-        )
-
-        high_leverage_context = AccountContext(
-            account_id=1,
-            balance_usd=490.0,
-            available_balance=490.0,
-            total_pnl=0.0,
-            recent_performance=PerformanceMetrics(
-                total_pnl=0.0,
-                win_rate=50.0,
-                avg_win=100.0,
-                avg_loss=-80.0,
-                max_drawdown=0.0,
-            ),
-            risk_exposure=0.0,
-            max_position_size=5000.0,
-            leverage=5.0,
-            active_strategy=high_leverage_strategy,
-            open_positions=[],
-        )
-
-        # Create custom TradingContext
-        from app.schemas.trading_decision import AssetMarketData, MarketContext, PricePoint
-
-        indicators = TechnicalIndicators(
-            interval=TechnicalIndicatorsSet(ema_20=[48000.0]),
-            long_interval=TechnicalIndicatorsSet(ema_50=[47000.0]),
-        )
-
-        btc_asset_data = AssetMarketData(
-            symbol="BTCUSDT",
-            current_price=48000.0,
-            price_change_24h=1000.0,
-            volume_24h=1000000.0,
-            funding_rate=0.01,
-            open_interest=50000000.0,
-            volatility=0.02,
-            technical_indicators=indicators,
-            price_history=[
-                PricePoint(timestamp=datetime.now(timezone.utc), price=48000.0, volume=1000.0),
-            ],
-        )
-
-        market_context = MarketContext(
-            assets={"BTCUSDT": btc_asset_data},
-            market_sentiment="neutral",
-        )
-
-        high_leverage_trading_context = TradingContext(
-            symbols=["BTCUSDT"],
-            account_id=1,
-            timeframes=["1h"],
-            market_data=market_context,
-            account_state=high_leverage_context,
-            risk_metrics=RiskMetrics(
-                var_95=0.0, max_drawdown=0.0, correlation_risk=0.0, concentration_risk=0.0
-            ),
-            recent_trades={},
-        )
+        # Create a context with high leverage (5x) and low balance ($490)
+        # to trigger concentration error: margin = 2000/5 = 400, concentration = 400/490 = 81.6%
+        high_leverage_trading_context = custom_trading_context_factory(leverage=5.0, balance=490.0)
 
         # Create high concentration scenario: $2000 position with 5x leverage on $490 balance
         # margin = 2000/5 = 400, concentration = 400/490 = 81.6% (> 80% error threshold)
