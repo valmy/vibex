@@ -108,9 +108,7 @@ class DecisionValidator:
             return symbol  # Return as-is if too short
 
     def _calculate_stop_loss_percentage(
-        self,
-        asset_decision: AssetDecision,
-        current_price: float
+        self, asset_decision: AssetDecision, current_price: float
     ) -> Optional[float]:
         """
         Calculate stop loss percentage from sl_price.
@@ -817,6 +815,8 @@ class DecisionValidator:
                     asset=asset_decision.asset,
                     action="hold",  # Conservative default
                     allocation_usd=0.0,  # No allocation for hold
+                    position_adjustment=None,
+                    order_adjustment=None,
                     tp_price=None,
                     sl_price=None,
                     exit_plan="Conservative hold due to validation failures. Monitor market conditions.",

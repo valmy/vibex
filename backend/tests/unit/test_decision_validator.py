@@ -1259,9 +1259,7 @@ class TestRiskPerTradeValidation:
         )
 
     @pytest.mark.asyncio
-    async def test_large_allocation_with_tight_sl_passes(
-        self, validator, sample_trading_context
-    ):
+    async def test_large_allocation_with_tight_sl_passes(self, validator, sample_trading_context):
         """Test that large allocation with tight stop loss passes risk validation.
 
         With $10,000 balance, 2% max risk per trade = $200 max risk.
@@ -1306,9 +1304,7 @@ class TestRiskPerTradeValidation:
         )
 
     @pytest.mark.asyncio
-    async def test_smaller_allocation_with_wide_sl_fails(
-        self, validator, sample_trading_context
-    ):
+    async def test_smaller_allocation_with_wide_sl_fails(self, validator, sample_trading_context):
         """Test that smaller allocation with wide stop loss fails validation.
 
         With $10,000 balance, 2% max risk per trade = $200 max risk.
@@ -1340,9 +1336,7 @@ class TestRiskPerTradeValidation:
         assert any("exceeds strategy limit" in error for error in result.errors)
 
     @pytest.mark.asyncio
-    async def test_no_sl_uses_default_stop_loss(
-        self, validator, sample_trading_context
-    ):
+    async def test_no_sl_uses_default_stop_loss(self, validator, sample_trading_context):
         """Test that missing sl_price uses strategy's default stop loss percentage.
 
         With $10,000 balance, 2% max risk per trade = $200 max risk.
@@ -1374,9 +1368,7 @@ class TestRiskPerTradeValidation:
         assert any("exceeds strategy limit" in error for error in result.errors)
 
     @pytest.mark.asyncio
-    async def test_sl_at_current_price_fails(
-        self, validator, sample_trading_context
-    ):
+    async def test_sl_at_current_price_fails(self, validator, sample_trading_context):
         """Test that stop loss at current price (0% SL) fails validation."""
         from app.schemas.trading_decision import AssetDecision
 
@@ -1404,9 +1396,7 @@ class TestRiskPerTradeValidation:
         assert any("must be positive" in error for error in result.errors)
 
     @pytest.mark.asyncio
-    async def test_sl_over_100_percent_capped(
-        self, validator, sample_trading_context
-    ):
+    async def test_sl_over_100_percent_capped(self, validator, sample_trading_context):
         """Test that stop loss over 100% is capped at 100%."""
         from app.schemas.trading_decision import AssetDecision
 
@@ -1434,9 +1424,7 @@ class TestRiskPerTradeValidation:
         assert any("exceeds strategy limit" in error for error in result.errors)
 
     @pytest.mark.asyncio
-    async def test_valid_allocation_with_sell_action(
-        self, validator, sample_trading_context
-    ):
+    async def test_valid_allocation_with_sell_action(self, validator, sample_trading_context):
         """Test valid risk calculation for sell action with tight stop loss.
 
         Note: May fail concentration check (single asset), which is expected.
