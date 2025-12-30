@@ -838,6 +838,71 @@ class DecisionEngine:
 
         logger.debug(f"Invalidated caches for symbol {symbol}")
 
+    def _create_minimal_performance_metrics(self) -> PerformanceMetrics:
+        """Creates a minimal valid PerformanceMetrics object."""
+        return PerformanceMetrics(
+            total_pnl=0.0,
+            win_rate=0.0,
+            avg_win=0.0,
+            avg_loss=0.0,
+            max_drawdown=0.0,
+            sharpe_ratio=None,
+        )
+
+    def _create_minimal_strategy_risk_parameters(self) -> StrategyRiskParameters:
+        """Creates minimal valid StrategyRiskParameters."""
+        return StrategyRiskParameters(
+            max_risk_per_trade=1.0,
+            max_daily_loss=5.0,
+            stop_loss_percentage=2.0,
+            take_profit_ratio=2.0,
+            max_leverage=2.0,
+            cooldown_period=300,
+            max_funding_rate_bps=0.0,
+            liquidation_buffer=0.0,
+        )
+
+    def _create_minimal_trading_strategy(self) -> TradingStrategy:
+        """Creates a minimal valid TradingStrategy object."""
+        return TradingStrategy(
+            strategy_id="unknown",
+            strategy_name="Unknown Strategy",
+            strategy_type="conservative",
+            prompt_template="No template available",
+            risk_parameters=self._create_minimal_strategy_risk_parameters(),
+            timeframe_preference=["1h", "4h"],
+            max_positions=3,
+            position_sizing="percentage",
+            order_preference="any",
+            funding_rate_threshold=0.0,
+            is_active=False,
+        )
+
+    def _create_minimal_account_context(self, account_id: int) -> AccountContext:
+        """Creates a minimal valid AccountContext object."""
+        return AccountContext(
+            account_id=account_id,
+            balance_usd=0.0,
+            available_balance=0.0,
+            total_pnl=0.0,
+            open_positions=[],
+            recent_performance=self._create_minimal_performance_metrics(),
+            risk_exposure=0.0,
+            max_position_size=0.0,
+            maker_fee_bps=5.0,
+            taker_fee_bps=20.0,
+            active_strategy=self._create_minimal_trading_strategy(),
+        )
+
+    def _create_minimal_risk_metrics(self) -> RiskMetrics:
+        """Creates a minimal valid RiskMetrics object."""
+        return RiskMetrics(
+            var_95=0.0,
+            max_drawdown=0.0,
+            correlation_risk=0.0,
+            concentration_risk=0.0,
+        )
+
     def _create_minimal_context(self, account_id: int, timestamp: datetime) -> TradingContext:
         """
         Create a minimal valid TradingContext for historical decisions.
@@ -859,75 +924,14 @@ class DecisionEngine:
             timestamp=timestamp,
         )
 
-        # Create minimal PerformanceMetrics
-        minimal_performance = PerformanceMetrics(
-            total_pnl=0.0,
-            win_rate=0.0,
-            avg_win=0.0,
-            avg_loss=0.0,
-            max_drawdown=0.0,
-            sharpe_ratio=None,
-        )
-
-        # Create minimal StrategyRiskParameters
-        minimal_risk_params = StrategyRiskParameters(
-            max_risk_per_trade=1.0,
-            max_daily_loss=5.0,
-            stop_loss_percentage=2.0,
-            take_profit_ratio=2.0,
-            max_leverage=2.0,
-            cooldown_period=300,
-            max_funding_rate_bps=0.0,
-            liquidation_buffer=0.0,
-        )
-
-        # Create minimal TradingStrategy
-        minimal_strategy = TradingStrategy(
-            strategy_id="unknown",
-            strategy_name="Unknown Strategy",
-            strategy_type="conservative",
-            prompt_template="No template available",
-            risk_parameters=minimal_risk_params,
-            timeframe_preference=["1h", "4h"],
-            max_positions=3,
-            position_sizing="percentage",
-            order_preference="any",
-            funding_rate_threshold=0.0,
-            is_active=False,
-        )
-
-        # Create minimal AccountContext
-        minimal_account_context = AccountContext(
-            account_id=account_id,
-            balance_usd=0.0,
-            available_balance=0.0,
-            total_pnl=0.0,
-            open_positions=[],
-            recent_performance=minimal_performance,
-            risk_exposure=0.0,
-            max_position_size=0.0,
-            maker_fee_bps=5.0,
-            taker_fee_bps=20.0,
-            active_strategy=minimal_strategy,
-        )
-
-        # Create minimal RiskMetrics
-        minimal_risk_metrics = RiskMetrics(
-            var_95=0.0,
-            max_drawdown=0.0,
-            correlation_risk=0.0,
-            concentration_risk=0.0,
-        )
-
-        # Create and return TradingContext
         return TradingContext(
             symbols=[],
             account_id=account_id,
             timeframes=[],
             market_data=minimal_market_context,
-            account_state=minimal_account_context,
+            account_state=self._create_minimal_account_context(account_id),
             recent_trades={},
-            risk_metrics=minimal_risk_metrics,
+            risk_metrics=self._create_minimal_risk_metrics(),
             timestamp=timestamp,
             errors=["Historical decision - full context not available"],
         )
