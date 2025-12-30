@@ -613,73 +613,152 @@ Provide:
         """
         last_exception = None
 
-        start_time = time.time()
+        # Initialize messages history
+        messages = [
+            {
+                "role": "system",
+                "content": self._get_decision_system_prompt(),
+            },
+            {"role": "user", "content": prompt},
+        ]
+
+        # Max loop for tool calls to prevent infinite loops
+        max_tool_loops = 20
+
         for attempt in range(self.max_retries):
             try:
-                start_time = time.time()
+                # Reset conversation state for each retry attempt
+                current_messages = list(messages)
+                tool_loop_count = 0
 
-                response = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": self._get_decision_system_prompt(),
-                        },
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.3,
-                    max_tokens=10000,  # Increased for reasoning models (~2000 for thinking + ~1000+ for JSON)
-                )
+                while tool_loop_count < max_tool_loops:
+                    start_time = time.time()
 
-                response_time_ms = (time.time() - start_time) * 1000
+                    response = await self.client.chat.completions.create(
+                        model=self.model,
+                        messages=current_messages,
+                        temperature=0.3,
+                        max_tokens=10000,
+                    )
 
-                # Record successful API call
-                self.metrics_tracker.record_api_call(
-                    model=self.model,
-                    prompt_tokens=response.usage.prompt_tokens,
-                    completion_tokens=response.usage.completion_tokens,
-                    response_time_ms=response_time_ms,
-                    success=True,
-                )
+                    response_time_ms = (time.time() - start_time) * 1000
 
-                # log debug response
-                logger.debug(f"LLM response: {response.choices[0].message.content}")
-                logger.debug(f"Response choices count: {len(response.choices)}")
-                logger.debug(f"First choice message type: {type(response.choices[0].message)}")
-                logger.debug(f"First choice message attributes: {[attr for attr in dir(response.choices[0].message) if not attr.startswith('_')]}")
+                    # Record successful API call
+                    self.metrics_tracker.record_api_call(
+                        model=self.model,
+                        prompt_tokens=response.usage.prompt_tokens,
+                        completion_tokens=response.usage.completion_tokens,
+                        response_time_ms=response_time_ms,
+                        success=True,
+                    )
 
-                # Detailed token usage logging
-                logger.debug(f"Token usage - prompt_tokens: {response.usage.prompt_tokens}")
-                logger.debug(f"Token usage - completion_tokens: {response.usage.completion_tokens}")
-                logger.debug(f"Token usage - total_tokens: {response.usage.total_tokens}")
-                logger.debug(f"Finish reason: {response.choices[0].finish_reason}")
+                    message = response.choices[0].message
 
-                # For reasoning models, check if content is empty and reasoning exists
-                message = response.choices[0].message
-                content = getattr(message, 'content', None) or ""
-                reasoning_content = getattr(message, 'reasoning_content', None) or getattr(message, 'reasoning', None) or ""
+                    # debug logging
+                    logger.debug(f"LLM response type: {type(message)}")
+                    logger.debug(f"Tool calls present: {bool(message.tool_calls)}")
 
-                if not content and reasoning_content:
-                    logger.debug(f"Reasoning content found (length: {len(reasoning_content)}), using reasoning as content")
-                    content = reasoning_content
-                    logger.debug(f"Reasoning content preview (first 500 chars): {reasoning_content[:500]}")
-                    logger.debug(f"Reasoning content preview (last 500 chars): {reasoning_content[-500:]}")
+                    # Handle Tool Calls (DeepSeek R1 Thinking via Tool)
+                    if message.tool_calls:
+                        # Append the assistant's message with tool calls
+                        current_messages.append(message)
 
-                logger.debug(f"Final content length: {len(content)} chars")
+                        for tool_call in message.tool_calls:
+                            if tool_call.function.name == "deepseek_reasoner":
+                                args_str = tool_call.function.arguments
+                                try:
+                                    args = json.loads(args_str)
+                                    reasoning = args.get("reasoning", "")
+                                    is_final = args.get("final", False)
 
-                return {
-                    "content": content,
-                    "usage": response.usage,
-                    "cost": self.metrics_tracker._calculate_cost(
-                        self.model,
-                        response.usage.prompt_tokens,
-                        response.usage.completion_tokens,
-                    ),
-                }
+                                    if reasoning:
+                                        logger.debug(f"DeepSeek R1 Tool Reasoning: {reasoning[:200]}...")
+
+                                    if is_final:
+                                        logger.debug("DeepSeek R1 thinking finished (final=True)")
+
+                                except json.JSONDecodeError:
+                                    logger.warning(
+                                        f"Failed to parse deepseek_reasoner arguments: {args_str}"
+                                    )
+
+                            # Append tool response (required by OpenAI API)
+                            current_messages.append({
+                                "role": "tool",
+                                "tool_call_id": tool_call.id,
+                                "content": "continue",
+                            })
+
+                        tool_loop_count += 1
+                        continue  # Loop again to get next response
+
+                    # Handle Content and Native Reasoning
+                    content = getattr(message, "content", None) or ""
+                    reasoning_content = (
+                        getattr(message, "reasoning_content", None)
+                        or getattr(message, "reasoning", None)
+                        or ""
+                    )
+                    
+                    if reasoning_content:
+                        logger.debug(f"DeepSeek R1 Native Reasoning found (length: {len(reasoning_content)})")
+
+                    # Check if we have final content
+                    if content:
+                        logger.debug(f"Content received (length: {len(content)} chars)")
+                        
+                        # Validate if it looks like the final JSON response
+                        if '"decisions"' in content or "'decisions'" in content:
+                            logger.debug("Content contains 'decisions' key, accepting as final response")
+                            return {
+                                "content": content,
+                                "usage": response.usage,
+                                "cost": self.metrics_tracker._calculate_cost(
+                                    self.model,
+                                    response.usage.prompt_tokens,
+                                    response.usage.completion_tokens,
+                                ),
+                            }
+                        else:
+                            # Content present but missing 'decisions'. It's likely intermediate reasoning text.
+                            logger.debug("Content missing 'decisions' key. Treating as intermediate reasoning.")
+                            current_messages.append({
+                                "role": "assistant",
+                                "content": content
+                            })
+                            # Force the model to output JSON
+                            current_messages.append({
+                                "role": "user",
+                                "content": "Please now provide the final decision in valid JSON format with the 'decisions' key."
+                            })
+                            tool_loop_count += 1
+                            continue
+                    
+                    # If content is empty but we have reasoning_content, it's an intermediate thinking step
+                    if not content and reasoning_content:
+                        logger.debug("Received native reasoning content but no final content. Continuing loop.")
+                        # Append reasoning as assistant message so model knows what it thought and continues
+                        current_messages.append({
+                            "role": "assistant",
+                            "content": reasoning_content
+                        })
+                        tool_loop_count += 1
+                        continue
+
+                    # If we got here: no tool calls, no content, and no reasoning content.
+                    logger.warning("Received empty response from LLM (no content, no tool calls, no reasoning)")
+                    # break loop to trigger retry
+                    raise LLMAPIError("Received empty response from LLM")
+
+                # End of while loop
+                logger.error("Max tool loops reached without final content")
+                raise LLMAPIError("Max tool loops reached without final content")
 
             except Exception as e:
                 last_exception = e
-                response_time_ms = (time.time() - start_time) * 1000 if "start_time" in locals() else 0
+                response_time_ms = (
+                    (time.time() - start_time) * 1000 if "start_time" in locals() else 0
+                )
 
                 # Record failed API call
                 self.metrics_tracker.record_api_call(
@@ -701,7 +780,9 @@ Provide:
                 else:
                     logger.error(f"API call failed after {self.max_retries} attempts: {e}")
 
-        raise LLMAPIError(f"API call failed after {self.max_retries} attempts: {last_exception}")
+        raise LLMAPIError(
+            f"API call failed after {self.max_retries} attempts: {last_exception}"
+        )
 
     def _validate_context(self, context: TradingContext) -> bool:
         """Validate that context has sufficient data for multi-asset decision generation.
@@ -1091,8 +1172,7 @@ Rules:
 
         logger.debug(f"Extracting JSON from text (length: {len(text)} chars)")
 
-        # First, try to extract JSON from code blocks (most reliable)
-        # Pattern: ```json { ... } ``` or ```{ ... } ```
+        # 1. Try to extract JSON from code blocks (most reliable)
         code_block_patterns = [
             r"```(?:json)?\s*(\{[\s\S]*?\})\s*```",  # Code block with JSON
             r"```(?:json)?\s*(\[.*?\]\n)\s*```",  # Code block with JSON array
@@ -1105,88 +1185,110 @@ Rules:
                 try:
                     parsed = json.loads(match)
                     logger.debug("Successfully parsed JSON from code block")
+                    # If it has decisions, it's definitely what we want
+                    if isinstance(parsed, dict) and "decisions" in parsed:
+                        return parsed
                     return parsed
                 except json.JSONDecodeError as e:
                     logger.debug(f"Failed to parse JSON from code block: {e}")
                     continue
 
-        # Look for "decisions": [ pattern which is specific to our trading decision format
-        # This helps avoid matching thinking text that contains other JSON-like content
-        decisions_pattern = r'"decisions"\s*:\s*\['
-        decisions_match = re.search(decisions_pattern, text, re.IGNORECASE)
-        if decisions_match:
-            logger.debug(f"Found 'decisions': [ pattern at position {decisions_match.start()}")
-            # Start from a bit before the decisions key to capture the opening brace
-            start_pos = text.rfind("{", 0, decisions_match.end())
-            if start_pos == -1:
-                start_pos = decisions_match.start()
+        # 2. comprehensive search for JSON objects
+        valid_objects = []
+        
+        # Find all opening braces
+        start_indices = [m.start() for m in re.finditer(r"\{", text)]
+        
+        # Limit the number of start positions to check to avoid O(N^2) on huge texts
+        # We assume the relevant JSON starts relatively early or late, but let's check up to 20 candidates
+        # favoring the ones that look like they start a block
+        if len(start_indices) > 50:
+             logger.debug(f"Found {len(start_indices)} start positions, checking all")
+        
+        for start_idx in start_indices:
+            # For each start, find the last closing brace and work backwards
+            end_idx = text.rfind("}")
+            if end_idx == -1 or end_idx <= start_idx:
+                continue
+                
+            current_end = end_idx
+            # Optimization: don't search if the substring is too short to be our target
+            if current_end - start_idx < 10:
+                continue
+
+            # Iteratively try to parse, shrinking from the end
+            # Limit iterations to avoid infinite loops
+            max_shrink_attempts = 20
+            attempts = 0
             
-            # Try to find the closing brace by counting braces
-            brace_count = 0
-            end_pos = start_pos
-            for i, char in enumerate(text[start_pos:], start_pos):
-                if char == '{':
-                    brace_count += 1
-                elif char == '}':
-                    brace_count -= 1
-                    if brace_count == 0:
-                        end_pos = i + 1
+            while current_end > start_idx and attempts < max_shrink_attempts:
+                potential_json = text[start_idx : current_end + 1]
+                try:
+                    parsed = json.loads(potential_json)
+                    # We found a valid JSON object
+                    
+                    score = 0
+                    has_decisions = False
+                    
+                    if isinstance(parsed, dict):
+                        if "decisions" in parsed:
+                            score += 1000
+                            has_decisions = True
+                        score += len(potential_json)
+                    
+                    valid_objects.append({
+                        "parsed": parsed,
+                        "score": score,
+                        "has_decisions": has_decisions,
+                        "length": len(potential_json)
+                    })
+                    
+                    # If we found a decisions object, we can probably stop looking at this start_idx
+                    if has_decisions:
                         break
+                        
+                    # Keep looking for smaller objects? No, usually we want the largest from this start
+                    break 
+                    
+                except json.JSONDecodeError:
+                    # Find the previous '}'
+                    current_end = text.rfind("}", start_idx, current_end)
+                    attempts += 1
+                    if current_end == -1:
+                        break
+
+        if valid_objects:
+            # Sort by score (descending)
+            valid_objects.sort(key=lambda x: x["score"], reverse=True)
+            best_match = valid_objects[0]
             
-            if brace_count == 0:
-                potential_json = text[start_pos:end_pos].strip()
-                try:
-                    parsed = json.loads(potential_json)
-                    logger.debug(f"Found trading decision JSON at position {start_pos}, length {end_pos - start_pos}")
-                    if "decisions" in parsed:
-                        logger.debug("Found JSON with 'decisions' key")
-                        return parsed
-                except json.JSONDecodeError:
-                    pass
+            logger.debug(f"Found {len(valid_objects)} valid JSON objects. Best match score: {best_match['score']}")
+            if best_match["has_decisions"]:
+                logger.debug("Selected JSON object contains 'decisions' key")
+            else:
+                logger.debug(f"Selected largest JSON object (length: {best_match['length']})")
+                
+            return best_match["parsed"]
 
-        # Fall back to finding the first JSON object by looking for the first '{'
-        # and finding a balanced closing '}'
-        logger.debug("Looking for first JSON object in text")
-        first_brace = text.find("{")
-        if first_brace != -1:
-            # Try to find a balanced JSON object by looking for '}' followed by newlines
-            # or end of content
-            for end_pos in range(len(text), first_brace, -1):
-                potential_json = text[first_brace:end_pos].strip()
-                try:
-                    parsed = json.loads(potential_json)
-                    logger.debug(f"Found JSON starting at position {first_brace}, length {end_pos - first_brace}")
-                    # Check if this looks like a trading decision (has 'decisions' key)
-                    if "decisions" in parsed:
-                        logger.debug("Found JSON with 'decisions' key")
-                        return parsed
-                    # Even if no 'decisions', return it if it parsed successfully
-                    logger.debug(f"Found JSON with keys: {list(parsed.keys())}")
-                    return parsed
-                except json.JSONDecodeError:
-                    continue
-
-        # Fall back to finding JSON objects using regex for nested structures
+        # 3. Fall back to regex for small/nested structures if the above failed
+        logger.debug("Falling back to regex extraction")
         json_pattern = r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}"
         matches = re.findall(json_pattern, text, re.DOTALL)
 
-        logger.debug(f"Found {len(matches)} potential JSON objects in text")
-
         for match in matches:
             try:
                 parsed = json.loads(match)
-                # Check if this looks like a trading decision (has 'decisions' key)
-                if "decisions" in parsed:
-                    logger.debug("Found JSON with 'decisions' key")
+                if isinstance(parsed, dict) and "decisions" in parsed:
+                    logger.debug("Found JSON with 'decisions' key via regex")
                     return parsed
             except json.JSONDecodeError:
                 continue
-
-        # If still no match, try to find any JSON and validate it
+        
+        # Return any valid JSON from regex if no 'decisions' found
         for match in matches:
             try:
                 parsed = json.loads(match)
-                logger.debug(f"Found JSON with keys: {list(parsed.keys())}")
+                logger.debug(f"Found JSON keys: {list(parsed.keys())} via regex")
                 return parsed
             except json.JSONDecodeError:
                 continue
