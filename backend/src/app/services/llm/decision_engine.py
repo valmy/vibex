@@ -34,9 +34,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ...db.session import get_session_factory
 from ...schemas.trading_decision import (
+    AccountContext,
     DecisionResult,
     HealthStatus,
+    MarketContext,
+    PerformanceMetrics,
+    RiskMetrics,
+    StrategyRiskParameters,
     TradingContext,
+    TradingStrategy,
     UsageMetrics,
 )
 from .context_builder import get_context_builder_service
@@ -730,16 +736,8 @@ class DecisionEngine:
 
                 # Create DecisionResult
                 # Note: We don't have the full context stored, so we create a minimal one
-                default_context = TradingContext(
-                    symbols=[],
-                    account_id=account_id,
-                    timeframes=[],
-                    market_data=None,  # type: ignore[arg-type]
-                    account_state=None,  # type: ignore[arg-type]
-                    recent_trades={},
-                    risk_metrics=None,  # type: ignore[arg-type]
-                    timestamp=decision.timestamp,
-                    errors=[],
+                default_context = self._create_minimal_context(
+                    account_id=account_id, timestamp=decision.timestamp
                 )
 
                 decision_result = DecisionResult(
@@ -839,6 +837,100 @@ class DecisionEngine:
         self.context_builder.clear_cache(f"market_context_{symbol}")
 
         logger.debug(f"Invalidated caches for symbol {symbol}")
+
+    def _create_minimal_context(self, account_id: int, timestamp: datetime) -> TradingContext:
+        """
+        Create a minimal valid TradingContext for historical decisions.
+
+        This is used when retrieving decision history where we don't have
+        the full context stored in the database.
+
+        Args:
+            account_id: Account identifier
+            timestamp: Timestamp for the context
+
+        Returns:
+            Minimal but valid TradingContext
+        """
+        # Create minimal MarketContext
+        minimal_market_context = MarketContext(
+            assets={},  # Empty assets dictionary
+            market_sentiment=None,
+            timestamp=timestamp,
+        )
+
+        # Create minimal PerformanceMetrics
+        minimal_performance = PerformanceMetrics(
+            total_pnl=0.0,
+            win_rate=0.0,
+            avg_win=0.0,
+            avg_loss=0.0,
+            max_drawdown=0.0,
+            sharpe_ratio=None,
+        )
+
+        # Create minimal StrategyRiskParameters
+        minimal_risk_params = StrategyRiskParameters(
+            max_risk_per_trade=1.0,
+            max_daily_loss=5.0,
+            stop_loss_percentage=2.0,
+            take_profit_ratio=2.0,
+            max_leverage=2.0,
+            cooldown_period=300,
+            max_funding_rate_bps=0.0,
+            liquidation_buffer=0.0,
+        )
+
+        # Create minimal TradingStrategy
+        minimal_strategy = TradingStrategy(
+            strategy_id="unknown",
+            strategy_name="Unknown Strategy",
+            strategy_type="conservative",
+            prompt_template="No template available",
+            risk_parameters=minimal_risk_params,
+            timeframe_preference=["1h", "4h"],
+            max_positions=3,
+            position_sizing="percentage",
+            order_preference="any",
+            funding_rate_threshold=0.0,
+            is_active=False,
+        )
+
+        # Create minimal AccountContext
+        minimal_account_context = AccountContext(
+            account_id=account_id,
+            balance_usd=0.0,
+            available_balance=0.0,
+            total_pnl=0.0,
+            open_positions=[],
+            recent_performance=minimal_performance,
+            risk_exposure=0.0,
+            max_position_size=0.0,
+            maker_fee_bps=5.0,
+            taker_fee_bps=20.0,
+            active_strategy=minimal_strategy,
+        )
+
+        # Create minimal RiskMetrics
+        minimal_risk_metrics = RiskMetrics(
+            var_95=0.0,
+            max_drawdown=0.0,
+            correlation_risk=0.0,
+            concentration_risk=0.0,
+        )
+
+        # Create and return TradingContext
+        return TradingContext(
+            symbols=[],
+            account_id=account_id,
+            timeframes=[],
+            market_data=minimal_market_context,
+            account_state=minimal_account_context,
+            recent_trades={},
+            risk_metrics=minimal_risk_metrics,
+            timestamp=timestamp,
+            errors=["Historical decision - full context not available"],
+        )
 
     async def get_engine_health(self) -> HealthStatus:
         """
