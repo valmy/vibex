@@ -31,7 +31,7 @@ class DecisionRequest(BaseModel):
     symbols: Optional[List[str]] = Field(
         None,
         description="List of trading pair symbols (e.g., ['BTCUSDT', 'ETHUSDT']). "
-        "If not provided, defaults to ASSETS environment variable.",
+        "If not provided or empty, defaults to ASSETS environment variable.",
     )
     account_id: int = Field(..., description="Account identifier")
     strategy_override: Optional[str] = Field(None, description="Optional strategy override")
@@ -352,6 +352,7 @@ async def validate_decision(decision: TradingDecision) -> Dict[str, Any]:
                 ),
                 risk_exposure=20.0,
                 max_position_size=2000.0,
+                leverage=2.0,
                 active_strategy=strategy,
             ),
             recent_trades={symbol: [] for symbol in symbols},

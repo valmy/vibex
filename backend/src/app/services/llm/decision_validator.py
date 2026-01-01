@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from ...core.exceptions import ValidationError as CustomValidationError
 from ...schemas.trading_decision import (
     AccountContext,
+    AssetDecision,
     RiskValidationResult,
     TradingContext,
     TradingDecision,
@@ -105,6 +106,33 @@ class DecisionValidator:
             return symbol[:3]  # Most common case
         else:
             return symbol  # Return as-is if too short
+
+    def _calculate_stop_loss_percentage(
+        self, asset_decision: AssetDecision, current_price: float
+    ) -> Optional[float]:
+        """
+        Calculate stop loss percentage from sl_price.
+
+        Args:
+            asset_decision: The asset decision containing sl_price
+            current_price: Current market price of the asset
+
+        Returns:
+            Stop loss percentage (e.g., 2.0 for 2%), or None if sl_price not available
+        """
+        if not asset_decision.sl_price:
+            return None
+
+        if current_price <= 0:
+            return None
+
+        if asset_decision.action == "buy":
+            sl_pct = (current_price - asset_decision.sl_price) / current_price * 100
+            return max(0, sl_pct)
+        elif asset_decision.action == "sell":
+            sl_pct = (asset_decision.sl_price - current_price) / current_price * 100
+            return max(0, sl_pct)
+        return None
 
     async def validate_decision(
         self, decision: TradingDecision, context: TradingContext
@@ -494,19 +522,42 @@ class DecisionValidator:
         warnings: List[str] = []
 
         strategy = context.account_state.active_strategy
+        default_sl_pct = strategy.risk_parameters.stop_loss_percentage
+        max_risk_per_trade = strategy.risk_parameters.max_risk_per_trade
+        balance = context.account_state.balance_usd
+        max_risk_amount = balance * (max_risk_per_trade / 100)
 
-        # Validate against strategy risk parameters
         for asset_decision in decision.decisions:
-            if asset_decision.action in ["buy", "sell"]:
-                max_risk_per_trade = strategy.risk_parameters.max_risk_per_trade
-                balance = context.account_state.balance_usd
-                max_risk_amount = balance * (max_risk_per_trade / 100)
+            if asset_decision.action not in ["buy", "sell"]:
+                continue
 
-                if asset_decision.allocation_usd > max_risk_amount:
-                    errors.append(
-                        f"business_rule ({asset_decision.asset}): Trade risk ${asset_decision.allocation_usd:.2f} "
-                        f"exceeds strategy limit ${max_risk_amount:.2f}"
-                    )
+            asset_data = context.market_data.get_asset_data(asset_decision.asset)
+            if not asset_data:
+                continue
+            current_price = asset_data.current_price
+
+            sl_pct = self._calculate_stop_loss_percentage(asset_decision, current_price)
+
+            if sl_pct is None:
+                sl_pct = default_sl_pct
+            else:
+                sl_pct = min(sl_pct, 100.0)
+
+            if sl_pct <= 0:
+                errors.append(
+                    f"business_rule ({asset_decision.asset}): Stop loss percentage must be positive, "
+                    f"got {sl_pct:.2f}%"
+                )
+                continue
+
+            actual_risk = asset_decision.allocation_usd * (sl_pct / 100)
+
+            if actual_risk > max_risk_amount:
+                errors.append(
+                    f"business_rule ({asset_decision.asset}): Actual risk ${actual_risk:.2f} "
+                    f"(allocation ${asset_decision.allocation_usd:.2f} × {sl_pct:.2f}% SL) "
+                    f"exceeds strategy limit ${max_risk_amount:.2f}"
+                )
 
         return errors, warnings
 
@@ -620,31 +671,68 @@ class DecisionValidator:
     async def _validate_concentration_risk(
         self, decision: TradingDecision, context: TradingContext
     ) -> Tuple[List[str], List[str]]:
-        """Validate concentration risk."""
-        errors = []
-        warnings = []
+        """Validate concentration risk for leveraged perpetual futures.
 
-        if decision.total_allocation_usd > 0:
-            # Calculate concentration per asset
-            asset_concentrations = {}
-            for asset_decision in decision.decisions:
-                if asset_decision.allocation_usd > 0:
-                    concentration = (
-                        asset_decision.allocation_usd / decision.total_allocation_usd
-                    ) * 100
-                    asset_concentrations[asset_decision.asset] = concentration
+        For perps trading, concentration is measured as MARGIN USAGE % of portfolio,
+        not position size % of decision. This accounts for leverage properly.
 
-            # Check for over-concentration in single asset
-            if asset_concentrations:
-                max_concentration = max(asset_concentrations.values())
-                if max_concentration > 60:
-                    errors.append(
-                        f"risk_rule: Single asset concentration ({max_concentration:.1f}%) exceeds safe limit (60%)"
-                    )
-                elif max_concentration > 50:
-                    warnings.append(
-                        f"risk_rule: High single asset concentration ({max_concentration:.1f}%)"
-                    )
+        Example:
+            - Portfolio: $10,000
+            - BTC position: $4,000 position size (notional value)
+            - Leverage: 2x
+            - Margin required: $4,000 / 2 = $2,000
+            - Concentration: $2,000 / $10,000 = 20%
+        """
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        if decision.total_allocation_usd <= 0:
+            return errors, warnings
+
+        account_balance = context.account_state.balance_usd
+        if account_balance <= 0:
+            errors.append(
+                "risk_rule: Cannot calculate concentration - account balance is zero or negative"
+            )
+            return errors, warnings
+
+        leverage = context.account_state.leverage
+
+        # Calculate concentration per asset based on MARGIN usage
+        # margin_required = position_size / leverage
+        # concentration = margin_required / account_balance
+        asset_concentrations = {}
+        for asset_decision in decision.decisions:
+            if asset_decision.allocation_usd > 0:
+                # allocation_usd is the position size (notional value)
+                position_size = asset_decision.allocation_usd
+                margin_required = position_size / leverage
+                concentration = (margin_required / account_balance) * 100
+                asset_concentrations[asset_decision.asset] = {
+                    "position_size": position_size,
+                    "margin_required": margin_required,
+                    "concentration_pct": concentration,
+                }
+
+        # Check for over-concentration in single asset
+        if asset_concentrations:
+            max_asset = max(asset_concentrations.items(), key=lambda x: x[1]["concentration_pct"])
+            max_asset_name = max_asset[0]
+            max_concentration = max_asset[1]["concentration_pct"]
+            margin_used = max_asset[1]["margin_required"]
+
+            # Thresholds: 80% error, 60% warning (higher than before since we now measure margin)
+            if max_concentration > 80:
+                errors.append(
+                    f"risk_rule: Single asset margin concentration ({max_concentration:.1f}%) "
+                    f"exceeds safe limit (80%). {max_asset_name} uses ${margin_used:.0f} margin "
+                    f"out of ${account_balance:.0f} balance."
+                )
+            elif max_concentration > 60:
+                warnings.append(
+                    f"risk_rule: High single asset margin concentration ({max_concentration:.1f}%). "
+                    f"{max_asset_name} uses ${margin_used:.0f} margin out of ${account_balance:.0f} balance."
+                )
 
         return errors, warnings
 
@@ -764,6 +852,8 @@ class DecisionValidator:
                     asset=asset_decision.asset,
                     action="hold",  # Conservative default
                     allocation_usd=0.0,  # No allocation for hold
+                    position_adjustment=None,
+                    order_adjustment=None,
                     tp_price=None,
                     sl_price=None,
                     exit_plan="Conservative hold due to validation failures. Monitor market conditions.",

@@ -470,6 +470,9 @@ class AccountContext(BaseModel):
     max_position_size: float = Field(..., gt=0)
     maker_fee_bps: float = Field(default=5.0, ge=0)
     taker_fee_bps: float = Field(default=20.0, ge=0)
+    leverage: float = Field(
+        default=2.0, ge=1.0, le=125.0, description="Trading leverage multiplier"
+    )
     active_strategy: TradingStrategy
 
     def can_open_new_position(self, allocation_usd: float) -> bool:

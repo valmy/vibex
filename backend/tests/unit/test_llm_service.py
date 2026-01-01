@@ -40,15 +40,28 @@ class TestLLMService:
     def mock_openai_client(self):
         """Create a mock OpenAI client."""
         mock_client = AsyncMock()
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = "Test response"
-        mock_response.usage = Mock()
-        mock_response.usage.prompt_tokens = 100
-        mock_response.usage.completion_tokens = 50
-        mock_response.usage.total_tokens = 150
 
-        mock_client.chat.completions.create.return_value = mock_response
+        # Create a helper to generate a mock response
+        def create_mock_response(content="Test response"):
+            mock_message = Mock()
+            mock_message.content = content
+            mock_message.tool_calls = None
+            mock_message.reasoning_content = None
+            mock_message.reasoning = None
+
+            mock_choice = Mock()
+            mock_choice.message = mock_message
+            mock_choice.finish_reason = "stop"
+
+            mock_response = Mock()
+            mock_response.choices = [mock_choice]
+            mock_response.usage = Mock()
+            mock_response.usage.prompt_tokens = 100
+            mock_response.usage.completion_tokens = 50
+            mock_response.usage.total_tokens = 150
+            return mock_response
+
+        mock_client.chat.completions.create.return_value = create_mock_response()
         return mock_client
 
     @pytest.fixture
@@ -315,6 +328,7 @@ class TestLLMService:
             "portfolio_risk_level": "medium",
         }
 
+        # Update the content properly
         mock_openai_client.chat.completions.create.return_value.choices[
             0
         ].message.content = json.dumps(decision_json)
@@ -752,12 +766,30 @@ class TestLLMService:
     @pytest.mark.asyncio
     async def test_call_llm_for_decision_success(self, llm_service, mock_openai_client):
         """Test successful LLM API call for decision."""
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = "Test response"
-        mock_response.usage = Mock()
-        mock_response.usage.prompt_tokens = 100
-        mock_response.usage.completion_tokens = 50
+
+        # Initialize helper inside the test or use the fixture one
+        def create_mock_response(content="Test response"):
+            mock_message = Mock()
+            mock_message.content = content
+            mock_message.tool_calls = None
+            mock_message.reasoning_content = None
+            mock_message.reasoning = None
+
+            mock_choice = Mock()
+            mock_choice.message = mock_message
+            mock_choice.finish_reason = "stop"
+
+            mock_response = Mock()
+            mock_response.choices = [mock_choice]
+            mock_response.usage = Mock()
+            mock_response.usage.prompt_tokens = 100
+            mock_response.usage.completion_tokens = 50
+            mock_response.usage.total_tokens = 150
+            return mock_response
+
+        # content must contain 'decisions' to be accepted as final
+        content = '{"decisions": []}'
+        mock_response = create_mock_response(content=content)
         mock_openai_client.chat.completions.create.return_value = mock_response
 
         llm_service._client = mock_openai_client
@@ -765,21 +797,39 @@ class TestLLMService:
             with patch.object(llm_service.metrics_tracker, "_calculate_cost", return_value=0.01):
                 result = await llm_service._call_llm_for_decision("Test prompt")
 
-                assert result["content"] == "Test response"
+                assert result["content"] == content
                 assert result["usage"] == mock_response.usage
                 assert result["cost"] == 0.01
 
     @pytest.mark.asyncio
     async def test_call_llm_for_decision_with_retries(self, llm_service, mock_openai_client):
         """Test LLM API call with retries on failure."""
+
+        def create_mock_response(content="Success"):
+            mock_message = Mock()
+            mock_message.content = content
+            mock_message.tool_calls = None
+            mock_message.reasoning_content = None
+            mock_message.reasoning = None
+
+            mock_choice = Mock()
+            mock_choice.message = mock_message
+            mock_choice.finish_reason = "stop"
+
+            mock_response = Mock()
+            mock_response.choices = [mock_choice]
+            mock_response.usage = Mock()
+            mock_response.usage.prompt_tokens = 100
+            mock_response.usage.completion_tokens = 50
+            return mock_response
+
+        # content must contain 'decisions' to be accepted as final
+        content = '{"decisions": []}'
         # First two calls fail, third succeeds
         mock_openai_client.chat.completions.create.side_effect = [
             Exception("First failure"),
             Exception("Second failure"),
-            Mock(
-                choices=[Mock(message=Mock(content="Success"))],
-                usage=Mock(prompt_tokens=100, completion_tokens=50),
-            ),
+            create_mock_response(content=content),
         ]
 
         llm_service._client = mock_openai_client
@@ -787,7 +837,7 @@ class TestLLMService:
             with patch.object(llm_service.metrics_tracker, "_calculate_cost", return_value=0.01):
                 result = await llm_service._call_llm_for_decision("Test prompt")
 
-                assert result["content"] == "Success"
+                assert result["content"] == content
                 # Should have made 3 attempts
                 assert mock_openai_client.chat.completions.create.call_count == 3
 
@@ -811,7 +861,7 @@ class TestLLMService:
         prompt = llm_service._get_decision_system_prompt()
 
         assert "expert cryptocurrency trading advisor" in prompt.lower()
-        assert "JSON format" in prompt
+        assert "valid JSON" in prompt
         assert "allocation_usd" in prompt
         assert "confidence" in prompt
         assert "rationale" in prompt
