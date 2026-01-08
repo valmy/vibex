@@ -4,6 +4,7 @@
 *   **Language**: Python 3.13 (supports 3.12+)
 *   **Framework**: FastAPI (Asynchronous REST API and WebSockets)
 *   **Task Management**: Built-in asyncio for concurrent market data processing and trade execution.
+*   **Execution Engine**: Modular adapter-based architecture supporting both live exchange interaction and local simulation (Paper Trading).
 
 ## Data Persistence & Caching
 *   **Primary Database**: PostgreSQL 17

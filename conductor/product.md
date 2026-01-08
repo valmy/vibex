@@ -14,6 +14,7 @@ VibeX is an LLM-powered cryptocurrency trading agent designed for decentralized 
 
 ## MVP Features
 *   **AsterDEX Real-time Integration**: Seamless connection to AsterDEX for live market data streaming and order execution.
+*   **Paper Trading Mode**: Robust simulation environment using live exchange prices to validate AI strategies without financial risk.
 *   **AI-Driven Market Analysis**: Leverage LLMs via OpenRouter to analyze market sentiment and technical data for trade generation.
 
 ## Risk Management Approach
