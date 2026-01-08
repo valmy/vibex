@@ -50,7 +50,7 @@ class AsterClient:
 
     async def fetch_klines(
         self, symbol: str, interval: str = "1h", limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    ) -> List[List[Any]]:
         """
         Fetch kline/candlestick data from Aster DEX.
 
@@ -63,14 +63,14 @@ class AsterClient:
             limit: Number of candles to fetch
 
         Returns:
-            List of candle data dictionaries
+            List of candle data (list of lists)
 
         Raises:
             Exception: If the API call fails
         """
         try:
             # The actual fetching is done in a separate thread to handle blocking I/O.
-            def _fetch_in_thread() -> List[Dict[str, Any]]:
+            def _fetch_in_thread() -> List[List[Any]]:
                 try:
                     # Use the _client property to get a fresh client instance
                     client = self._client
@@ -214,6 +214,7 @@ class AsterClient:
             Order response dictionary
         """
         try:
+
             def _place_in_thread() -> Dict[str, Any]:
                 try:
                     client = self._client
@@ -221,7 +222,7 @@ class AsterClient:
                         "symbol": symbol,
                         "side": side.upper(),
                         "type": type.upper(),
-                        "quantity": quantity
+                        "quantity": quantity,
                     }
                     if price is not None:
                         kwargs["price"] = price
@@ -236,17 +237,17 @@ class AsterClient:
                         return client.order(**kwargs)
                     else:
                         return client.new_order(**kwargs)
-                        
+
                 except Exception as e:
                     logger.error(f"Error placing order in thread: {e}", exc_info=True)
                     raise
 
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(None, _place_in_thread)
-            
+
             logger.info(f"Order placed successfully: {symbol} {side} {quantity}")
             return response
-            
+
         except Exception as e:
             logger.error(f"Error in place_order task: {e}", exc_info=True)
             raise
@@ -259,6 +260,7 @@ class AsterClient:
             List of position dictionaries
         """
         try:
+
             def _fetch_in_thread() -> List[Dict[str, Any]]:
                 try:
                     client = self._client

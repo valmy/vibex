@@ -300,7 +300,7 @@ class MarketDataService:
         Returns:
             List of candle data dictionaries
         """
-        return await self.client.fetch_klines(symbol, interval, limit)  # type: ignore[return-value]
+        return await self.client.fetch_klines(symbol, interval, limit)
 
     async def fetch_funding_rate(
         self,

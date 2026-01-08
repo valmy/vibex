@@ -45,12 +45,12 @@ from ...schemas.trading_decision import (
     TradingStrategy,
     UsageMetrics,
 )
+from ..execution.service import get_execution_service
 from .context_builder import get_context_builder_service
 from .decision_repository import DecisionRepository
 from .decision_validator import get_decision_validator
 from .llm_service import get_llm_service
 from .strategy_manager import StrategyManager
-from ..execution.service import get_execution_service
 
 logger = logging.getLogger(__name__)
 
@@ -630,6 +630,7 @@ class DecisionEngine:
 
         async with self.session_factory() as db:
             from sqlalchemy import select
+
             from ...models.account import Account
 
             stmt = select(Account).where(Account.id == account_id)
