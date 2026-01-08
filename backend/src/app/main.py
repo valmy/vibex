@@ -19,6 +19,7 @@ from .api.routes import (
     auth,
     decision_engine,
     diary,
+    execution,
     market_data,
     monitoring,
     orders,
@@ -130,6 +131,7 @@ app.include_router(decision_engine.router)
 app.include_router(strategies.router)
 app.include_router(monitoring.router)
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+app.include_router(execution.router)
 app.include_router(users.router)
 
 
