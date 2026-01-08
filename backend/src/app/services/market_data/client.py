@@ -190,3 +190,65 @@ class AsterClient:
         except Exception as e:
             logger.error(f"Error in fetch_balance task: {e}", exc_info=True)
             raise
+
+    async def place_order(
+        self,
+        symbol: str,
+        side: str,
+        type: str,
+        quantity: float,
+        price: Optional[float] = None,
+        reduce_only: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Place a new order on Aster DEX.
+
+        Args:
+            symbol: Trading pair symbol
+            side: 'BUY' or 'SELL'
+            type: 'MARKET', 'LIMIT', etc.
+            quantity: Order quantity
+            price: Limit price (required for LIMIT orders)
+            reduce_only: Whether the order is reduce-only
+
+        Returns:
+            Order response dictionary
+        """
+        try:
+            def _place_in_thread() -> Dict[str, Any]:
+                try:
+                    client = self._client
+                    kwargs: Dict[str, Any] = {
+                        "symbol": symbol,
+                        "side": side.upper(),
+                        "type": type.upper(),
+                        "quantity": quantity
+                    }
+                    if price is not None:
+                        kwargs["price"] = price
+                    if reduce_only:
+                        kwargs["reduceOnly"] = "true"
+
+                    # Assuming client.new_order is the method name
+                    # If the library uses a different name, this will need adjustment
+                    if hasattr(client, "new_order"):
+                        return client.new_order(**kwargs)
+                    elif hasattr(client, "order"):
+                        return client.order(**kwargs)
+                    else:
+                        # Fallback try 'new_order' if introspection fails/is unavailable
+                        return client.new_order(**kwargs)
+                        
+                except Exception as e:
+                    logger.error(f"Error placing order in thread: {e}", exc_info=True)
+                    raise
+
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(None, _place_in_thread)
+            
+            logger.info(f"Order placed successfully: {symbol} {side} {quantity}")
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error in place_order task: {e}", exc_info=True)
+            raise
