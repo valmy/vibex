@@ -25,7 +25,7 @@ async def verify():
     account.leverage = 5.0
     account.is_paper_trading = False # Triggers LiveExecutionAdapter
     
-    print("Executing Live Market Buy path for BTCUSDT (0.0001 qty)...")
+    print("Executing Live Market Buy path for BTCUSDT (0.001 qty)...")
     try:
         # This will attempt a real API call via AsterClient
         result = await service.execute_order(
@@ -33,7 +33,7 @@ async def verify():
             account=account,
             symbol="BTCUSDT",
             action="buy",
-            quantity=0.0001
+            quantity=0.001
         )
         print("-" * 50)
         print(f"SUCCESS: Order placed! Result: {result}")
