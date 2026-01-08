@@ -14,20 +14,9 @@
 - [x] Task: Implement Risk Checks (Leverage & Cooldown) [206c5f9]
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Live Execution & Safety' (Protocol in workflow.md) [151e877]
 
-## Phase 3: Reconciliation & Integration
+## Phase 3: Reconciliation & Integration [checkpoint: 84bc512]
 
 - [x] Task: Implement Live Position Reconciliation [9940661]
-    - Fetch remote positions from AsterDEX.
-    - Reconcile with local DB (Live trades only).
-    - **Test:** Verify local state updates to match remote state.
-
 - [x] Task: Connect Decision Engine to Execution Service [75fecff]
-    - Update `DecisionEngine` to call `ExecutionService`.
-    - Ensure correct mode (Paper/Live) is used based on Account config.
-    - **Test:** E2E test: Generate Decision -> Execution Service called -> Order "Placed" (Mocked).
-
 - [x] Task: Add Execution Status Endpoints [1f1b15d]
-    - Endpoints to view active Paper/Live positions and status.
-    - **Test:** Verify API response.
-
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Reconciliation & Integration' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Reconciliation & Integration' (Protocol in workflow.md) [84bc512]
