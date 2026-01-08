@@ -198,6 +198,7 @@ class AsterClient:
         type: str,
         quantity: float,
         price: Optional[float] = None,
+        stop_price: Optional[float] = None,
         reduce_only: bool = False,
     ) -> Dict[str, Any]:
         """
@@ -206,9 +207,10 @@ class AsterClient:
         Args:
             symbol: Trading pair symbol
             side: 'BUY' or 'SELL'
-            type: 'MARKET', 'LIMIT', etc.
+            type: 'MARKET', 'LIMIT', 'STOP_MARKET', 'TAKE_PROFIT', etc.
             quantity: Order quantity
             price: Limit price (required for LIMIT orders)
+            stop_price: Trigger price (required for STOP/TAKE_PROFIT orders)
             reduce_only: Whether the order is reduce-only
 
         Returns:
@@ -226,17 +228,18 @@ class AsterClient:
                     }
                     if price is not None:
                         kwargs["price"] = price
+                    if stop_price is not None:
+                        # Aster/Hyperliquid usually uses 'stopPrice'
+                        kwargs["stopPrice"] = stop_price
                     if reduce_only:
                         kwargs["reduceOnly"] = "true"
 
                     # Assuming client.new_order is the method name
-                    # If the library uses a different name, this will need adjustment
                     if hasattr(client, "new_order"):
                         return client.new_order(**kwargs)
                     elif hasattr(client, "order"):
                         return client.order(**kwargs)
                     else:
-                        # Fallback try 'new_order' if introspection fails/is unavailable
                         return client.new_order(**kwargs)
                         
                 except Exception as e:
