@@ -9,7 +9,7 @@
 
 ## Phase 2: Live Execution & Safety
 
-- [ ] Task: Implement Live Execution Adapter
+- [x] Task: Implement Live Execution Adapter [b98107f]
     - Implement `LiveExecutionAdapter.execute_market_order` using `AsterClient`.
     - **Test:** Mock `AsterClient` and verify correct API calls are made for market orders.
 
