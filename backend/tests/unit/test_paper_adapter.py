@@ -22,6 +22,10 @@ class TestPaperExecutionAdapter:
         mock_db.add = MagicMock()
         mock_db.commit = AsyncMock()
         mock_db.refresh = AsyncMock()
+        # Mock execute for position check
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None # No existing position
+        mock_db.execute = AsyncMock(return_value=mock_result)
 
         adapter = PaperExecutionAdapter(client=mock_client)
         
@@ -44,10 +48,19 @@ class TestPaperExecutionAdapter:
         mock_client.fetch_klines.assert_called_once()
         
         # Check trade creation
-        mock_db.add.assert_called_once()
-        # Get the Trade object passed to add
-        trade_arg = mock_db.add.call_args[0][0]
-        assert isinstance(trade_arg, Trade)
+        # db.add called for Trade AND Position
+        assert mock_db.add.call_count >= 1
+        
+        # Verify Trade object
+        # We need to find the Trade object in the calls
+        trade_arg = None
+        for call in mock_db.add.call_args_list:
+            arg = call[0][0]
+            if isinstance(arg, Trade):
+                trade_arg = arg
+                break
+        
+        assert trade_arg is not None
         assert trade_arg.account_id == account_id
         assert trade_arg.symbol == symbol
         assert trade_arg.side == action
