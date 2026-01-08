@@ -26,7 +26,7 @@
     - Ensure correct mode (Paper/Live) is used based on Account config.
     - **Test:** E2E test: Generate Decision -> Execution Service called -> Order "Placed" (Mocked).
 
-- [ ] Task: Add Execution Status Endpoints
+- [x] Task: Add Execution Status Endpoints [1f1b15d]
     - Endpoints to view active Paper/Live positions and status.
     - **Test:** Verify API response.
 
