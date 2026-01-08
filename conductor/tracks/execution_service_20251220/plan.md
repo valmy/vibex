@@ -14,7 +14,7 @@
     - Logic: Fetch real-time price from AsterDEX (read-only) -> Create local "Trade" record -> Update local "Position".
     - **Test:** Mock `AsterClient.get_orderbook` / price fetch. Verify `execute_market_order` creates a Trade record with the fetched price without calling `place_order`.
 
-- [ ] Task: Implement Paper Position Tracking
+- [x] Task: Implement Paper Position Tracking [9cd1c53]
     - Implement logic to track and update simulated positions in local DB.
     - Ensure Paper positions are distinguished from Live positions (implicit via Account).
     - **Test:** Verify opening a paper trade creates a position; verify PnL calculations based on new price updates.
