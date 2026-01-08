@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 class ExecutionAdapter(ABC):
@@ -12,10 +12,12 @@ class ExecutionAdapter(ABC):
         account_id: int, 
         symbol: str, 
         action: str, 
-        quantity: float
+        quantity: float,
+        tp_price: Optional[float] = None,
+        sl_price: Optional[float] = None
     ) -> Dict[str, Any]:
         """
-        Execute a market order.
+        Execute a market order with optional TP/SL.
         
         Args:
             db: Database session
@@ -23,8 +25,10 @@ class ExecutionAdapter(ABC):
             symbol: The asset symbol (e.g., 'BTC-USD')
             action: 'buy' or 'sell'
             quantity: The amount to trade
+            tp_price: Take-profit price (optional)
+            sl_price: Stop-loss price (optional)
             
         Returns:
-            Dict containing execution details (order_id, price, status, etc.)
+            Dict containing execution details
         """
         pass

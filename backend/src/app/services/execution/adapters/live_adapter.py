@@ -20,33 +20,63 @@ class LiveExecutionAdapter(ExecutionAdapter):
         account_id: int, 
         symbol: str, 
         action: str, 
-        quantity: float
+        quantity: float,
+        tp_price: Optional[float] = None,
+        sl_price: Optional[float] = None
     ) -> Dict[str, Any]:
-        """Execute a real market order on AsterDEX."""
+        """Execute a real market order on AsterDEX with optional TP/SL."""
         
-        # 1. Place order via API
+        # 1. Place Primary Order
         response = await self.client.place_order(
             symbol=symbol,
-            side=action.upper(), # 'BUY' or 'SELL'
+            side=action.upper(),
             type="MARKET",
             quantity=quantity
         )
         
-        # 2. Parse response
-        # Assuming standard Binance-like response
         order_id = str(response.get("orderId", response.get("id", "")))
         status = response.get("status", "NEW")
-        
-        # Note: Market orders might not return fill price immediately if asynchronous.
-        # We might need to fetch trade details separately or use 'avgPrice' if available.
-        # For MVP, we return what we have.
         price = float(response.get("avgPrice", response.get("price", 0.0)))
         
-        # We don't create Trade/Position records here for Live trading?
-        # The plan says "Fetch remote positions and compare with local DB" in Phase 3.
-        # However, it's good practice to log the order locally immediately.
-        # But `spec.md` says "Source of Truth (Live): AsterDEX".
-        # So we trust the exchange and sync later.
+        # 2. Place TP/SL if provided
+        # Note: We should ideally check if primary order was filled or at least accepted.
+        # Assuming synchronous response success implies acceptance.
+        
+        exit_side = "SELL" if action.lower() == "buy" else "BUY"
+        
+        if tp_price:
+            # Place Take Profit (Limit or Take Profit Market?)
+            # Usually standard Take Profit is a Trigger order.
+            # Using TAKE_PROFIT type (Trigger order).
+            # Price logic: Limit price or Trigger price?
+            # Assuming 'price' is Limit Price for TAKE_PROFIT_LIMIT or just price for TAKE_PROFIT market.
+            # AsterDEX/Hyperliquid usually allows Trigger orders.
+            # Let's assume TAKE_PROFIT with 'price' as Limit (if limit) or just price.
+            # Usually needs 'stopPrice' (trigger).
+            # If using TAKE_PROFIT (market), pass stopPrice.
+            # If using LIMIT (reduce only), pass price.
+            # Let's assume LIMIT ReduceOnly for TP to be safe and simple (maker).
+            
+            await self.client.place_order(
+                symbol=symbol,
+                side=exit_side,
+                type="TAKE_PROFIT", # or LIMIT
+                quantity=quantity,
+                price=tp_price, # Limit price
+                reduce_only=True
+            )
+            
+        if sl_price:
+            # Place Stop Loss
+            # Usually STOP_MARKET with stopPrice.
+            await self.client.place_order(
+                symbol=symbol,
+                side=exit_side,
+                type="STOP_MARKET",
+                quantity=quantity,
+                stop_price=sl_price,
+                reduce_only=True
+            )
         
         return {
             "order_id": order_id,

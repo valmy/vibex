@@ -3,6 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.trade import Trade
 from app.models.position import Position
+from app.models.order import Order
 from app.services.market_data.client import AsterClient
 from app.core.config import config
 from .base import ExecutionAdapter
@@ -23,22 +24,36 @@ class PaperExecutionAdapter(ExecutionAdapter):
         account_id: int, 
         symbol: str, 
         action: str, 
-        quantity: float
+        quantity: float,
+        tp_price: Optional[float] = None,
+        sl_price: Optional[float] = None
     ) -> Dict[str, Any]:
-        """Simulate a market order execution."""
+        """Simulate a market order execution with optional TP/SL."""
         
         # 1. Fetch current price
-        # Using 1m candles to get latest price. Limit 1 gives the latest candle.
         klines = await self.client.fetch_klines(symbol, interval="1m", limit=1)
         if not klines:
             raise ValueError(f"Could not fetch price for {symbol}")
-        
-        # Candle format: [time, open, high, low, close, volume, ...]
         price = float(klines[0][4])
         
-        # 2. Create Trade record
-        total_cost = price * quantity
+        # 2. Create Primary Order (Filled immediately)
+        primary_order = Order(
+            account_id=account_id,
+            symbol=symbol,
+            side=action,
+            order_type="market",
+            quantity=quantity,
+            price=price,
+            filled_quantity=quantity,
+            average_price=price,
+            status="filled",
+            total_cost=price * quantity,
+            exchange_order_id=f"paper_ord_{symbol}_{int(klines[0][0])}"
+        )
+        db.add(primary_order)
         
+        # 3. Create Trade record
+        total_cost = price * quantity
         trade = Trade(
             account_id=account_id,
             symbol=symbol,
@@ -47,20 +62,62 @@ class PaperExecutionAdapter(ExecutionAdapter):
             price=price,
             total_cost=total_cost,
             commission=0.0,
-            exchange_trade_id=f"paper_{symbol}_{int(klines[0][0])}" 
+            exchange_trade_id=f"paper_trd_{symbol}_{int(klines[0][0])}",
+            order=primary_order
         )
-        
         db.add(trade)
         
-        # 3. Update Position
-        await self._update_position(db, account_id, symbol, trade)
+        # 4. Update Position
+        position = await self._update_position(db, account_id, symbol, trade)
+        
+        # Link primary order to position
+        if position:
+            primary_order.position = position
+            # Update Position TP/SL fields if provided (Paper specific tracking)
+            if tp_price:
+                position.take_profit = tp_price
+            if sl_price:
+                position.stop_loss = sl_price
+
+        # 5. Create TP/SL Orders (Pending)
+        # Determine opposite side
+        exit_side = "sell" if action == "buy" else "buy"
+        
+        if tp_price:
+            tp_order = Order(
+                account_id=account_id,
+                symbol=symbol,
+                side=exit_side,
+                order_type="take_profit",
+                quantity=quantity,
+                price=tp_price, # Limit price for TP
+                stop_price=None, # Usually TP is limit, but can be Trigger. Assume Limit for paper simplicity.
+                status="pending",
+                position=position
+            )
+            db.add(tp_order)
+            
+        if sl_price:
+            sl_order = Order(
+                account_id=account_id,
+                symbol=symbol,
+                side=exit_side,
+                order_type="stop_loss",
+                quantity=quantity,
+                price=None, # Market stop
+                stop_price=sl_price,
+                status="pending",
+                position=position
+            )
+            db.add(sl_order)
         
         return {
-            "order_id": trade.exchange_trade_id,
+            "order_id": primary_order.exchange_order_id,
             "status": "filled",
             "price": price,
             "is_paper": True,
-            "trade_obj": trade 
+            "trade_obj": trade,
+            "position_obj": position
         }
 
     async def _update_position(
@@ -69,10 +126,11 @@ class PaperExecutionAdapter(ExecutionAdapter):
         account_id: int, 
         symbol: str, 
         trade: Trade
-    ) -> None:
+    ) -> Optional[Position]:
         """Update or create position based on trade."""
         
         # Fetch existing open position
+        # Note: We must await execute()
         result = await db.execute(
             select(Position).where(
                 Position.account_id == account_id,
@@ -101,8 +159,8 @@ class PaperExecutionAdapter(ExecutionAdapter):
                 status="open"
             )
             db.add(position)
-            # Link trade to position (optional, but good practice)
             trade.position = position
+            return position
             
         else:
             # Update existing position
@@ -117,15 +175,13 @@ class PaperExecutionAdapter(ExecutionAdapter):
                 position.entry_value = new_entry_value
                 position.entry_price = new_entry_price
                 position.current_price = trade.price
-                # Recalculate metrics (simplified for paper trading)
                 position.current_value = new_quantity * trade.price
                 
                 trade.position = position
+                return position
                 
             # Case 2: Closing or reducing position (Opposite side)
             else:
-                # Assuming simple FIFO or weighted logic for PnL
-                # If closing partially or fully
                 if trade.quantity <= position.quantity:
                     # Reducing
                     position.quantity -= trade.quantity
@@ -135,21 +191,19 @@ class PaperExecutionAdapter(ExecutionAdapter):
                     if position.quantity == 0:
                         position.status = "closed"
                     
-                    # Update current price/value
                     position.current_price = trade.price
                     position.current_value = position.quantity * trade.price
                     
                     trade.position = position
                     
-                else:
-                    # Flipping position (Close current, open new opposite)
-                    # For MVP, let's just close current and leftover creates new?
-                    # Or throw error? Or handle flip.
-                    # Simpler: Just close current fully, ignore remainder for now (or handle as new position logic which is complex)
-                    # Let's verify requirement. "Update local position".
-                    # Let's assume for now we don't flip in one trade for simplicity or handle strictly.
-                    # Logic: Close current position.
+                    if position.quantity == 0:
+                        # If closed, we might want to return None or closed position
+                        # Returning closed position so orders can be linked (historical)
+                        return position
+                    return position
                     
+                else:
+                    # Close current
                     remaining_qty = trade.quantity - position.quantity
                     position.quantity = 0
                     position.status = "closed"
@@ -158,12 +212,12 @@ class PaperExecutionAdapter(ExecutionAdapter):
                     
                     trade.position = position
                     
-                    # Create new position for remainder
+                    # Open new for remainder
                     if remaining_qty > 0:
                         new_pos = Position(
                             account_id=account_id,
                             symbol=symbol,
-                            side=trade_side,
+                            side=trade_side, # New side
                             quantity=remaining_qty,
                             entry_price=trade.price,
                             entry_value=remaining_qty * trade.price,
@@ -174,8 +228,7 @@ class PaperExecutionAdapter(ExecutionAdapter):
                             status="open"
                         )
                         db.add(new_pos)
-                        # Trade might need to link to two positions? 
-                        # Trade model has single position_id. 
-                        # Ideally split trade into two trades.
-                        # For now, let's just handle simple reduction/close.
-                        pass
+                        # We can't easily link trade to TWO positions.
+                        # For now, link to the closed one as primary impact.
+                        return new_pos
+                    return position
