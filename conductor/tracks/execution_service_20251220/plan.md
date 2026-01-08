@@ -7,24 +7,12 @@
 - [x] Task: Implement Paper Position Tracking [9cd1c53]
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Paper Trading Engine' (Protocol in workflow.md) [8809a16]
 
-## Phase 2: Live Execution & Safety
+## Phase 2: Live Execution & Safety [checkpoint: 151e877]
 
 - [x] Task: Implement Live Execution Adapter [b98107f]
-    - Implement `LiveExecutionAdapter.execute_market_order` using `AsterClient`.
-    - **Test:** Mock `AsterClient` and verify correct API calls are made for market orders.
-
 - [x] Task: Implement TP/SL Orchestration (Live & Paper) [2680fd8]
-    - Implement logic to place TP/SL orders.
-    - **Paper:** Simulate TP/SL as "pending orders" in DB that trigger on price updates.
-    - **Live:** Execute actual API calls to place Trigger orders.
-    - **Test:** Verify orchestration flow for both modes.
-
 - [x] Task: Implement Risk Checks (Leverage & Cooldown) [206c5f9]
-    - Add pre-execution validation for 25x leverage limit.
-    - Add cooldown checks.
-    - **Test:** Verify order is rejected if leverage > 25x or within cooldown window.
-
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Live Execution & Safety' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Live Execution & Safety' (Protocol in workflow.md) [151e877]
 
 ## Phase 3: Reconciliation & Integration
 
