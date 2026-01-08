@@ -9,7 +9,7 @@
     - Implement factory logic to select adapter based on `Account.is_paper_trading`.
     - **Test:** Verify Adapter factory correctly returns `PaperExecutionAdapter` when `account.is_paper_trading` is True.
 
-- [ ] Task: Implement Paper Market Order Simulation
+- [x] Task: Implement Paper Market Order Simulation [ce50281]
     - Implement `PaperExecutionAdapter.execute_market_order`.
     - Logic: Fetch real-time price from AsterDEX (read-only) -> Create local "Trade" record -> Update local "Position".
     - **Test:** Mock `AsterClient.get_orderbook` / price fetch. Verify `execute_market_order` creates a Trade record with the fetched price without calling `place_order`.
