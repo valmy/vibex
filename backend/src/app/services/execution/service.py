@@ -1,9 +1,10 @@
-from typing import Any, Dict, Optional
-from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.account import Account
 from app.models.trade import Trade
+from app.models.position import Position
 from app.services.execution.factory import ExecutionAdapterFactory
 
 class RiskCheckError(Exception):
@@ -29,21 +30,6 @@ class ExecutionService:
     ) -> Dict[str, Any]:
         """
         Execute a trading order after performing risk checks.
-        
-        Args:
-            db: Database session
-            account: Trading account
-            symbol: Asset symbol
-            action: 'buy' or 'sell'
-            quantity: Order quantity
-            tp_price: Take profit price (optional)
-            sl_price: Stop loss price (optional)
-            
-        Returns:
-            Execution result dictionary
-            
-        Raises:
-            RiskCheckError: If safety checks fail
         """
         
         # 1. Leverage Check
@@ -69,7 +55,6 @@ class ExecutionService:
 
     async def _check_cooldown(self, db: AsyncSession, account_id: int, symbol: str) -> None:
         """Check if trading is allowed based on cooldown period."""
-        # Get last trade for this account and symbol
         stmt = (
             select(Trade)
             .where(Trade.account_id == account_id, Trade.symbol == symbol)
@@ -80,8 +65,6 @@ class ExecutionService:
         last_trade = result.scalar_one_or_none()
         
         if last_trade:
-            # Check time difference
-            # Ensure last_trade.created_at is timezone aware or handle naive
             last_time = last_trade.created_at
             if last_time.tzinfo is None:
                 last_time = last_time.replace(tzinfo=timezone.utc)
@@ -94,3 +77,76 @@ class ExecutionService:
                     f"Cooldown active. Last trade was {diff.total_seconds():.0f}s ago. "
                     f"Wait {self.DEFAULT_COOLDOWN_MINUTES} minutes."
                 )
+
+    async def reconcile_positions(self, db: AsyncSession, account: Account) -> Dict[str, Any]:
+        """
+        Reconcile local position state with the exchange.
+        
+        Args:
+            db: Database session
+            account: Trading account
+            
+        Returns:
+            Summary of reconciliation actions
+        """
+        if account.is_paper_trading:
+            # Paper trading doesn't need remote reconciliation
+            return {"status": "skipped", "reason": "paper_trading"}
+
+        adapter = ExecutionAdapterFactory.get_adapter(account)
+        # Note: Adapter must have 'client' attribute for this to work
+        # Paper adapter has it, Live adapter has it.
+        if not hasattr(adapter, "client"):
+            return {"status": "error", "reason": "adapter_no_client"}
+
+        # 1. Fetch remote positions
+        remote_positions = await adapter.client.fetch_positions()
+        # Aster/Hyperliquid returns list of positions
+        # Standardize to dict symbol -> data
+        remote_map = {p["symbol"]: p for p in remote_positions if float(p.get("size", 0)) != 0}
+
+        # 2. Fetch local open positions
+        stmt = select(Position).where(
+            Position.account_id == account.id,
+            Position.status == "open"
+        )
+        result = await db.execute(stmt)
+        local_positions = result.scalars().all()
+
+        actions = []
+
+        # 3. Process local positions
+        for local_pos in local_positions:
+            if local_pos.symbol not in remote_map:
+                # Position closed on exchange
+                local_pos.status = "closed"
+                local_pos.quantity = 0.0
+                actions.append(f"Closed local position for {local_pos.symbol}")
+            else:
+                # Position exists, update stats
+                remote_pos = remote_map.pop(local_pos.symbol)
+                local_pos.quantity = abs(float(remote_pos["size"]))
+                local_pos.entry_price = float(remote_pos["entryPrice"])
+                # Update other fields...
+                actions.append(f"Updated local position for {local_pos.symbol}")
+
+        # 4. Process new remote positions (not in local)
+        for symbol, remote_pos in remote_map.items():
+            new_pos = Position(
+                account_id=account.id,
+                symbol=symbol,
+                side="long" if float(remote_pos["size"]) > 0 else "short",
+                quantity=abs(float(remote_pos["size"])),
+                entry_price=float(remote_pos["entryPrice"]),
+                entry_value=abs(float(remote_pos["size"])) * float(remote_pos["entryPrice"]),
+                current_price=float(remote_pos["entryPrice"]), # Placeholder
+                current_value=abs(float(remote_pos["size"])) * float(remote_pos["entryPrice"]),
+                unrealized_pnl=0.0,
+                unrealized_pnl_percent=0.0,
+                status="open"
+            )
+            db.add(new_pos)
+            actions.append(f"Created local position for {symbol} (external)")
+
+        await db.commit()
+        return {"status": "success", "actions": actions}

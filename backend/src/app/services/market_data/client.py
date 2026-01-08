@@ -163,10 +163,7 @@ class AsterClient:
                     # Fetch account information which includes balance
                     result = client.account()
                     # Extract balance from the response
-                    # The exact field name may vary based on the API response structure
-                    # Common fields: 'totalWalletBalance', 'balance', 'availableBalance'
                     if isinstance(result, dict):
-                        # Try different possible balance field names
                         balance = (
                             result.get("totalWalletBalance")
                             or result.get("balance")
@@ -229,12 +226,10 @@ class AsterClient:
                     if price is not None:
                         kwargs["price"] = price
                     if stop_price is not None:
-                        # Aster/Hyperliquid usually uses 'stopPrice'
                         kwargs["stopPrice"] = stop_price
                     if reduce_only:
                         kwargs["reduceOnly"] = "true"
 
-                    # Assuming client.new_order is the method name
                     if hasattr(client, "new_order"):
                         return client.new_order(**kwargs)
                     elif hasattr(client, "order"):
@@ -254,4 +249,34 @@ class AsterClient:
             
         except Exception as e:
             logger.error(f"Error in place_order task: {e}", exc_info=True)
+            raise
+
+    async def fetch_positions(self) -> List[Dict[str, Any]]:
+        """
+        Fetch open positions from Aster DEX.
+
+        Returns:
+            List of position dictionaries
+        """
+        try:
+            def _fetch_in_thread() -> List[Dict[str, Any]]:
+                try:
+                    client = self._client
+                    # library method is likely client.account_position() or similar
+                    if hasattr(client, "account_position"):
+                        return client.account_position()
+                    elif hasattr(client, "positions"):
+                        return client.positions()
+                    else:
+                        # Default guess for Hyperliquid/Aster fork
+                        return client.account_position()
+                except Exception as e:
+                    logger.error(f"Error fetching positions in thread: {e}", exc_info=True)
+                    raise
+
+            loop = asyncio.get_event_loop()
+            positions = await loop.run_in_executor(None, _fetch_in_thread)
+            return positions
+        except Exception as e:
+            logger.error(f"Error in fetch_positions task: {e}", exc_info=True)
             raise
