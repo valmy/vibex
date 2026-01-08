@@ -13,7 +13,7 @@
     - Implement `LiveExecutionAdapter.execute_market_order` using `AsterClient`.
     - **Test:** Mock `AsterClient` and verify correct API calls are made for market orders.
 
-- [ ] Task: Implement TP/SL Orchestration (Live & Paper)
+- [x] Task: Implement TP/SL Orchestration (Live & Paper) [2680fd8]
     - Implement logic to place TP/SL orders.
     - **Paper:** Simulate TP/SL as "pending orders" in DB that trigger on price updates.
     - **Live:** Execute actual API calls to place Trigger orders.
