@@ -81,31 +81,17 @@ class ExecutionService:
     async def reconcile_positions(self, db: AsyncSession, account: Account) -> Dict[str, Any]:
         """
         Reconcile local position state with the exchange.
-        
-        Args:
-            db: Database session
-            account: Trading account
-            
-        Returns:
-            Summary of reconciliation actions
         """
         if account.is_paper_trading:
-            # Paper trading doesn't need remote reconciliation
             return {"status": "skipped", "reason": "paper_trading"}
 
         adapter = ExecutionAdapterFactory.get_adapter(account)
-        # Note: Adapter must have 'client' attribute for this to work
-        # Paper adapter has it, Live adapter has it.
         if not hasattr(adapter, "client"):
             return {"status": "error", "reason": "adapter_no_client"}
 
-        # 1. Fetch remote positions
         remote_positions = await adapter.client.fetch_positions()
-        # Aster/Hyperliquid returns list of positions
-        # Standardize to dict symbol -> data
         remote_map = {p["symbol"]: p for p in remote_positions if float(p.get("size", 0)) != 0}
 
-        # 2. Fetch local open positions
         stmt = select(Position).where(
             Position.account_id == account.id,
             Position.status == "open"
@@ -115,22 +101,17 @@ class ExecutionService:
 
         actions = []
 
-        # 3. Process local positions
         for local_pos in local_positions:
             if local_pos.symbol not in remote_map:
-                # Position closed on exchange
                 local_pos.status = "closed"
                 local_pos.quantity = 0.0
                 actions.append(f"Closed local position for {local_pos.symbol}")
             else:
-                # Position exists, update stats
                 remote_pos = remote_map.pop(local_pos.symbol)
                 local_pos.quantity = abs(float(remote_pos["size"]))
                 local_pos.entry_price = float(remote_pos["entryPrice"])
-                # Update other fields...
                 actions.append(f"Updated local position for {local_pos.symbol}")
 
-        # 4. Process new remote positions (not in local)
         for symbol, remote_pos in remote_map.items():
             new_pos = Position(
                 account_id=account.id,
@@ -139,7 +120,7 @@ class ExecutionService:
                 quantity=abs(float(remote_pos["size"])),
                 entry_price=float(remote_pos["entryPrice"]),
                 entry_value=abs(float(remote_pos["size"])) * float(remote_pos["entryPrice"]),
-                current_price=float(remote_pos["entryPrice"]), # Placeholder
+                current_price=float(remote_pos["entryPrice"]),
                 current_value=abs(float(remote_pos["size"])) * float(remote_pos["entryPrice"]),
                 unrealized_pnl=0.0,
                 unrealized_pnl_percent=0.0,
@@ -150,3 +131,13 @@ class ExecutionService:
 
         await db.commit()
         return {"status": "success", "actions": actions}
+
+# Global instance
+_execution_service: Optional[ExecutionService] = None
+
+def get_execution_service() -> ExecutionService:
+    """Get or create the execution service instance."""
+    global _execution_service
+    if _execution_service is None:
+        _execution_service = ExecutionService()
+    return _execution_service

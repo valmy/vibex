@@ -50,6 +50,7 @@ from .decision_repository import DecisionRepository
 from .decision_validator import get_decision_validator
 from .llm_service import get_llm_service
 from .strategy_manager import StrategyManager
+from ..execution.service import get_execution_service
 
 logger = logging.getLogger(__name__)
 
@@ -331,6 +332,14 @@ class DecisionEngine:
         await self._persist_decision_if_repository_exists(
             account_id, strategy.strategy_id, decision_result, context
         )
+
+        # Execute trades if validation passed
+        if decision_result.validation_passed:
+            try:
+                await self._execute_decisions(account_id, decision_result)
+            except Exception as e:
+                logger.error(f"Decision execution failed: {e}", exc_info=True)
+
         return decision_result
 
     async def _get_strategy(self, account_id: int, strategy_override: Optional[str]) -> Any:
@@ -610,6 +619,62 @@ class DecisionEngine:
         except Exception as e:
             logger.error(f"Failed to persist decision: {e}", exc_info=True)
             raise
+
+    async def _execute_decisions(self, account_id: int, result: DecisionResult) -> None:
+        """Execute trades for each asset decision."""
+        execution_service = get_execution_service()
+
+        if not self.session_factory:
+            logger.warning("No session factory available for execution")
+            return
+
+        async with self.session_factory() as db:
+            from sqlalchemy import select
+            from ...models.account import Account
+
+            stmt = select(Account).where(Account.id == account_id)
+            db_result = await db.execute(stmt)
+            account = db_result.scalar_one_or_none()
+
+            if not account:
+                logger.error(f"Account {account_id} not found for execution")
+                return
+
+            for asset_decision in result.decision.get_active_decisions():
+                if asset_decision.action in ["buy", "sell"]:
+                    try:
+                        # Fetch price for quantity calculation
+                        current_price = 0.0
+                        asset_data = result.context.market_data.get_asset_data(asset_decision.asset)
+                        if asset_data:
+                            current_price = asset_data.current_price
+
+                        if current_price <= 0:
+                            logger.error(
+                                f"Invalid price for {asset_decision.asset}, skipping execution"
+                            )
+                            continue
+
+                        quantity = asset_decision.allocation_usd / current_price
+
+                        logger.info(
+                            f"Executing {asset_decision.action} for {asset_decision.asset} "
+                            f"(qty: {quantity:.6f})"
+                        )
+
+                        await execution_service.execute_order(
+                            db=db,
+                            account=account,
+                            symbol=asset_decision.asset,
+                            action=asset_decision.action,
+                            quantity=quantity,
+                            tp_price=asset_decision.tp_price,
+                            sl_price=asset_decision.sl_price,
+                        )
+                        await db.commit()
+
+                    except Exception as e:
+                        logger.error(f"Execution failed for {asset_decision.asset}: {e}")
 
     async def batch_decisions(
         self,
