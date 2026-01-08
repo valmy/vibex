@@ -21,7 +21,7 @@
     - Reconcile with local DB (Live trades only).
     - **Test:** Verify local state updates to match remote state.
 
-- [ ] Task: Connect Decision Engine to Execution Service
+- [x] Task: Connect Decision Engine to Execution Service [75fecff]
     - Update `DecisionEngine` to call `ExecutionService`.
     - Ensure correct mode (Paper/Live) is used based on Account config.
     - **Test:** E2E test: Generate Decision -> Execution Service called -> Order "Placed" (Mocked).
