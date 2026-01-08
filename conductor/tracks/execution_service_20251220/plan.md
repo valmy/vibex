@@ -19,7 +19,7 @@
     - **Live:** Execute actual API calls to place Trigger orders.
     - **Test:** Verify orchestration flow for both modes.
 
-- [ ] Task: Implement Risk Checks (Leverage & Cooldown)
+- [x] Task: Implement Risk Checks (Leverage & Cooldown) [206c5f9]
     - Add pre-execution validation for 25x leverage limit.
     - Add cooldown checks.
     - **Test:** Verify order is rejected if leverage > 25x or within cooldown window.
